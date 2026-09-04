@@ -291,7 +291,6 @@
     <div class="tab-content" id="tab-settings" hidden>
       <div class="tabs subtabs">
         <button class="subtab-btn active" data-subtab="basic">基本設定</button>
-        <button class="subtab-btn" data-subtab="screen">画面登録</button>
         <button class="subtab-btn" data-subtab="image">画像指定</button>
         <button class="subtab-btn" data-subtab="freeze">フリーズ演出</button>
         <button class="subtab-btn" data-subtab="io">入出力</button>
@@ -320,27 +319,16 @@
         </div>
       </div>
 
-      <div class="subtab-content" id="subtab-screen" hidden>
-        <button class="action" id="register-screen">🖥️ ゲーム画面を選択</button>
-        <div id="screen-status" class="note">未登録</div>
-        <button class="action" id="unregister-screen" disabled>解除</button>
-        <div class="note">
-          登録すると、選択した画面/ウィンドウ/タブの映像がこのオーバーレイの最背面に表示され、揺れ演出もこの映像に直接かかります(OBS側のゲームキャプチャを別途重ねる必要がなくなります)。<br><br>
-          ※ ブラウザ/OBSの内蔵ブラウザのバージョンによっては画面共有ダイアログが表示されない場合があります。その場合はOBS側で別途「ゲームキャプチャ」ソースをこのオーバーレイの下に重ねてください。<br><br>
-          ※ 登録内容はブラウザの仕様上、保存できません(OBS再起動・ページ再読込のたびに再選択が必要です)。
-        </div>
-      </div>
-
       <div class="subtab-content" id="subtab-image" hidden>
-        <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダを選択</button>
+        <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダ(cutin)を選択</button>
         <button class="action" id="reauth-folder">🔓 フォルダへのアクセスを再許可</button>
-        <div id="folder-status">未選択(character/banner同様、フォルダ内の画像を読み込みます)</div>
+        <div id="folder-status">未選択(このHTMLと同じ enshutsu フォルダ内の「cutin」を選んでください)</div>
         <div id="image-list"></div>
         <div class="note">
           OBS再起動やページ再読込のたびに、ブラウザの仕様でフォルダへのアクセス許可が失効することがあります。設定パネルを開くと自動で再許可を試みますが、うまくいかない場合はこのボタンを押してください(フォルダを選び直す必要はありません)。
         </div>
         <div class="note">
-          <strong>ボイス連携:</strong> 選択したフォルダの中に「voice」という名前のサブフォルダを置くと、そこから声を自動で読み込みます。画像とボイスのファイル名に含まれる数字が一致するもの同士が対応します(例: 「01_はな.png」⇔「voice/01.mp3」)。対応する声がないカットインの場合は、声は再生されません。
+          <strong>ボイス連携:</strong> cutin フォルダの中に「voice」という名前のサブフォルダを置くと(enshutsu/cutin/voice/)、そこから声を自動で読み込みます。画像とボイスのファイル名に含まれる数字が一致するもの同士が対応します(例: 「01_はな.png」⇔「voice/01.mp3」)。対応する声がないカットインの場合は、声は再生されません。
         </div>
       </div>
 
@@ -349,7 +337,7 @@
         <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="freeze-status" class="note">未選択</div>
         <div class="note">
-          カットイン画像フォルダとは別に、独立した「freeze」フォルダを選択してください(HTMLファイルの近くに置く運用を想定)。フォルダ直下のGIFと、その中の「sound」サブフォルダ内の音声が対象です。<br><br>
+          cutin フォルダとは別に、このHTMLと同じ enshutsu フォルダ内の「freeze」フォルダを選択してください(enshutsu/freeze/)。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/freeze/sound/)内の音声が対象です。<br><br>
           ロック2の番号などの状況に関わらず、freezeフォルダにGIFが1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。GIFと同じ番号のsound内の音声があれば一緒に再生され、なければGIFのみ再生されます。GIFが1つもない場合はこの演出はスキップされます。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
@@ -493,45 +481,13 @@
     });
   });
 
-  /* ===================== ゲーム画面登録 ===================== */
-  const registerScreenBtn = el("register-screen");
-  const unregisterScreenBtn = el("unregister-screen");
-  const screenStatus = el("screen-status");
-  let currentScreenStream = null;
+  /* ===================== ゲーム画面(main_control.htmlからWebRTCで受信) ===================== */
+  let currentScreenStream = null; // ローカルキャプチャ用(現在は使用していないが、他コードとの互換のため保持)
 
-  async function registerGameScreen(){
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
-      screenStatus.textContent = "このブラウザ/OBSの内蔵ブラウザは画面共有(getDisplayMedia)に対応していません";
-      return;
-    }
-    try{
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: "never" },
-        audio: false
-      });
-      unregisterGameScreen(); // 既存の登録があれば先に解除
-      currentScreenStream = stream;
-      gameVideo.srcObject = stream;
-      gameVideo.style.display = "block";
-      await gameVideo.play().catch(()=>{});
-
-      const track = stream.getVideoTracks()[0];
-      screenStatus.textContent = "登録中: " + (track && track.label ? track.label : "選択した画面");
-      unregisterScreenBtn.disabled = false;
-
-      if(track){
-        track.addEventListener("ended", ()=>{
-          screenStatus.textContent = "未登録(共有が終了しました)";
-          currentScreenStream = null;
-          gameVideo.srcObject = null;
-          gameVideo.style.display = "none";
-          unregisterScreenBtn.disabled = true;
-        });
-      }
-    }catch(err){
-      console.log("画面登録キャンセルまたはエラー:", err);
-      screenStatus.textContent = "選択がキャンセルされました、またはエラーが発生しました";
-    }
+  // main_control.htmlからWebRTC経由で受信する場合のPeerConnection(setupRemoteTriggerから利用)
+  let gameScreenPc = null;
+  function closeGameScreenPc(){
+    if(gameScreenPc){ try{ gameScreenPc.close(); }catch(e){} gameScreenPc = null; }
   }
 
   function unregisterGameScreen(){
@@ -539,14 +495,10 @@
       currentScreenStream.getTracks().forEach(t=> t.stop());
     }
     currentScreenStream = null;
+    closeGameScreenPc();
     gameVideo.srcObject = null;
     gameVideo.style.display = "none";
-    screenStatus.textContent = "未登録";
-    unregisterScreenBtn.disabled = true;
   }
-
-  registerScreenBtn.addEventListener("click", registerGameScreen);
-  unregisterScreenBtn.addEventListener("click", unregisterGameScreen);
 
   /* ===================== エクスポート / インポート ===================== */
   el("export-settings").addEventListener("click", ()=>{
@@ -1267,9 +1219,62 @@ function hideGameVideo(){
       triggerEnshutsu: () => window.triggerEnshutsu && window.triggerEnshutsu(),
       toggleSlow: () => { const b = document.getElementById("slow-toggle"); if(b) b.click(); },
       toggleSettings: () => { const b = document.getElementById("settings-toggle"); if(b) b.click(); },
+      // main_control側で選択した「ゲーム画面」のメタ情報(名前/サイズ)。実際の映像は下のWebRTC系アクションで届く。
+      gameScreenInfo: (info) => {
+        window.currentGameScreen = info || null;
+        if(info){
+          console.log("[ゲーム画面] 情報を受信しました:", info.label, `${info.width}×${info.height}`);
+        }else{
+          console.log("[ゲーム画面] 選択が解除されました");
+        }
+      },
+      // main_control.htmlからのWebRTC映像配信を受け取り、既存のgameVideo要素にそのまま表示する
+      webrtcOffer: async (data) => {
+        if(!data) return;
+        closeGameScreenPc();
+        gameScreenPc = new RTCPeerConnection({ iceServers: [] }); // 同一PC内のやり取りのためSTUN不要
+        gameScreenPc.addEventListener("icecandidate", (ev)=>{
+          if(ev.candidate) sendGameScreenSignal("webrtcIceCandidate", ev.candidate.toJSON());
+        });
+        gameScreenPc.addEventListener("track", (ev)=>{
+          currentScreenStream = null; // ローカル登録とは別経路であることを明示
+          gameVideo.srcObject = ev.streams[0];
+          gameVideo.style.display = "block";
+          gameVideo.play().catch(()=>{});
+          console.log("[ゲーム画面] 映像を表示しました:", window.currentGameScreen && window.currentGameScreen.label ? window.currentGameScreen.label : "");
+        });
+        gameScreenPc.addEventListener("connectionstatechange", ()=>{
+          console.log("[ゲーム画面] 映像受信の接続状態:", gameScreenPc.connectionState);
+          if(gameScreenPc.connectionState === "failed" || gameScreenPc.connectionState === "disconnected" || gameScreenPc.connectionState === "closed"){
+            gameVideo.srcObject = null;
+            gameVideo.style.display = "none";
+          }
+        });
+        try{
+          await gameScreenPc.setRemoteDescription(new RTCSessionDescription(data));
+          const answer = await gameScreenPc.createAnswer();
+          await gameScreenPc.setLocalDescription(answer);
+          sendGameScreenSignal("webrtcAnswer", { sdp: gameScreenPc.localDescription.sdp, type: gameScreenPc.localDescription.type });
+        }catch(e){
+          console.log("[ゲーム画面] 映像受信の確立に失敗しました:", e.message);
+        }
+      },
+      webrtcIceCandidate: (data) => {
+        if(gameScreenPc && data) gameScreenPc.addIceCandidate(new RTCIceCandidate(data)).catch(()=>{});
+      },
+      webrtcStop: () => {
+        closeGameScreenPc();
+        gameVideo.srcObject = null;
+        gameVideo.style.display = "none";
+      },
     };
     let ws = null;
     let reconnectTimer = null;
+
+    function sendGameScreenSignal(action, data){
+      if(!ws || ws.readyState !== WebSocket.OPEN) return;
+      try{ ws.send(JSON.stringify({ action, data })); }catch(e){}
+    }
 
     function scheduleReconnect(){
       if(reconnectTimer) return;
@@ -1294,7 +1299,7 @@ function hideGameVideo(){
         try{ data = JSON.parse(ev.data); }catch(e){ return; }
         if(!data || typeof data.action !== "string") return;
         const fn = ACTIONS[data.action];
-        if(fn) fn();
+        if(fn) fn(data.data);
       });
       ws.addEventListener("close", scheduleReconnect);
       ws.addEventListener("error", ()=>{ try{ ws.close(); }catch(e){} });

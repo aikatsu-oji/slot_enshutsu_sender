@@ -1,9 +1,14 @@
 // 演出トリガー用の軽量WebSocket中継サーバー
 //
+// 配置: (プロジェクトルート)\server\trigger_relay_server.js
+//   ※ node_modules はプロジェクトルート直下に置く想定です。
+//     Node はファイルの場所から上の階層へ順に node_modules を探すため、
+//     server\ 配下からでもルートの ws パッケージをそのまま読み込めます。
+//
 // 使い方:
-//   1. npm install ws       ※setup.bat を使えば自動で行われます
-//   2. node trigger_relay_server.js  ※setup.bat を使えば自動で起動します
-//   3. enshutsu_overlay.html をOBSのブラウザソースとして開く(自動で接続します)
+//   1. npm install ws                      ※プロジェクトルートで実行。setup.bat を使えば自動で行われます
+//   2. node server\trigger_relay_server.js ※プロジェクトルートで実行。setup.bat を使えば自動で起動します
+//   3. enshutsu\enshutsu_overlay.html をOBSのブラウザソースとして開く(自動で接続します)
 //   4. main_control.html をブラウザで開く(自動で接続します)
 //
 //   main_control.html のボタン操作、または他の演出制御HTML/スクリプトから

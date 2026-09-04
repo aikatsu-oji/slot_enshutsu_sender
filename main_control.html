@@ -232,6 +232,20 @@
     font-size:12px !important;
   }
   .offline-actions{display:flex;gap:8px;}
+
+  .screen-info{
+    margin-top:10px;
+    font-size:12.5px;
+    color:#c9bfc5;
+    background:#0d0b14;
+    border:1px solid #3a3348;
+    border-radius:8px;
+    padding:9px 12px;
+  }
+  .screen-info.selected{
+    color:var(--gold-bright);
+    border-color:rgba(212,175,55,.4);
+  }
 </style>
 </head>
 <body>
@@ -293,6 +307,15 @@
       <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
       <button class="btn" id="btn-settings" disabled>⚙️ 設定パネル開閉</button>
     </div>
+  </div>
+
+  <div class="card">
+    <h2>ゲーム画面</h2>
+    <div class="row2">
+      <button class="btn" id="btn-pick-screen">🖥️ 画面/ウィンドウを選択</button>
+      <button class="btn" id="btn-clear-screen" disabled>選択解除</button>
+    </div>
+    <div class="screen-info" id="screen-info">未選択</div>
   </div>
 
   <div class="card">
@@ -377,6 +400,12 @@
       connectBtn.textContent = "切断";
       log(`✅ 中継サーバー(${url})に接続しました`);
     });
+    ws.addEventListener("message", (ev)=>{
+      let data;
+      try{ data = JSON.parse(ev.data); }catch(e){ return; }
+      if(!data || typeof data.action !== "string") return;
+      handleSignalMessage(data);
+    });
     ws.addEventListener("close", ()=>{
       setStatus("off","未接続");
       setButtonsEnabled(false);
@@ -409,13 +438,14 @@
     }
   });
 
-  function sendAction(action, label){
+  function sendAction(action, label, data){
     if(!ws || ws.readyState !== WebSocket.OPEN){
       log(`⚠️ ${label}: 中継サーバーに未接続のため送信できません`);
       return;
     }
     try{
-      ws.send(JSON.stringify({ action }));
+      const payload = (data === undefined) ? { action } : { action, data };
+      ws.send(JSON.stringify(payload));
       log(`▶ ${label} を送信しました`);
     }catch(e){
       log(`⚠️ ${label} の送信中にエラー: ${e.message}`);
@@ -439,6 +469,123 @@
   });
 
   buttons.settings.addEventListener("click", ()=> sendAction("toggleSettings","設定パネルの開閉"));
+
+  // ゲーム画面(ウィンドウキャプチャ)をWebRTCで実際にenshutsu側へ映像配信する。
+  // WSの中継サーバーはSDP/ICEのシグナリング(制御メッセージ)を運ぶだけで、映像本体はP2P(WebRTC)で流れる。
+  const pickScreenBtn = document.getElementById("btn-pick-screen");
+  const clearScreenBtn = document.getElementById("btn-clear-screen");
+  const screenInfoEl = document.getElementById("screen-info");
+
+  let captureStream = null;
+  let pc = null;
+
+  function renderScreenInfo(info){
+    if(!info){
+      screenInfoEl.textContent = "未選択";
+      screenInfoEl.classList.remove("selected");
+      clearScreenBtn.disabled = true;
+      return;
+    }
+    screenInfoEl.textContent = `${info.label || "(名称不明)"} — ${info.width}×${info.height}(映像配信中)`;
+    screenInfoEl.classList.add("selected");
+    clearScreenBtn.disabled = false;
+  }
+
+  function sendSignal(action, data){
+    if(!ws || ws.readyState !== WebSocket.OPEN) return;
+    try{ ws.send(JSON.stringify({ action, data })); }catch(e){}
+  }
+
+  function closePeerConnection(){
+    if(pc){ try{ pc.close(); }catch(e){} pc = null; }
+  }
+
+  function stopCapture(){
+    if(captureStream){
+      captureStream.getTracks().forEach(t => t.stop());
+      captureStream = null;
+    }
+    closePeerConnection();
+  }
+
+  async function startWebrtcPublish(stream){
+    closePeerConnection();
+    pc = new RTCPeerConnection({ iceServers: [] }); // 同一PC内でのやり取りのためSTUN不要
+    stream.getVideoTracks().forEach(track => pc.addTrack(track, stream));
+
+    pc.addEventListener("icecandidate", (ev)=>{
+      if(ev.candidate) sendSignal("webrtcIceCandidate", ev.candidate.toJSON());
+    });
+    pc.addEventListener("connectionstatechange", ()=>{
+      log(`🖥️ 映像配信の接続状態: ${pc.connectionState}`);
+    });
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    sendSignal("webrtcOffer", { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
+  }
+
+  // enshutsu側からのanswer/ICE candidateをws受信ハンドラから呼び出す
+  function handleSignalMessage(data){
+    if(!pc) return;
+    if(data.action === "webrtcAnswer" && data.data){
+      pc.setRemoteDescription(new RTCSessionDescription(data.data)).catch(()=>{});
+    }else if(data.action === "webrtcIceCandidate" && data.data){
+      pc.addIceCandidate(new RTCIceCandidate(data.data)).catch(()=>{});
+    }
+  }
+
+  pickScreenBtn.addEventListener("click", async ()=>{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+      log("⚠️ このブラウザ/環境では画面選択(getDisplayMedia)が使えません");
+      return;
+    }
+    let stream;
+    try{
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    }catch(e){
+      log(`⚠️ 画面の選択がキャンセルされたか、失敗しました: ${e.message}`);
+      return;
+    }
+    stopCapture(); // 既存の配信があれば止めてから切り替える
+    captureStream = stream;
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings ? track.getSettings() : {};
+    const info = {
+      label: track.label || "",
+      width: settings.width || 0,
+      height: settings.height || 0,
+      displaySurface: settings.displaySurface || "",
+    };
+
+    // ブラウザ側の「共有を停止」操作にも追従して片付ける
+    track.addEventListener("ended", ()=>{
+      log("🖥️ 画面共有が停止されました");
+      stopCapture();
+      renderScreenInfo(null);
+      sendAction("gameScreenInfo", "ゲーム画面情報(解除)", null);
+      sendSignal("webrtcStop", null);
+    });
+
+    renderScreenInfo(info);
+    log(`🖥️ ゲーム画面を選択しました: ${info.label}`);
+    sendAction("gameScreenInfo", "ゲーム画面情報", info);
+
+    try{
+      await startWebrtcPublish(stream);
+      log("🖥️ enshutsu側への映像配信を開始しました");
+    }catch(e){
+      log(`⚠️ 映像配信の開始に失敗しました: ${e.message}`);
+    }
+  });
+
+  clearScreenBtn.addEventListener("click", ()=>{
+    stopCapture();
+    renderScreenInfo(null);
+    log("🖥️ ゲーム画面の選択を解除しました");
+    sendAction("gameScreenInfo", "ゲーム画面情報(解除)", null);
+    sendSignal("webrtcStop", null);
+  });
 
   // オフライン時ヘルプ: コマンドコピー
   copyCmdBtn.addEventListener("click", async ()=>{
