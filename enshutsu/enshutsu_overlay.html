@@ -19,8 +19,18 @@
   }
   *{ box-sizing:border-box; }
 
+  /* 単体ブラウザで開いた場合のみ、16:9の外側(黒帯)を塗る。OBS内では透過を維持 */
+  body.standalone{ background:#000; }
+  body.standalone #stage-root{ outline:1px solid rgba(255,255,255,0.18); outline-offset:-1px; }
+
   #stage-root{
-    position:fixed; inset:0;
+    /* 常に16:9を維持し、画面中央に配置(ウィンドウを縦長/横長にしても比率は変わらない) */
+    position:fixed;
+    width:  min(100vw, calc(100vh * 16 / 9));
+    height: min(100vh, calc(100vw * 9 / 16));
+    left: calc((100vw - min(100vw, calc(100vh * 16 / 9))) / 2);
+    top:  calc((100vh - min(100vh, calc(100vw * 9 / 16))) / 2);
+    overflow:hidden;
     pointer-events:none;
     z-index: 10;
   }
@@ -110,7 +120,11 @@
   }
 
   /* ---------- 設定UI(配信画面には映らない想定・OBSでは操作しない限り操作不可) ---------- */
+  /* 設定ギアはオーバーレイ上には出さない。開閉は main_control.html などのコンパネから
+     WebSocketの toggleSettings アクション経由でのみ行う。
+     要素自体は残してあるので、コンパネ側が #settings-toggle を click() する従来の方式もそのまま動く。 */
   #settings-toggle{
+    display:none;
     position:fixed; top:12px; right:12px;
     width:34px; height:34px;
     border-radius:50%;
@@ -120,7 +134,7 @@
     font-size:16px;
     cursor:pointer;
     z-index:100;
-    display:flex; align-items:center; justify-content:center;
+    align-items:center; justify-content:center;
     transition: background .2s, transform .2s;
   }
   #settings-toggle:hover{ background: rgba(30,18,14,0.85); transform: rotate(25deg); }
@@ -320,24 +334,28 @@
       </div>
 
       <div class="subtab-content" id="subtab-image" hidden>
-        <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダ(cutin)を選択</button>
+        <div id="cutin-mode-note" class="note" hidden></div>
+        <button class="action" id="reload-folder" hidden>🔄 カットイン画像フォルダを再読込</button>
+        <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダ(freeze/cutin)を選択</button>
         <button class="action" id="reauth-folder">🔓 フォルダへのアクセスを再許可</button>
-        <div id="folder-status">未選択(このHTMLと同じ enshutsu フォルダ内の「cutin」を選んでください)</div>
+        <div id="folder-status">未選択(enshutsu/yokoku/freeze/cutin を選んでください)</div>
         <div id="image-list"></div>
-        <div class="note">
+        <div class="note" id="cutin-fsa-note">
           OBS再起動やページ再読込のたびに、ブラウザの仕様でフォルダへのアクセス許可が失効することがあります。設定パネルを開くと自動で再許可を試みますが、うまくいかない場合はこのボタンを押してください(フォルダを選び直す必要はありません)。
         </div>
         <div class="note">
-          <strong>ボイス連携:</strong> cutin フォルダの中に「voice」という名前のサブフォルダを置くと(enshutsu/cutin/voice/)、そこから声を自動で読み込みます。画像とボイスのファイル名に含まれる数字が一致するもの同士が対応します(例: 「01_はな.png」⇔「voice/01.mp3」)。対応する声がないカットインの場合は、声は再生されません。
+          <strong>ボイス連携:</strong> cutin フォルダの中に「voice」という名前のサブフォルダを置くと(enshutsu/yokoku/freeze/cutin/voice/)、そこから声を自動で読み込みます。画像とボイスのファイル名に含まれる数字が一致するもの同士が対応します(例: 「01_はな.png」⇔「voice/01.mp3」)。対応する声がないカットインの場合は、声は再生されません。
         </div>
       </div>
 
       <div class="subtab-content" id="subtab-freeze" hidden>
-        <button class="action" id="pick-freeze-folder">📁 フリーズ演出フォルダ(freeze)を選択</button>
+        <div id="freeze-mode-note" class="note" hidden></div>
+        <button class="action" id="reload-freeze-folder" hidden>🔄 暗転後フォルダを再読込</button>
+        <button class="action" id="pick-freeze-folder">📁 暗転後の演出フォルダ(freeze/afterblackout)を選択</button>
         <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="freeze-status" class="note">未選択</div>
         <div class="note">
-          cutin フォルダとは別に、このHTMLと同じ enshutsu フォルダ内の「freeze」フォルダを選択してください(enshutsu/freeze/)。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/freeze/sound/)内の音声が対象です。<br><br>
+          cutin フォルダとは別に、enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
           ロック2の番号などの状況に関わらず、freezeフォルダにGIFが1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。GIFと同じ番号のsound内の音声があれば一緒に再生され、なければGIFのみ再生されます。GIFが1つもない場合はこの演出はスキップされます。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
@@ -386,6 +404,37 @@
 
   /* ===================== DOM参照 ===================== */
   const el = id => document.getElementById(id);
+
+  /* ===================== 16:9固定(ウィンドウ比率制御) ===================== */
+  // OBSブラウザソース内では window.obsstudio が存在する。単体ブラウザ(setup.batのアプリウィンドウ等)の場合のみ
+  // #stage-root の外側(黒帯)を塗る。OBS内では透過を維持する
+  if(!window.obsstudio){
+    document.body.classList.add("standalone");
+    // ウィンドウ外寸を16:9へ整形する(起動直後 + 手動リサイズ後)。
+    // resizeTo は通常タブでは無視されるが、setup.bat が開く --app ウィンドウ(単一タブ)では有効。
+    // 無視された場合も #stage-root 側のレターボックスで演出の比率は保たれる
+    let snapTimer = null;
+    let snapping = false;
+    function snapTo16x9(){
+      const chromeW = window.outerWidth - window.innerWidth;
+      const chromeH = window.outerHeight - window.innerHeight;
+      // 横幅を基準に高さを合わせる。ただし画面からはみ出す場合は高さを基準にする
+      let innerW = window.innerWidth;
+      let innerH = Math.round(innerW * 9 / 16);
+      const maxH = (screen.availHeight || screen.height) - chromeH;
+      if(innerH > maxH){ innerH = maxH; innerW = Math.round(innerH * 16 / 9); }
+      if(Math.abs(innerH - window.innerHeight) < 2 && Math.abs(innerW - window.innerWidth) < 2) return;
+      snapping = true;
+      try{ window.resizeTo(innerW + chromeW, innerH + chromeH); }catch(e){}
+      setTimeout(()=>{ snapping = false; }, 200);
+    }
+    window.addEventListener("resize", ()=>{
+      if(snapping) return;
+      clearTimeout(snapTimer);
+      snapTimer = setTimeout(snapTo16x9, 150);
+    });
+    window.addEventListener("load", ()=>{ setTimeout(snapTo16x9, 100); });
+  }
 
   const screenWrapper = el("screen-wrapper");
   const gameVideo = el("game-screen-video");
@@ -446,7 +495,10 @@
   /* ===================== 設定パネル開閉・タブ切替 ===================== */
   const settingsToggle = el("settings-toggle");
   const settingsPanel = el("settings-panel");
-  settingsToggle.addEventListener("click", async ()=>{
+
+  // 設定パネルの開閉。オーバーレイ上にギアは表示しないため、
+  // 実際の呼び出し元はコンパネからの toggleSettings アクション。
+  async function toggleSettingsPanel(){
     settingsPanel.classList.toggle("open");
     // 設定パネルを開いた操作(ユーザー操作)のタイミングで、
     // 画像フォルダの権限が失効していれば自動で再許可を試みる
@@ -461,7 +513,12 @@
         freezeFolderRestorePromise = reacquireFreezeFolderPermission();
       }
     }
-  });
+  }
+
+  // 非表示のギアボタンにも従来どおり紐づけておく(コンパネが click() で叩く方式との互換用)
+  settingsToggle.addEventListener("click", toggleSettingsPanel);
+  // 外部から直接呼べるようにも公開しておく
+  window.toggleSettings = toggleSettingsPanel;
 
   document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.addEventListener("click", ()=>{
@@ -644,6 +701,121 @@
     return { pool, soundMap };
   }
 
+  /* ===================== サーバーモード(http:// 経由での自動読み込み) =====================
+     trigger_relay_server.js がプロジェクトルートを静的配信しているため、
+     http:// で開かれている場合はフォルダ選択も権限の再許可も一切不要になる。
+     このHTML自身のURLを起点に cutin / freeze を相対パスで解決する。 */
+  const SERVER_MODE = location.protocol === "http:" || location.protocol === "https:";
+  // このHTMLが置かれているディレクトリのURLパス(末尾スラッシュなし)。例: "/enshutsu"
+  const BASE_PATH = location.pathname.replace(/\/[^/]*$/, "");
+
+  // ▼ フォルダ配置(このHTMLからの相対パス)。構成を変えたらここだけ書き換えれば全体が追従します。
+  //   フリーズ演出ルート : enshutsu/yokoku/freeze
+  //     ├ 萌えカットイン : enshutsu/yokoku/freeze/cutin
+  //     │   └ ボイス     : enshutsu/yokoku/freeze/cutin/voice
+  //     └ 暗転後の演出   : enshutsu/yokoku/freeze/afterblackout
+  //         └ サウンド   : enshutsu/yokoku/freeze/afterblackout/sound
+  const FREEZE_ROOT = "yokoku/freeze";
+  const CUTIN_DIR = FREEZE_ROOT + "/cutin";
+  const VOICE_DIR = CUTIN_DIR + "/voice";
+  const FREEZE_DIR = FREEZE_ROOT + "/afterblackout";
+  const FREEZE_SOUND_DIR = FREEZE_DIR + "/sound";
+
+  async function apiList(subPath){
+    const res = await fetch(`/api/list?dir=${encodeURIComponent(BASE_PATH + "/" + subPath)}`, {cache:"no-store"});
+    if(!res.ok) throw new Error(`/api/list に失敗しました (${res.status})`);
+    const data = await res.json();
+    return Array.isArray(data.files) ? data.files : [];
+  }
+
+  // 相対URL化。ファイル名に記号や日本語が含まれても壊れないようにエンコードする。
+  function assetUrl(subPath, name){
+    return `${BASE_PATH}/${subPath}/${encodeURIComponent(name)}`;
+  }
+
+  function hasExt(name, extList){
+    const lower = name.toLowerCase();
+    return extList.some(ext=> lower.endsWith(ext));
+  }
+
+  async function loadImagesFromServer(){
+    const files = await apiList(CUTIN_DIR);
+    return files
+      .filter(name=> hasExt(name, IMAGE_EXT))
+      .map(name=> ({name, url: assetUrl(CUTIN_DIR, name), number: extractNumber(name)}));
+  }
+
+  async function loadVoicesFromServer(){
+    const map = new Map();
+    try{
+      const files = await apiList(VOICE_DIR);
+      files.forEach(name=>{
+        if(!hasExt(name, VOICE_EXT)) return;
+        const num = extractNumber(name);
+        if(num === null) return;
+        map.set(num, assetUrl(VOICE_DIR, name));
+      });
+    }catch(err){
+      console.log("voiceフォルダの読み込みでエラー:", err);
+    }
+    return map;
+  }
+
+  async function loadFreezeAssetsFromServer(){
+    const pool = [];
+    const soundMap = new Map();
+    const gifFiles = await apiList(FREEZE_DIR);
+    gifFiles.forEach(name=>{
+      if(!name.toLowerCase().endsWith(".gif")) return;
+      pool.push({name, url: assetUrl(FREEZE_DIR, name), number: extractNumber(name)});
+    });
+    try{
+      const soundFiles = await apiList(FREEZE_SOUND_DIR);
+      soundFiles.forEach(name=>{
+        if(!hasExt(name, VOICE_EXT)) return;
+        const num = extractNumber(name);
+        if(num === null) return;
+        soundMap.set(num, assetUrl(FREEZE_SOUND_DIR, name));
+      });
+    }catch(err){
+      console.log(FREEZE_SOUND_DIR + "フォルダの読み込みでエラー:", err);
+    }
+    return { pool, soundMap };
+  }
+
+  async function loadCutinFromServer(){
+    try{
+      illustrationPool = await loadImagesFromServer();
+      voiceMap = await loadVoicesFromServer();
+      sequentialIndex = 0;
+      renderImageList();
+      el("folder-status").textContent = illustrationPool.length > 0
+        ? `${illustrationPool.length} 枚の萌えカットイン画像を読込済み(自動 / ${CUTIN_DIR} フォルダ)`
+        : `${CUTIN_DIR} フォルダに画像が見つかりませんでした`;
+      return true;
+    }catch(err){
+      console.log("cutinフォルダの自動読み込みに失敗:", err);
+      el("folder-status").textContent = `${CUTIN_DIR} フォルダの自動読み込みに失敗しました(サーバーが起動しているか確認してください)`;
+      return false;
+    }
+  }
+
+  async function loadFreezeFromServer(){
+    try{
+      const { pool, soundMap } = await loadFreezeAssetsFromServer();
+      freezeGifPool = pool;
+      freezeSoundMap = soundMap;
+      el("freeze-status").textContent = pool.length > 0
+        ? `GIF ${pool.length}件を読込済み(対応サウンド ${soundMap.size}件 / 自動 / ${FREEZE_DIR} フォルダ)`
+        : `${FREEZE_DIR} フォルダにGIFが見つかりませんでした`;
+      return true;
+    }catch(err){
+      console.log("freezeフォルダの自動読み込みに失敗:", err);
+      el("freeze-status").textContent = `${FREEZE_DIR} フォルダの自動読み込みに失敗しました(サーバーが起動しているか確認してください)`;
+      return false;
+    }
+  }
+
   function renderImageList(){
     const list = el("image-list");
     list.innerHTML = "";
@@ -707,7 +879,7 @@
       console.log("フォルダ復元エラー:", err);
     }
   }
-  let folderRestorePromise = tryRestoreFolder();
+  let folderRestorePromise = SERVER_MODE ? loadCutinFromServer() : tryRestoreFolder();
 
   // 権限が失効している場合に、ユーザー操作(クリック)のタイミングで再許可を試みる。
   // requestPermission はユーザー操作直後でないと呼べない仕様のため、
@@ -794,7 +966,7 @@
       console.log("フリーズ演出フォルダ復元エラー:", err);
     }
   }
-  let freezeFolderRestorePromise = tryRestoreFreezeFolder();
+  let freezeFolderRestorePromise = SERVER_MODE ? loadFreezeFromServer() : tryRestoreFreezeFolder();
 
   async function reacquireFreezeFolderPermission(){
     if(!restoredFreezeHandle) return false;
@@ -822,6 +994,34 @@
     freezeFolderRestorePromise = reacquireFreezeFolderPermission();
     await freezeFolderRestorePromise;
   });
+
+  /* ===================== フォルダタブのUIをモードに合わせて切り替える ===================== */
+  (function setupFolderUiMode(){
+    const serverOnly = [el("reload-folder"), el("reload-freeze-folder"), el("cutin-mode-note"), el("freeze-mode-note")];
+    const fileOnly = [el("pick-folder"), el("reauth-folder"), el("pick-freeze-folder"), el("reauth-freeze-folder"), el("cutin-fsa-note")];
+
+    if(SERVER_MODE){
+      serverOnly.forEach(node=>{ if(node) node.hidden = false; });
+      fileOnly.forEach(node=>{ if(node) node.hidden = true; });
+      const modeText = `サーバー経由で開いているため、このHTMLからの相対パスで ${CUTIN_DIR} / ${FREEZE_DIR} フォルダを自動で読み込みます。フォルダ選択もアクセス許可も不要です。`;
+      el("cutin-mode-note").textContent = modeText + " フォルダに画像を追加したら「再読込」を押してください。";
+      el("freeze-mode-note").textContent = modeText + " フォルダにGIFを追加したら「再読込」を押してください。";
+
+      el("reload-folder").addEventListener("click", async ()=>{
+        el("folder-status").textContent = "再読込中...";
+        folderRestorePromise = loadCutinFromServer();
+        await folderRestorePromise;
+      });
+      el("reload-freeze-folder").addEventListener("click", async ()=>{
+        el("freeze-status").textContent = "再読込中...";
+        freezeFolderRestorePromise = loadFreezeFromServer();
+        await freezeFolderRestorePromise;
+      });
+    }else{
+      serverOnly.forEach(node=>{ if(node) node.hidden = true; });
+      fileOnly.forEach(node=>{ if(node) node.hidden = false; });
+    }
+  })();
 
   function pickIllustration(){
     if(illustrationPool.length === 0) return null;
@@ -1218,7 +1418,7 @@ function hideGameVideo(){
       playUpToLock3: () => window.playUpToLock3 && window.playUpToLock3(),
       triggerEnshutsu: () => window.triggerEnshutsu && window.triggerEnshutsu(),
       toggleSlow: () => { const b = document.getElementById("slow-toggle"); if(b) b.click(); },
-      toggleSettings: () => { const b = document.getElementById("settings-toggle"); if(b) b.click(); },
+      toggleSettings: () => { if(window.toggleSettings) window.toggleSettings(); },
       // main_control側で選択した「ゲーム画面」のメタ情報(名前/サイズ)。実際の映像は下のWebRTC系アクションで届く。
       gameScreenInfo: (info) => {
         window.currentGameScreen = info || null;
