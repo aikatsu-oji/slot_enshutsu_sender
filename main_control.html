@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>演出コントロールパネル</title>
+<style>
+  :root{
+    --gold:#d4af37;
+    --gold-bright:#ffd76a;
+    --bg:#0a0a12;
+    --panel:#15121e;
+    --panel2:#1c1828;
+    --red:#c0392b;
+    --green:#2ecc71;
+    --text:#eee;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+    background:
+      radial-gradient(circle at 50% -10%, #2a2138 0%, var(--bg) 60%);
+    color:var(--text);
+    min-height:100vh;
+    padding:24px;
+  }
+  h1{
+    text-align:center;
+    font-size:22px;
+    letter-spacing:.15em;
+    margin:0 0 4px;
+    background:linear-gradient(180deg,var(--gold-bright),var(--gold));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+    text-shadow:0 0 20px rgba(212,175,55,.35);
+  }
+  .sub{
+    text-align:center;
+    font-size:12px;
+    color:#8a8398;
+    margin-bottom:20px;
+  }
+  .wrap{
+    max-width:760px;
+    margin:0 auto;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .card{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid rgba(212,175,55,.25);
+    border-radius:14px;
+    padding:18px 20px;
+    box-shadow:0 8px 24px rgba(0,0,0,.4);
+  }
+  .card h2{
+    font-size:13px;
+    letter-spacing:.1em;
+    margin:0 0 12px;
+    color:var(--gold-bright);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:6px;height:6px;border-radius:50%;
+    background:var(--gold);
+    box-shadow:0 0 8px var(--gold);
+  }
+
+  /* 接続バー */
+  .conn-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    flex-wrap:wrap;
+  }
+  .conn-row input[type=text]{
+    flex:1;
+    min-width:180px;
+    background:#0d0b14;
+    border:1px solid #3a3348;
+    color:var(--text);
+    padding:9px 12px;
+    border-radius:8px;
+    font-size:13px;
+  }
+  .conn-row input[type=text]:focus{outline:1px solid var(--gold);}
+  .btn{
+    cursor:pointer;
+    border:1px solid rgba(212,175,55,.4);
+    background:#221d30;
+    color:var(--text);
+    padding:9px 16px;
+    border-radius:8px;
+    font-size:13px;
+    font-weight:600;
+    transition:all .15s ease;
+    white-space:nowrap;
+  }
+  .btn:hover{
+    background:#2c2540;
+    border-color:var(--gold);
+    transform:translateY(-1px);
+  }
+  .btn:active{transform:translateY(0);}
+  .btn:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+
+  .status-pill{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    padding:6px 12px;
+    border-radius:999px;
+    background:#241a1a;
+    border:1px solid var(--red);
+    color:#ff8a7a;
+  }
+  .status-pill.on{
+    background:#12261a;
+    border-color:var(--green);
+    color:#7cf2a8;
+  }
+  .status-pill .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 6px currentColor;
+  }
+  .status-pill.pending{
+    border-color:var(--gold);
+    color:var(--gold-bright);
+    background:#241f12;
+  }
+
+  /* ボタングリッド */
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(3,1fr);
+    gap:10px;
+  }
+  .grid .btn{width:100%;padding:14px 8px;font-size:13px;}
+
+  .btn-main{
+    background:linear-gradient(180deg,#3a2f14,#241c0c);
+    border-color:var(--gold);
+    color:var(--gold-bright);
+    font-size:15px !important;
+    padding:16px !important;
+    letter-spacing:.05em;
+  }
+  .btn-main:hover{
+    background:linear-gradient(180deg,#4a3c1a,#2e2410);
+    box-shadow:0 0 18px rgba(212,175,55,.35);
+  }
+
+  .row2{
+    display:flex;
+    gap:10px;
+  }
+  .row2 .btn{flex:1;}
+  .toggle-on{
+    background:#20351f !important;
+    border-color:var(--green) !important;
+    color:#a8f2c0 !important;
+  }
+
+  /* ログ */
+  .log{
+    background:#08070c;
+    border:1px solid #2a2436;
+    border-radius:8px;
+    padding:10px 12px;
+    height:140px;
+    overflow-y:auto;
+    font-family:"Consolas",monospace;
+    font-size:11.5px;
+    line-height:1.6;
+    color:#9d97ad;
+    white-space:pre-wrap;
+  }
+
+  .lbl{
+    font-size:11px;
+    color:#7a7488;
+    margin-bottom:6px;
+  }
+
+  /* オフライン時ヘルプ */
+  .offline-help{
+    display:none;
+    margin-top:14px;
+    border:1px solid rgba(192,57,43,.5);
+    background:#1c1216;
+    border-radius:10px;
+    padding:14px 16px;
+  }
+  .offline-help.show{display:block;}
+  .offline-help-title{
+    font-size:13px;
+    font-weight:700;
+    color:#ff9a8a;
+    margin-bottom:8px;
+  }
+  .offline-help-body p{
+    margin:0 0 8px;
+    font-size:12.5px;
+    color:#c9bfc5;
+    line-height:1.6;
+  }
+  .cmd-row{
+    display:flex;
+    gap:8px;
+    align-items:center;
+    margin-bottom:10px;
+  }
+  .cmd-row code{
+    flex:1;
+    background:#08070c;
+    border:1px solid #3a3348;
+    border-radius:6px;
+    padding:8px 10px;
+    font-family:"Consolas",monospace;
+    font-size:12px;
+    color:var(--gold-bright);
+  }
+  .btn-sm{
+    padding:7px 12px !important;
+    font-size:12px !important;
+  }
+  .offline-actions{display:flex;gap:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>演出コントロールパネル</h1>
+    <div class="sub">enshutsu_overlay.html 外部操作用 / WebSocket中継サーバー経由</div>
+  </div>
+
+  <div class="card">
+    <h2>接続設定</h2>
+    <div class="conn-row">
+      <input id="ws-url" type="text" value="ws://localhost:8787" spellcheck="false">
+      <button class="btn" id="btn-connect">接続</button>
+      <span class="status-pill" id="status-pill"><span class="dot"></span><span id="status-text">未接続</span></span>
+    </div>
+    <div class="offline-help" id="offline-help">
+      <div class="offline-help-title">⚠️ 中継サーバーに接続できていません</div>
+      <div class="offline-help-body">
+        <p><b>setup.bat</b> をこのファイルと同じフォルダで実行すると、サーバーの起動から接続まで自動で行われます。</p>
+        <p>手動で起動する場合は、同じフォルダで以下のコマンドを実行してください:</p>
+        <div class="cmd-row">
+          <code id="cmd-text">node trigger_relay_server.js</code>
+          <button class="btn btn-sm" id="btn-copy-cmd">コピー</button>
+        </div>
+        <div class="offline-actions">
+          <button class="btn btn-sm" id="btn-retry-now">今すぐ再接続を試す</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>フル演出</h2>
+    <button class="btn btn-main" id="btn-full" disabled>🎰 フル演出を再生(ロック1→2→3)</button>
+  </div>
+
+  <div class="card">
+    <h2>段階まで再生</h2>
+    <div class="grid">
+      <button class="btn" id="btn-upto1" disabled>ロック1で終了</button>
+      <button class="btn" id="btn-upto2" disabled>ロック2で終了</button>
+      <button class="btn" id="btn-upto3" disabled>ロック3まで到達</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>単体ステージ再生</h2>
+    <div class="grid">
+      <button class="btn" id="btn-lock1" disabled>ロック1単体</button>
+      <button class="btn" id="btn-lock2" disabled>ロック2単体</button>
+      <button class="btn" id="btn-lock3" disabled>ロック3単体</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>オーバーレイ操作</h2>
+    <div class="row2">
+      <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
+      <button class="btn" id="btn-settings" disabled>⚙️ 設定パネル開閉</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="lbl">ログ</div>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const urlInput = document.getElementById("ws-url");
+  const connectBtn = document.getElementById("btn-connect");
+  const pill = document.getElementById("status-pill");
+  const statusText = document.getElementById("status-text");
+  const logEl = document.getElementById("log");
+  const offlineHelp = document.getElementById("offline-help");
+  const copyCmdBtn = document.getElementById("btn-copy-cmd");
+  const cmdText = document.getElementById("cmd-text");
+  const retryNowBtn = document.getElementById("btn-retry-now");
+
+  const buttons = {
+    full: document.getElementById("btn-full"),
+    upto1: document.getElementById("btn-upto1"),
+    upto2: document.getElementById("btn-upto2"),
+    upto3: document.getElementById("btn-upto3"),
+    lock1: document.getElementById("btn-lock1"),
+    lock2: document.getElementById("btn-lock2"),
+    lock3: document.getElementById("btn-lock3"),
+    slow: document.getElementById("btn-slow"),
+    settings: document.getElementById("btn-settings"),
+  };
+
+  let ws = null;
+  let reconnectTimer = null;
+  let manuallyDisconnected = false;
+
+  function log(msg){
+    const time = new Date().toLocaleTimeString("ja-JP",{hour12:false});
+    logEl.textContent = `[${time}] ${msg}\n` + logEl.textContent;
+  }
+
+  function setStatus(mode, text){
+    pill.classList.remove("on","pending");
+    if(mode === "on") pill.classList.add("on");
+    if(mode === "pending") pill.classList.add("pending");
+    statusText.textContent = text;
+    // 接続済みならヘルプを隠し、それ以外(未接続/再接続待ち)では表示する
+    offlineHelp.classList.toggle("show", mode !== "on");
+  }
+
+  function setButtonsEnabled(enabled){
+    Object.values(buttons).forEach(b => b.disabled = !enabled);
+  }
+
+  function scheduleReconnect(){
+    if(manuallyDisconnected) return;
+    if(reconnectTimer) return;
+    setStatus("pending","再接続待機中...");
+    reconnectTimer = setTimeout(()=>{
+      reconnectTimer = null;
+      connect();
+    }, 2000);
+  }
+
+  function connect(){
+    const url = urlInput.value.trim();
+    if(!url){ log("⚠️ WebSocket URLが空です"); return; }
+    manuallyDisconnected = false;
+    setStatus("pending","接続中...");
+    try{
+      ws = new WebSocket(url);
+    }catch(e){
+      log(`⚠️ 接続エラー: ${e.message}`);
+      scheduleReconnect();
+      return;
+    }
+    ws.addEventListener("open", ()=>{
+      setStatus("on","接続済み");
+      setButtonsEnabled(true);
+      connectBtn.textContent = "切断";
+      log(`✅ 中継サーバー(${url})に接続しました`);
+    });
+    ws.addEventListener("close", ()=>{
+      setStatus("off","未接続");
+      setButtonsEnabled(false);
+      connectBtn.textContent = "接続";
+      if(!manuallyDisconnected){
+        log("⚠️ 接続が切断されました。再接続を試みています...");
+        scheduleReconnect();
+      }
+    });
+    ws.addEventListener("error", ()=>{
+      try{ ws.close(); }catch(e){}
+    });
+  }
+
+  function disconnect(){
+    manuallyDisconnected = true;
+    if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if(ws) try{ ws.close(); }catch(e){}
+    setStatus("off","未接続");
+    setButtonsEnabled(false);
+    connectBtn.textContent = "接続";
+    log("🔌 手動で切断しました");
+  }
+
+  connectBtn.addEventListener("click", ()=>{
+    if(ws && ws.readyState === WebSocket.OPEN){
+      disconnect();
+    }else{
+      connect();
+    }
+  });
+
+  function sendAction(action, label){
+    if(!ws || ws.readyState !== WebSocket.OPEN){
+      log(`⚠️ ${label}: 中継サーバーに未接続のため送信できません`);
+      return;
+    }
+    try{
+      ws.send(JSON.stringify({ action }));
+      log(`▶ ${label} を送信しました`);
+    }catch(e){
+      log(`⚠️ ${label} の送信中にエラー: ${e.message}`);
+    }
+  }
+
+  buttons.full.addEventListener("click", ()=> sendAction("triggerEnshutsu","フル演出"));
+  buttons.upto1.addEventListener("click", ()=> sendAction("playUpToLock1","ロック1で終了"));
+  buttons.upto2.addEventListener("click", ()=> sendAction("playUpToLock2","ロック2で終了"));
+  buttons.upto3.addEventListener("click", ()=> sendAction("playUpToLock3","ロック3まで到達"));
+  buttons.lock1.addEventListener("click", ()=> sendAction("playLock1","ロック1単体"));
+  buttons.lock2.addEventListener("click", ()=> sendAction("playLock2","ロック2単体"));
+  buttons.lock3.addEventListener("click", ()=> sendAction("playLock3","ロック3単体"));
+
+  let slowOn = false;
+  buttons.slow.addEventListener("click", ()=>{
+    sendAction("toggleSlow","スロー再生の切り替え");
+    slowOn = !slowOn;
+    buttons.slow.textContent = slowOn ? "🐢 スロー再生: ON" : "🐢 スロー再生: OFF";
+    buttons.slow.classList.toggle("toggle-on", slowOn);
+  });
+
+  buttons.settings.addEventListener("click", ()=> sendAction("toggleSettings","設定パネルの開閉"));
+
+  // オフライン時ヘルプ: コマンドコピー
+  copyCmdBtn.addEventListener("click", async ()=>{
+    const text = cmdText.textContent;
+    try{
+      await navigator.clipboard.writeText(text);
+      copyCmdBtn.textContent = "コピーしました";
+    }catch(e){
+      // クリップボードAPIが使えない環境向けフォールバック
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand("copy"); copyCmdBtn.textContent = "コピーしました"; }
+      catch(e2){ log("⚠️ コピーに失敗しました。手動で選択してコピーしてください"); }
+      document.body.removeChild(ta);
+    }
+    setTimeout(()=>{ copyCmdBtn.textContent = "コピー"; }, 1500);
+  });
+
+  // オフライン時ヘルプ: 今すぐ再接続
+  retryNowBtn.addEventListener("click", ()=>{
+    if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
+    log("🔄 手動で再接続を試みます...");
+    connect();
+  });
+
+  // 初回自動接続
+  connect();
+})();
+</script>
+</body>
+</html>
