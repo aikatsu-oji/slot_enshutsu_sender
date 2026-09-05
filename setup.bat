@@ -129,7 +129,7 @@ echo [Œx] enshutsu\enshutsu_overlay.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñBenshutsuƒtƒHƒ‹ƒ_“à‚
 :CHECK_KYOTAI
 rem â‘Ìƒrƒ…[(kyotai.html)Bå§Œä‚Æ˜A“®ƒ‚[ƒhE‘€ìƒpƒlƒ‹”ñ•\¦‚ÅŠJ‚­B”CˆÓƒtƒ@ƒCƒ‹‚È‚Ì‚Å–³‚­‚Ä‚à‘±sB
 if not exist "kyotai.html" goto MAIN_BOARD
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/kyotai.html?mode=link&hidebar=1" --window-size=420,980 --window-position=1490,0
+start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/kyotai/kyotai.html?mode=link&hidebar=1" --window-size=420,980 --window-position=1490,0
 goto MAIN_BOARD
 
 :NO_BROWSER
