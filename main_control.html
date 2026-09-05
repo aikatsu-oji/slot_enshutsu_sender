@@ -246,6 +246,114 @@
     color:var(--gold-bright);
     border-color:rgba(212,175,55,.4);
   }
+
+  /* 主制御モニタ（god_main_board.py の試験用モニタ端子から受信） */
+  .mb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;}
+  .mb-head h2{margin:0;}
+  .mb-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:8px;
+  }
+  .mb-tile{
+    background:#0d0b14;
+    border:1px solid #3a3348;
+    border-radius:8px;
+    padding:8px 10px;
+    min-width:0;
+  }
+  .mb-tile .lbl{margin-bottom:2px;}
+  .mb-val{
+    font-size:20px;
+    font-weight:700;
+    color:var(--text);
+    font-variant-numeric:tabular-nums;
+    line-height:1.2;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .mb-val small{font-size:11px;font-weight:400;color:#8a8398;margin-left:4px;}
+  .mb-tile.state-normal .mb-val{color:#c9bfc5;}
+  .mb-tile.state-gg .mb-val{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.5);}
+  .mb-tile.state-at .mb-val{color:#7cf2a8;text-shadow:0 0 10px rgba(46,204,113,.4);}
+  .mb-val.plus{color:#7cf2a8;}
+  .mb-val.minus{color:#ff9a8a;}
+  .mb-reels{
+    display:flex;gap:8px;margin-top:8px;
+  }
+  .mb-reel{
+    flex:1;text-align:center;
+    background:#08070c;border:1px solid #3a3348;border-radius:8px;
+    padding:10px 0;font-size:18px;font-weight:700;color:var(--text);
+  }
+  .mb-reel.hit{border-color:var(--gold);color:var(--gold-bright);box-shadow:0 0 10px rgba(212,175,55,.35) inset;}
+  .mb-roles{
+    display:flex;gap:8px;margin-top:8px;font-size:12.5px;color:#c9bfc5;
+  }
+  .mb-roles span{flex:1;background:#0d0b14;border:1px solid #3a3348;border-radius:8px;padding:7px 10px;}
+  .mb-roles b{color:var(--gold-bright);font-weight:600;}
+  .mb-events{
+    margin-top:10px;
+    background:#08070c;border:1px solid #3a3348;border-radius:8px;
+    padding:8px 10px;height:110px;overflow-y:auto;
+    font-family:"Consolas",monospace;font-size:11.5px;line-height:1.6;color:#9d97ad;white-space:pre-wrap;
+  }
+  .mb-events .ev-gg{color:var(--gold-bright);}
+  .mb-events .ev-god{color:#ff6b6b;font-weight:700;}
+  .mb-events .ev-at{color:#7cf2a8;}
+  .mb-events .ev-end{color:#ff9a8a;}
+  .mb-opts{display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;color:#8a8398;}
+  .mb-opts label{display:flex;align-items:center;gap:5px;cursor:pointer;}
+  .mb-cmds{display:none;}
+  .mb-cmds.show{display:block;}
+
+  /* 副制御モニタ */
+  .sb-grid{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:8px;
+  }
+  .sb-guess{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.4);}
+  .sb-real{font-size:11px;color:#7a7488;margin-top:3px;}
+  .sb-real.gap{color:#ff9a8a;}
+  .sb-heat{display:flex;gap:3px;margin-top:7px;}
+  .sb-heat i{
+    flex:1;height:12px;border-radius:2px;
+    background:#0d0b14;border:1px solid #3a3348;
+  }
+  .sb-heat i.lit{
+    background:var(--gold);border-color:var(--gold-bright);
+    box-shadow:0 0 6px rgba(212,175,55,.5);
+  }
+  .sb-events .ev-freeze{color:#ff6b6b;font-weight:700;}
+  .sb-events .ev-banner{color:var(--gold-bright);}
+
+  /* 信号注入 */
+  .inj-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .inj-row select,
+  .inj-row input[type=text]{
+    background:#0d0b14;border:1px solid #3a3348;border-radius:8px;
+    color:var(--text);font-family:inherit;font-size:12.5px;padding:8px 10px;min-width:0;
+  }
+  .inj-row select{flex:1;}
+  .inj-hex{
+    width:3.6em;text-align:center;font-family:"Consolas",monospace;
+    font-size:15px;color:var(--gold-bright);text-transform:uppercase;
+  }
+  .inj-json{
+    width:100%;margin-top:10px;height:44px;resize:vertical;
+    background:#08070c;border:1px solid #3a3348;border-radius:8px;
+    color:var(--gold-bright);font-family:"Consolas",monospace;font-size:11.5px;
+    padding:8px 10px;
+  }
+  .inj-note{font-size:11.5px;color:#7a7488;margin-top:8px;line-height:1.6;}
+  .inj-sep{border-top:1px solid #3a3348;margin:16px 0 14px;}
+
+  @media (max-width:560px){
+    .mb-grid{grid-template-columns:repeat(2,1fr);}
+    .sb-grid{grid-template-columns:repeat(2,1fr);}
+  }
 </style>
 </head>
 <body>
@@ -319,6 +427,96 @@
   </div>
 
   <div class="card">
+    <div class="mb-head">
+      <h2>主制御モニタ</h2>
+      <span class="status-pill" id="mb-pill"><span class="dot"></span><span id="mb-pill-text">未受信</span></span>
+    </div>
+    <div class="mb-grid">
+      <div class="mb-tile state-normal" id="mb-state-tile">
+        <div class="lbl">遊技状態</div>
+        <div class="mb-val" id="mb-state">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl" id="mb-games-lbl">ゲーム数</div>
+        <div class="mb-val" id="mb-games">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">差枚数</div>
+        <div class="mb-val" id="mb-diff">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">ストック</div>
+        <div class="mb-val" id="mb-stock">—</div>
+      </div>
+    </div>
+    <div class="mb-reels">
+      <div class="mb-reel" id="mb-reel-0">—</div>
+      <div class="mb-reel" id="mb-reel-1">—</div>
+      <div class="mb-reel" id="mb-reel-2">—</div>
+    </div>
+    <div class="mb-roles">
+      <span>成立役 <b id="mb-flag">—</b></span>
+      <span>表示役 <b id="mb-prize">—</b></span>
+      <span>ナビ <b id="mb-navi">—</b></span>
+      <span>払出 <b id="mb-pay">—</b></span>
+    </div>
+    <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
+    <div class="mb-opts">
+      <label><input type="checkbox" id="mb-show-cmds" checked> 主→副コマンド生ログを表示</label>
+      <label><input type="checkbox" id="mb-to-log" checked> 主要イベントを下のログにも出す</label>
+      <span id="mb-total" style="margin-left:auto"></span>
+    </div>
+    <div class="mb-events mb-cmds" id="mb-cmds"></div>
+  </div>
+
+  <div class="card">
+    <div class="mb-head">
+      <h2>副制御モニタ</h2>
+      <span class="status-pill" id="sb-pill"><span class="dot"></span><span id="sb-pill-text">未受信</span></span>
+    </div>
+    <div class="sb-grid">
+      <div class="mb-tile">
+        <div class="lbl">副制御の推測</div>
+        <div class="mb-val sb-guess" id="sb-guess">—</div>
+        <div class="sb-real" id="sb-real">主制御の実値 —</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">ヒート</div>
+        <div class="mb-val" id="sb-heat-n">—</div>
+        <div class="sb-heat" id="sb-heat"></div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">副制御が見ている状態</div>
+        <div class="mb-val" id="sb-state">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">受信コマンド数</div>
+        <div class="mb-val" id="sb-rx">—</div>
+      </div>
+    </div>
+    <div class="mb-events sb-events" id="sb-events">副制御が発火した演出がここに流れます</div>
+  </div>
+
+  <div class="card">
+    <h2>信号注入</h2>
+    <div class="inj-row">
+      <select id="inj-cmd"></select>
+      <select id="inj-arg"></select>
+      <input class="inj-hex" id="inj-b0" type="text" maxlength="2" spellcheck="false" value="20">
+      <input class="inj-hex" id="inj-b1" type="text" maxlength="2" spellcheck="false" value="07">
+      <button class="btn btn-sm" id="inj-send" disabled>メイン→サブへ流す</button>
+    </div>
+    <div class="inj-note">主制御の送信口を通るため、副制御は正規の受信と区別できません。上の生ログにも同じ形で残ります。反映は次のゲームの切れ目です。</div>
+    <div class="inj-sep"></div>
+    <div class="inj-row">
+      <select id="inj-evt"></select>
+      <button class="btn btn-sm" id="inj-evt-send" disabled>サブの出力として流す</button>
+    </div>
+    <textarea class="inj-json" id="inj-json" spellcheck="false"></textarea>
+    <div class="inj-note">副制御の判断を飛ばして 8765 のオーバーレイへ直送します。上のボタン群と違い、演出イベントの形そのものを検証できます。</div>
+  </div>
+
+  <div class="card">
     <div class="lbl">ログ</div>
     <div class="log" id="log"></div>
   </div>
@@ -348,6 +546,8 @@
     lock3: document.getElementById("btn-lock3"),
     slow: document.getElementById("btn-slow"),
     settings: document.getElementById("btn-settings"),
+    injMain: document.getElementById("inj-send"),
+    injEvt: document.getElementById("inj-evt-send"),
   };
 
   let ws = null;
@@ -404,6 +604,8 @@
       let data;
       try{ data = JSON.parse(ev.data); }catch(e){ return; }
       if(!data || typeof data.action !== "string") return;
+      if(data.action === "mainBoard"){ handleMainBoard(data); return; }
+      if(data.action === "subBoard"){ handleSubBoard(data); return; }
       handleSignalMessage(data);
     });
     ws.addEventListener("close", ()=>{
@@ -445,6 +647,20 @@
     }
     try{
       const payload = (data === undefined) ? { action } : { action, data };
+      ws.send(JSON.stringify(payload));
+      log(`▶ ${label} を送信しました`);
+    }catch(e){
+      log(`⚠️ ${label} の送信中にエラー: ${e.message}`);
+    }
+  }
+
+  // sendAction は {action, data} 形式専用。注入は独自のキーを持つのでこちらを使う。
+  function sendRaw(payload, label){
+    if(!ws || ws.readyState !== WebSocket.OPEN){
+      log(`⚠️ ${label}: 中継サーバーに未接続のため送信できません`);
+      return;
+    }
+    try{
       ws.send(JSON.stringify(payload));
       log(`▶ ${label} を送信しました`);
     }catch(e){
@@ -524,6 +740,358 @@
     await pc.setLocalDescription(offer);
     sendSignal("webrtcOffer", { sdp: pc.localDescription.sdp, type: pc.localDescription.type });
   }
+
+  // ---------------------------------------------------------------
+  // 主制御モニタ
+  //   god_main_board.py の試験用モニタ端子(PanelLink)が中継サーバーへ送る
+  //   { action:"mainBoard", type:"state"|"event"|"cmd"|"summary", ... } を表示する。
+  //   表示のみで、主制御へ何かを送り返すことはない(単方向)。
+  // ---------------------------------------------------------------
+  const mb = {
+    pill: document.getElementById("mb-pill"),
+    pillText: document.getElementById("mb-pill-text"),
+    stateTile: document.getElementById("mb-state-tile"),
+    state: document.getElementById("mb-state"),
+    gamesLbl: document.getElementById("mb-games-lbl"),
+    games: document.getElementById("mb-games"),
+    diff: document.getElementById("mb-diff"),
+    stock: document.getElementById("mb-stock"),
+    reels: [0,1,2].map(i => document.getElementById(`mb-reel-${i}`)),
+    flag: document.getElementById("mb-flag"),
+    prize: document.getElementById("mb-prize"),
+    navi: document.getElementById("mb-navi"),
+    pay: document.getElementById("mb-pay"),
+    events: document.getElementById("mb-events"),
+    cmds: document.getElementById("mb-cmds"),
+    showCmds: document.getElementById("mb-show-cmds"),
+    toLog: document.getElementById("mb-to-log"),
+    total: document.getElementById("mb-total"),
+  };
+  const MB_EVENT_LABEL = {
+    gg_start: ["▶ ゴッドゲーム突入", "ev-gg"],
+    god: ["★ 神揃い", "ev-god"],
+    stock_up: ["ストック獲得", "ev-gg"],
+    at_start: ["◆ AT開始", "ev-at"],
+    add_games: ["上乗せ", "ev-at"],
+    stock_release: ["ストック放出", "ev-at"],
+    at_end: ["AT終了 → 通常時", "ev-end"],
+    info: ["", ""],
+  };
+  const MB_STATE_CLASS = { "通常": "state-normal", "GG": "state-gg", "AT": "state-at" };
+  let mbTimer = null;
+  let mbEventCount = 0;
+  let mbCmdCount = 0;
+
+  function mbAlive(text){
+    mb.pill.classList.remove("pending");
+    mb.pill.classList.add("on");
+    mb.pillText.textContent = text;
+    if(mbTimer) clearTimeout(mbTimer);
+    mbTimer = setTimeout(()=>{
+      mb.pill.classList.remove("on");
+      mb.pill.classList.add("pending");
+      mb.pillText.textContent = "受信途絶";
+    }, 20000);
+  }
+
+  function mbAppend(el, html, cls, counterName){
+    const line = document.createElement("div");
+    if(cls) line.className = cls;
+    line.innerHTML = html;
+    if(counterName === "ev"){
+      if(mbEventCount === 0) el.textContent = "";
+      mbEventCount++;
+      if(mbEventCount > 60) el.removeChild(el.firstChild);
+    }else{
+      mbCmdCount++;
+      if(mbCmdCount > 200) el.removeChild(el.firstChild);
+    }
+    el.appendChild(line);
+    el.scrollTop = el.scrollHeight;
+  }
+
+  function mbRenderState(d){
+    mbAlive(`受信中 / 設定${d.setting ?? "?"}`);
+    const st = d.state || "—";
+    mb.stateTile.className = "mb-tile " + (MB_STATE_CLASS[st] || "state-normal");
+    if(st === "通常"){
+      mb.state.innerHTML = `通常<small>${d.mode ?? ""}</small>`;
+      mb.gamesLbl.textContent = "ゲーム数 / 天井まで";
+      mb.games.innerHTML = `${d.gameCount ?? "—"}<small>/ ${d.ceilingLeft ?? "—"}</small>`;
+    }else if(st === "GG"){
+      mb.state.innerHTML = `GG<small>残${d.ggLeft ?? "—"}G</small>`;
+      mb.gamesLbl.textContent = "ゴッドゲーム";
+      mb.games.innerHTML = `${d.ggLeft ?? "—"}<small>G</small>`;
+    }else{
+      mb.state.innerHTML = `AT<small>神々の宴</small>`;
+      mb.gamesLbl.textContent = "AT残ゲーム数";
+      mb.games.innerHTML = `${d.atLeft ?? "—"}<small>G</small>`;
+    }
+    const diff = Number(d.diff ?? 0);
+    mb.diff.textContent = (diff > 0 ? "+" : "") + diff.toLocaleString();
+    mb.diff.className = "mb-val " + (diff > 0 ? "plus" : diff < 0 ? "minus" : "");
+    mb.stock.textContent = d.stock ?? "—";
+
+    const reel = Array.isArray(d.reel) ? d.reel : ["—","—","—"];
+    const hit = reel.length === 3 && reel[0] === reel[1] && reel[1] === reel[2] && (reel[0] === "神" || reel[0] === "赤7");
+    mb.reels.forEach((el,i)=>{ el.textContent = reel[i] ?? "—"; el.classList.toggle("hit", hit); });
+    mb.flag.textContent = d.flag ?? "—";
+    mb.prize.textContent = d.prize ?? "—";
+    mb.navi.textContent = d.navi ? `押し順${d.navi}` : "—";
+    mb.pay.textContent = d.pay != null ? `${d.pay}枚` : "—";
+    mb.total.textContent = `${(d.game ?? 0).toLocaleString()}G / IN ${(d.totalIn ?? 0).toLocaleString()} / OUT ${(d.totalOut ?? 0).toLocaleString()}`;
+
+    // 副制御の推測と突き合わせるため、主制御の実モードを控えておく
+    sbRealMode = (st === "通常") ? (d.mode ?? null) : null;
+    sbSyncReal();
+  }
+
+  function mbRenderEvent(d){
+    const [label, cls] = MB_EVENT_LABEL[d.event] || MB_EVENT_LABEL.info;
+    // 通知文(text)はラベルと重複しない場合だけ添える(赤7揃い / +30G / 残ストック数など)
+    const showText = ["stock_up","add_games","stock_release","info"].includes(d.event);
+    const detail = showText ? (d.text || "") : "";
+    const extra = d.event === "gg_start" && d.cause ? `（${d.cause}）` : "";
+    const stock = d.stock != null ? `  stock=${d.stock}` : "";
+    const html = `${String(d.game ?? "").padStart(5)}G  ${label}${extra}  ${escapeHtml(detail)}${stock}`;
+    mbAppend(mb.events, html, cls, "ev");
+    if(mb.toLog.checked && d.event !== "info" && d.event !== "stock_release"){
+      log(`🎰 主制御: ${label}${extra} ${detail}`);
+    }
+  }
+
+  function mbRenderCmd(d){
+    const html = `${escapeHtml(d.cmd || "")}  ${escapeHtml((d.name || "").padEnd(6, "　"))} ${String(d.data ?? "").padStart(3)}  ${escapeHtml(d.note || "")}`;
+    mbAppend(mb.cmds, html, "", "cmd");
+  }
+
+  function escapeHtml(s){
+    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+
+  function handleMainBoard(d){
+    switch(d.type){
+      case "state": mbRenderState(d); break;
+      case "event": mbRenderEvent(d); break;
+      case "cmd": mbRenderCmd(d); break;
+      case "summary":
+        mbAppend(mb.events, `── 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚 ──`, "ev-end", "ev");
+        log(`🎰 主制御 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚`);
+        mb.pill.classList.remove("on","pending");
+        mb.pillText.textContent = "停止";
+        if(mbTimer){ clearTimeout(mbTimer); mbTimer = null; }
+        break;
+    }
+  }
+
+  mb.showCmds.addEventListener("change", ()=>{
+    mb.cmds.classList.toggle("show", mb.showCmds.checked);
+  });
+  // 既定でオンなので、読み込み時にも表示状態を合わせておく
+  mb.cmds.classList.toggle("show", mb.showCmds.checked);
+
+  // ---------------------------------------------------------------
+  // 副制御モニタ
+  //   SubBoard の試験用モニタ端子が送る
+  //   { action:"subBoard", type:"state"|"event", ... } を表示する。
+  //   guess は副制御が受信履歴だけから立てた見立てであり、主制御の内部モード
+  //   そのものではない。両者が食い違ったときは実値側を赤で示す。
+  // ---------------------------------------------------------------
+  const SB_HEAT_MAX = 9;      // SubBoard の min(heat + 3, 9) に合わせる
+  const sb = {
+    pill: document.getElementById("sb-pill"),
+    pillText: document.getElementById("sb-pill-text"),
+    guess: document.getElementById("sb-guess"),
+    real: document.getElementById("sb-real"),
+    heatN: document.getElementById("sb-heat-n"),
+    heat: document.getElementById("sb-heat"),
+    state: document.getElementById("sb-state"),
+    rx: document.getElementById("sb-rx"),
+    events: document.getElementById("sb-events"),
+  };
+  const SB_EVENT_LABEL = {
+    freeze:    ["★ フリーズ演出", "ev-freeze"],
+    banner:    ["バナー予告",     "ev-banner"],
+    navi:      ["押し順ナビ",     ""],
+    gg_start:  ["▶ GG開始",       "ev-gg"],
+    stock_up:  ["ストック加算",   "ev-gg"],
+    add_games: ["上乗せ",         "ev-at"],
+    at_end:    ["AT終了",         "ev-end"],
+  };
+  for(let i = 0; i < SB_HEAT_MAX; i++) sb.heat.appendChild(document.createElement("i"));
+
+  let sbRealMode = null;      // 主制御の実モード(通常時のみ)
+  let sbGuess = null;         // 副制御の推測
+  let sbTimer = null;
+  let sbEventCount = 0;
+
+  function sbAlive(text){
+    sb.pill.classList.remove("pending");
+    sb.pill.classList.add("on");
+    sb.pillText.textContent = text;
+    if(sbTimer) clearTimeout(sbTimer);
+    sbTimer = setTimeout(()=>{
+      sb.pill.classList.remove("on");
+      sb.pill.classList.add("pending");
+      sb.pillText.textContent = "受信途絶";
+    }, 20000);
+  }
+
+  function sbSyncReal(){
+    if(sbRealMode == null){
+      sb.real.textContent = "主制御の実値 —（通常時のみ）";
+      sb.real.classList.remove("gap");
+      return;
+    }
+    sb.real.textContent = `主制御の実値 ${sbRealMode}`;
+    sb.real.classList.toggle("gap", sbGuess != null && sbGuess !== sbRealMode);
+  }
+
+  function sbRenderState(d){
+    sbAlive(`受信中 / ${(d.game ?? 0).toLocaleString()}G`);
+    sbGuess = d.guess ?? null;
+    sb.guess.textContent = sbGuess ?? "—";
+    sb.heatN.textContent = d.heat ?? "—";
+    sb.state.textContent = d.state ?? "—";
+    sb.rx.textContent = (d.rx ?? 0).toLocaleString();
+    const lit = Math.max(0, Math.min(SB_HEAT_MAX, Number(d.heat) || 0));
+    Array.from(sb.heat.children).forEach((el, i)=> el.classList.toggle("lit", i < lit));
+    sbSyncReal();
+  }
+
+  function sbRenderEvent(d){
+    const ev = (d && d.event) || {};
+    const [label, cls] = SB_EVENT_LABEL[ev.type] || [ev.type || "?", ""];
+    const detail = Object.keys(ev)
+      .filter(k => k !== "type" && k !== "g")
+      .map(k => `${k}=${typeof ev[k] === "object" ? JSON.stringify(ev[k]) : ev[k]}`)
+      .join(" ");
+    const g = ev.g != null ? String(ev.g).padStart(5) : "    —";
+    const line = document.createElement("div");
+    if(cls) line.className = cls;
+    line.textContent = `${g}G  ${label}  ${detail}`;
+    if(sbEventCount === 0) sb.events.textContent = "";
+    sbEventCount++;
+    if(sbEventCount > 60) sb.events.removeChild(sb.events.firstChild);
+    sb.events.appendChild(line);
+    sb.events.scrollTop = sb.events.scrollHeight;
+  }
+
+  function handleSubBoard(d){
+    if(d.type === "state") sbRenderState(d);
+    else if(d.type === "event") sbRenderEvent(d);
+  }
+
+  // ---------------------------------------------------------------
+  // 信号注入
+  //   god_main_board.py 第4節のコマンド定義に対応する。{action:"panelInject"}
+  //   を中継へ投げると主制御側の受信スレッドがキューに積み、遊技の切れ目で
+  //   流し込む。主制御へ状態を問い合わせる経路ではない(単方向は崩れない)。
+  // ---------------------------------------------------------------
+  const INJ_FLAG = ["ハズレ","リプレイ","共通ベル","押順ベル","こぼし","スイカ",
+                    "弱チェリー","強チェリー","チャンス目","赤7揃い","神揃い"];
+  const INJ_STATE = ["通常","GG","AT"];
+  const asEnum = arr => arr.map((v, i) => [i, v]);
+  const asRange = (n, f) => Array.from({length:n}, (_, i) => [i, f(i)]);
+
+  const INJ_CMD = {
+    0x01:{name:"電源投入",     args:asEnum(INJ_STATE)},
+    0x10:{name:"メダル投入",   args:null, def:3},
+    0x11:{name:"遊技開始",     args:asEnum(INJ_STATE)},
+    0x20:{name:"内部当選",     args:asEnum(INJ_FLAG), def:7},
+    0x21:{name:"押し順ナビ",   args:asRange(6, i => `押し順${i+1}`).concat([[255,"ナビなし"]]), def:255},
+    0x30:{name:"リール回転",   args:[[0,"—"]]},
+    0x31:{name:"左リール停止", args:asRange(21, i => `${i}コマ`)},
+    0x32:{name:"中リール停止", args:asRange(21, i => `${i}コマ`)},
+    0x33:{name:"右リール停止", args:asRange(21, i => `${i}コマ`)},
+    0x34:{name:"全停止",       args:asEnum(INJ_FLAG)},
+    0x40:{name:"払出",         args:null, def:8},
+    0x41:{name:"遊技終了",     args:null},
+    0x50:{name:"状態移行",     args:asEnum(INJ_STATE)},
+    0x51:{name:"ストック数",   args:null, def:1},
+    0x52:{name:"AT残G",        args:null, def:50},
+    0x53:{name:"上乗せ",       args:null, def:30},
+  };
+  const INJ_EVT = {
+    freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
+    banner:    ["バナー予告",     {type:"banner", rank:"赤", trigger:"強チェリー", heat:3}],
+    navi:      ["押し順ナビ",     {type:"navi", order:0}],
+    gg_start:  ["GG開始",         {type:"gg_start"}],
+    stock_up:  ["ストック加算",   {type:"stock_up", stock:2, gain:1}],
+    add_games: ["上乗せ",         {type:"add_games", games:30}],
+    at_end:    ["AT終了",         {type:"at_end", total:0}],
+  };
+  const hex2 = n => (n & 0xFF).toString(16).toUpperCase().padStart(2,"0");
+
+  const injCmd = document.getElementById("inj-cmd");
+  const injArg = document.getElementById("inj-arg");
+  const injB0 = document.getElementById("inj-b0");
+  const injB1 = document.getElementById("inj-b1");
+  const injEvt = document.getElementById("inj-evt");
+  const injJson = document.getElementById("inj-json");
+
+  Object.keys(INJ_CMD).forEach(k => {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = `${hex2(Number(k))}  ${INJ_CMD[k].name}`;
+    injCmd.appendChild(o);
+  });
+
+  function injFillArgs(){
+    const typ = Number(injCmd.value);
+    const entry = INJ_CMD[typ];
+    injB0.value = hex2(typ);
+    injArg.innerHTML = "";
+    if(!entry.args){
+      injArg.style.display = "none";      // 数値をそのまま入れる種別
+      injB1.value = hex2(entry.def ?? 0);
+      return;
+    }
+    injArg.style.display = "";
+    entry.args.forEach(([d, label]) => {
+      const o = document.createElement("option");
+      o.value = d;
+      o.textContent = `${hex2(d)}  ${label}`;
+      injArg.appendChild(o);
+    });
+    injArg.value = String(entry.def ?? entry.args[0][0]);
+    injB1.value = hex2(Number(injArg.value));
+  }
+  injCmd.addEventListener("change", injFillArgs);
+  injArg.addEventListener("change", ()=>{ injB1.value = hex2(Number(injArg.value)); });
+  injCmd.value = String(0x20);
+  injFillArgs();
+
+  Object.keys(INJ_EVT).forEach(k => {
+    const o = document.createElement("option");
+    o.value = k;
+    o.textContent = INJ_EVT[k][0];
+    injEvt.appendChild(o);
+  });
+  injEvt.addEventListener("change", ()=>{
+    injJson.value = JSON.stringify(INJ_EVT[injEvt.value][1]);
+  });
+  injJson.value = JSON.stringify(INJ_EVT.freeze[1]);
+
+  buttons.injMain.addEventListener("click", ()=>{
+    const typ = parseInt(injB0.value, 16);
+    const data = parseInt(injB1.value, 16);
+    if(Number.isNaN(typ) || Number.isNaN(data)){
+      log("⚠️ 注入: 上位・下位バイトは16進数で入れてください");
+      return;
+    }
+    const name = (INJ_CMD[typ] || {}).name || "未定義";
+    sendRaw({ action:"panelInject", layer:"main2sub", type:typ, data:data },
+            `注入 0x${hex2(typ)}${hex2(data)}（${name}）`);
+  });
+
+  buttons.injEvt.addEventListener("click", ()=>{
+    let ev;
+    try{ ev = JSON.parse(injJson.value); }
+    catch(e){ log("⚠️ 注入: JSONの書式が不正です"); return; }
+    sendRaw({ action:"panelInject", layer:"enshutsu", event:ev },
+            `演出直送 ${ev && ev.type ? ev.type : "?"}`);
+  });
 
   // enshutsu側からのanswer/ICE candidateをws受信ハンドラから呼び出す
   function handleSignalMessage(data){

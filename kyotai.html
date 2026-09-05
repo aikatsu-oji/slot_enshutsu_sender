@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>筐体 - 神域 -SHIN'IKI-</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@500;800&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  /* ---- 配色: 紺碧の石 × 古金 × 象牙。実機の総金色とは別の解釈で「神域」を表す ---- */
+  :root{
+    --lapis:#14213d; --lapis-deep:#0b1226; --lapis-light:#1f3260;
+    --gold:#c9a24a; --gold-bright:#f1d27a; --gold-dim:#7d6328;
+    --ivory:#efe6d2; --ink:#0a0a10;
+    --red:#d43a2f; --green:#3fa35b; --yellow:#f2c23b; --blue:#4d8fd6;
+    --font-title:"Shippori Mincho B1","Yu Mincho","Hiragino Mincho ProN",serif;
+    --font-ui:"Zen Kaku Gothic New","Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:#050710;
+    color:var(--ivory);
+    font-family:var(--font-ui);
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+  }
+
+  /* ---- 筐体本体: 高さ基準で縮尺 ---- */
+  .cabinet{
+    --w:min(100vw, calc(100vh * 0.58));
+    --koma:calc(var(--w) / 8.4);   /* 1コマの高さ。リール窓は3コマ分。筐体幅に追従 */
+    width:var(--w);
+    height:calc(var(--w) / 0.58);
+    max-height:100vh;
+    display:grid;
+    grid-template-rows:5fr 6fr 3.2fr 0.9fr;
+    background:
+      linear-gradient(90deg, var(--gold-dim) 0, var(--gold) 6px, var(--lapis-light) 6px, var(--lapis) 40px, var(--lapis) calc(100% - 40px), var(--lapis-light) calc(100% - 6px), var(--gold) calc(100% - 6px), var(--gold-dim) 100%);
+    border-radius:18px 18px 8px 8px;
+    box-shadow:0 30px 80px rgba(0,0,0,.7), inset 0 0 0 1px rgba(241,210,122,.25);
+    position:relative;
+    overflow:hidden;
+    font-size:calc(var(--w) / 34);
+  }
+  .cabinet > *{min-height:0;}
+
+  /* ---- 上部液晶 ---- */
+  .lcd-frame{
+    margin:4% 7% 2%;
+    border:3px solid var(--gold);
+    border-radius:6px;
+    background:var(--ink);
+    position:relative;
+    overflow:hidden;
+    box-shadow:inset 0 0 40px rgba(0,0,0,.9), 0 0 0 6px var(--lapis-deep);
+  }
+  .lcd{
+    position:absolute;inset:0;
+    background:
+      radial-gradient(ellipse at 50% 120%, rgba(201,162,74,.28), transparent 60%),
+      repeating-linear-gradient(90deg, rgba(255,255,255,.025) 0 2px, transparent 2px 9px),
+      linear-gradient(180deg,#0e1730,#050810);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;
+  }
+  .lcd.gg{background:radial-gradient(ellipse at 50% 60%, rgba(241,210,122,.55), rgba(125,99,40,.2) 55%, #1a1204);}
+  .lcd.at{background:radial-gradient(ellipse at 50% 60%, rgba(63,163,91,.4), rgba(11,50,30,.6) 60%, #041008);}
+  .lcd-state{
+    font-family:var(--font-title);
+    font-weight:800;
+    font-size:3.2em;
+    line-height:1;
+    letter-spacing:.08em;
+    color:var(--ivory);
+    text-shadow:0 2px 0 rgba(0,0,0,.6), 0 0 24px rgba(241,210,122,.25);
+  }
+  .lcd.gg .lcd-state,.lcd.at .lcd-state{color:#fff8e6;text-shadow:0 0 30px rgba(241,210,122,.8),0 3px 0 rgba(0,0,0,.5);}
+  .lcd-sub{margin-top:.5em;font-size:1.05em;color:rgba(239,230,210,.75);letter-spacing:.12em;}
+  .lcd-note{position:absolute;left:0;right:0;bottom:6%;font-size:.85em;color:rgba(239,230,210,.5);letter-spacing:.06em;}
+  .lcd-flash{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:var(--font-title);font-weight:800;font-size:2.6em;letter-spacing:.1em;
+    color:var(--gold-bright);text-shadow:0 0 30px rgba(241,210,122,.9),0 4px 0 rgba(0,0,0,.6);
+    background:rgba(5,7,16,.55);
+    opacity:0;pointer-events:none;transform:scale(1.15);
+    transition:opacity .18s, transform .18s;
+  }
+  .lcd-flash.show{opacity:1;transform:scale(1);}
+  .lcd-flash.god{color:#fff;text-shadow:0 0 40px var(--red),0 0 80px var(--gold-bright);}
+
+  /* ---- リール周り ---- */
+  .reel-deck{
+    position:relative;
+    margin:0 7%;
+    display:grid;
+    grid-template-rows:auto 1fr auto;
+    gap:2%;
+  }
+  .segs{display:flex;justify-content:space-between;align-items:flex-end;padding:0 2%;}
+  .seg{
+    background:#08060a;border:2px solid var(--gold-dim);border-radius:4px;
+    padding:.25em .6em;min-width:5.2em;text-align:right;
+    font-family:"Consolas","Courier New",monospace;font-weight:700;font-size:1.5em;letter-spacing:.1em;
+    color:#ff5a3c;text-shadow:0 0 8px rgba(255,90,60,.8);
+    position:relative;
+  }
+  .seg small{position:absolute;left:.5em;top:-1.3em;font-size:.45em;letter-spacing:.2em;color:var(--gold);font-family:var(--font-ui);font-weight:400;}
+  .navi{display:flex;gap:.6em;align-items:center;}
+  .navi span{
+    width:1.9em;height:1.9em;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid var(--gold-dim);background:#08060a;color:#3a3020;
+    font-weight:700;font-size:1.1em;transition:all .15s;
+  }
+  .navi span.on{background:var(--gold-bright);color:var(--lapis-deep);border-color:#fff3c8;box-shadow:0 0 14px var(--gold-bright);}
+
+  .window{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:6px;
+    padding:6px;
+    background:linear-gradient(180deg,var(--gold-dim),var(--gold) 20%,var(--gold-bright) 50%,var(--gold) 80%,var(--gold-dim));
+    border-radius:8px;
+    box-shadow:0 6px 0 var(--lapis-deep), inset 0 1px 0 rgba(255,255,255,.4);
+    position:relative;
+    align-self:center;
+  }
+  .reel{
+    position:relative;height:calc(var(--koma) * 3);overflow:hidden;
+    background:#fdfbf3;border-radius:4px;
+    box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+  }
+  .reel::before,.reel::after{
+    content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;
+  }
+  .reel::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent);}
+  .reel::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.45),transparent);}
+  .reel .line{
+    position:absolute;left:0;right:0;top:calc(var(--koma) * 1);height:var(--koma);z-index:2;pointer-events:none;
+    box-shadow:inset 0 0 0 2px rgba(212,58,47,.0);
+    transition:box-shadow .15s;
+  }
+  .reel.hit .line{box-shadow:inset 0 0 0 3px rgba(241,210,122,.95), 0 0 18px rgba(241,210,122,.8);}
+  .strip{position:absolute;left:0;right:0;top:0;will-change:transform;}
+  .strip.blur{filter:blur(1.5px);}
+  .koma{
+    position:absolute;left:0;right:0;height:var(--koma);
+    display:flex;align-items:center;justify-content:center;
+    border-bottom:1px solid rgba(20,33,61,.12);
+    font-weight:800;
+  }
+  /* 図柄。テキストとCSSだけで描く */
+  .sym{display:flex;align-items:center;justify-content:center;width:82%;height:74%;border-radius:6px;font-size:1.7em;line-height:1;}
+  .sym-god{font-family:var(--font-title);color:var(--lapis-deep);background:linear-gradient(180deg,#fff3c8,var(--gold-bright) 45%,var(--gold));box-shadow:0 2px 0 var(--gold-dim);letter-spacing:0;}
+  .sym-seven{font-family:var(--font-title);font-size:2.4em;color:var(--red);text-shadow:0 2px 0 #7a1811,0 0 2px #fff;transform:skewX(-8deg);}
+  .sym-bar{background:#151515;color:#fff;font-size:1.05em;letter-spacing:.25em;height:46%;border-radius:2px;box-shadow:inset 0 0 0 2px #444;}
+  .sym-bell{color:#8a5f00;background:radial-gradient(circle at 50% 35%,#ffe27a,var(--yellow) 60%,#c8931a);border-radius:50% 50% 45% 45%;width:52%;height:60%;font-size:.9em;}
+  .sym-melon{color:#eaf7e9;background:radial-gradient(circle at 40% 40%,#6cc47f,var(--green) 55%,#1f6b35);border-radius:50%;width:56%;height:64%;font-size:.75em;}
+  .sym-cherry{color:#ffe0dc;background:radial-gradient(circle at 40% 40%,#ff7f74,var(--red) 55%,#7a1811);border-radius:50%;width:42%;height:48%;font-size:.7em;}
+  .sym-rep{color:#e6f0ff;background:linear-gradient(180deg,#7fb0ea,var(--blue));font-size:1em;height:52%;border-radius:20px;}
+  .sym-blank{background:repeating-linear-gradient(135deg,#dcd3bd 0 4px,#efe6d2 4px 8px);height:40%;width:70%;}
+
+  .controls{
+    display:grid;grid-template-columns:1.1fr 1fr 3fr;align-items:center;gap:3%;
+    padding:0 2% 2%;
+  }
+  .lever{
+    justify-self:start;align-self:center;
+    width:2.6em;height:2.6em;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%,#ffd8b0,#e0742a 45%,#7a3510);
+    border:3px solid var(--gold-dim);
+    box-shadow:0 4px 0 #3a1a08, 0 0 0 5px var(--lapis-deep);
+    cursor:pointer;transition:transform .08s;
+  }
+  .lever:active,.lever.down{transform:translateY(4px);box-shadow:0 0 0 #3a1a08,0 0 0 5px var(--lapis-deep);}
+  .maxbet{
+    justify-self:center;
+    background:linear-gradient(180deg,#f7e2a0,var(--gold));color:var(--lapis-deep);
+    border:2px solid var(--gold-dim);border-radius:6px;
+    font-weight:700;font-size:.85em;letter-spacing:.1em;padding:.5em .8em;
+    cursor:pointer;box-shadow:0 3px 0 var(--gold-dim);
+  }
+  .maxbet:active{transform:translateY(3px);box-shadow:none;}
+  .stops{display:flex;gap:6%;justify-content:space-around;}
+  .stop{
+    width:2.4em;height:2.4em;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,#ff8f83,var(--red) 55%,#6f1610);
+    border:3px solid var(--gold-dim);
+    box-shadow:0 4px 0 #3b0c08, 0 0 0 4px var(--lapis-deep);
+    color:#fff3c8;font-family:var(--font-title);font-weight:800;font-size:1em;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;transition:transform .06s, filter .15s;
+    filter:brightness(.55);
+  }
+  .stop.armed{filter:brightness(1);}
+  .stop.armed:hover{filter:brightness(1.15);}
+  .stop:active,.stop.down{transform:translateY(4px);box-shadow:0 0 0 #3b0c08,0 0 0 4px var(--lapis-deep);}
+
+  /* ---- 下部パネル ---- */
+  .panel{
+    margin:2% 7% 3%;
+    border:3px solid var(--gold);border-radius:6px;
+    background:
+      radial-gradient(ellipse at 50% 100%, rgba(201,162,74,.35), transparent 55%),
+      linear-gradient(180deg,#0e1730,#070b18);
+    position:relative;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    box-shadow:0 0 0 6px var(--lapis-deep), inset 0 0 40px rgba(0,0,0,.8);
+  }
+  .panel::before{
+    content:"";position:absolute;inset:8% 10%;
+    border:1px solid rgba(241,210,122,.35);border-radius:2px;pointer-events:none;
+  }
+  .title{
+    font-family:var(--font-title);font-weight:800;font-size:4.2em;line-height:1;
+    letter-spacing:.28em;margin-left:.28em;
+    background:linear-gradient(180deg,#fff7dc 0%,var(--gold-bright) 40%,var(--gold) 60%,#8a6a22 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,.7)) drop-shadow(0 0 18px rgba(241,210,122,.35));
+  }
+  .title-sub{margin-top:.4em;font-size:.9em;letter-spacing:.5em;color:var(--gold);}
+  .title-type{position:absolute;right:12%;bottom:12%;font-size:.7em;letter-spacing:.2em;color:rgba(239,230,210,.55);}
+
+  /* ---- 受皿 ---- */
+  .tray{
+    margin:0 4% 0;
+    border-radius:0 0 8px 8px;
+    background:linear-gradient(180deg,#2b2f3a,#0f1117);
+    box-shadow:inset 0 6px 12px rgba(0,0,0,.8);
+  }
+
+  /* ---- 操作バー(筐体外) ---- */
+  .bar{
+    position:fixed;left:12px;top:12px;
+    display:flex;flex-direction:column;gap:8px;
+    background:rgba(10,12,22,.85);border:1px solid rgba(201,162,74,.35);border-radius:10px;
+    padding:12px 14px;font-size:12.5px;color:var(--ivory);z-index:10;
+    max-width:260px;
+  }
+  .bar label{display:flex;align-items:center;gap:8px;}
+  .bar input[type=text]{flex:1;background:#08060a;border:1px solid #3a3348;color:var(--ivory);padding:5px 8px;border-radius:6px;font-size:12px;}
+  .bar button{background:#1e1a2c;border:1px solid var(--gold-dim);color:var(--ivory);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px;}
+  .bar button:hover{border-color:var(--gold);}
+  .bar .st{font-size:11.5px;color:#9d97ad;}
+  .bar .st.on{color:#7cf2a8;}
+  .bar .keys{font-size:11px;color:#8a8398;line-height:1.6;}
+  .bar.hidden{display:none;}
+  .toggle-bar{position:fixed;right:12px;top:12px;z-index:11;background:rgba(10,12,22,.7);border:1px solid rgba(201,162,74,.35);color:var(--gold);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:12px;}
+
+  @media (prefers-reduced-motion: reduce){ .strip.blur{filter:none;} }
+</style>
+</head>
+<body>
+
+<button class="toggle-bar" id="toggle-bar" aria-label="操作パネル表示切替">⚙</button>
+<div class="bar" id="bar">
+  <label><input type="radio" name="mode" value="local" checked> ローカル試打（内部抽選あり）</label>
+  <label><input type="radio" name="mode" value="link"> 主制御と連動（god_main_board.py）</label>
+  <label>中継 <input type="text" id="ws-url" value="ws://localhost:8787" spellcheck="false"><button id="btn-conn">接続</button></label>
+  <div class="st" id="ws-st">未接続</div>
+  <label><input type="checkbox" id="auto-stop"> 停止ボタンを自動で押す（ローカル）</label>
+  <div class="keys">Space/Enter = レバー　左/中/右 = ← ↓ → または J K L　MAXBET = M</div>
+</div>
+
+<div class="cabinet" id="cabinet">
+  <div class="lcd-frame">
+    <div class="lcd" id="lcd">
+      <div class="lcd-state" id="lcd-state">神域</div>
+      <div class="lcd-sub" id="lcd-sub">レバーを叩いてください</div>
+      <div class="lcd-note" id="lcd-note">ローカル試打</div>
+      <div class="lcd-flash" id="lcd-flash"></div>
+    </div>
+  </div>
+
+  <div class="reel-deck">
+    <div class="segs">
+      <div class="seg" id="seg-credit"><small>CREDIT</small>50</div>
+      <div class="navi" id="navi"><span>1</span><span>2</span><span>3</span></div>
+      <div class="seg" id="seg-pay"><small>PAY</small>0</div>
+    </div>
+    <div class="window">
+      <div class="reel" id="reel-0"><div class="strip" id="strip-0"></div><div class="line"></div></div>
+      <div class="reel" id="reel-1"><div class="strip" id="strip-1"></div><div class="line"></div></div>
+      <div class="reel" id="reel-2"><div class="strip" id="strip-2"></div><div class="line"></div></div>
+    </div>
+    <div class="controls">
+      <div class="lever" id="lever" role="button" aria-label="レバーON" tabindex="0"></div>
+      <button class="maxbet" id="maxbet">MAX BET</button>
+      <div class="stops">
+        <button class="stop" id="stop-0" aria-label="左リール停止">左</button>
+        <button class="stop" id="stop-1" aria-label="中リール停止">中</button>
+        <button class="stop" id="stop-2" aria-label="右リール停止">右</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="title">神域</div>
+    <div class="title-sub">SHIN'IKI</div>
+    <div class="title-type">GOD TYPE / 6号機仕様</div>
+  </div>
+  <div class="tray"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------
+  // 図柄配列: god_main_board.py の REEL_L / REEL_C / REEL_R と同一
+  // ---------------------------------------------------------------
+  const REELS = [
+    ["神","ベル","リプ","スイカ","赤7","ベル","チェリー","リプ","ベル","ブランク","スイカ","リプ","ベル","BAR","リプ","ベル","スイカ","リプ","ベル","チェリー","リプ"],
+    ["神","リプ","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","赤7","ベル","スイカ","リプ","ベル","BAR","リプ","ベル","スイカ","リプ"],
+    ["神","ベル","リプ","赤7","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","ベル","BAR","リプ","ベル","スイカ","リプ","ベル","スイカ"],
+  ];
+  const KOMA = 21, MAX_SLIP = 4;
+  const SYM_CLASS = {"神":"sym-god","赤7":"sym-seven","BAR":"sym-bar","ベル":"sym-bell","スイカ":"sym-melon","チェリー":"sym-cherry","リプ":"sym-rep","ブランク":"sym-blank"};
+  const SYM_TEXT  = {"神":"神","赤7":"7","BAR":"BAR","ベル":"ベル","スイカ":"スイカ","チェリー":"チェ","リプ":"RP","ブランク":""};
+
+  // ---------------------------------------------------------------
+  // リール物理
+  //   実機: 約80rpm(21コマ/0.75秒 ≒ 28コマ/秒)。停止操作から190ms以内に最大4コマ滑って停止。
+  //   ここでは「停止操作時の中段コマ + 滑り(0-4)」を主制御と同じ規則で決め、
+  //   そこまで等速で流してから止め、止まった瞬間に小さく戻る(実機の「ガクッ」)。
+  // ---------------------------------------------------------------
+  const SPEED = 28;                 // コマ/秒
+  const SPINUP = 0.55;              // 定速に達するまで(秒)。この間は停止ボタン無効
+  // 1コマの実ピクセル高。カスタムプロパティは calc のまま返る環境があるので、リール窓の高さから逆算する
+  const komaPxOf = el => el.clientHeight / 3;
+
+  class Reel {
+    constructor(idx){
+      this.idx = idx;
+      this.tape = REELS[idx];
+      this.el = document.getElementById(`reel-${idx}`);
+      this.strip = document.getElementById(`strip-${idx}`);
+      this.pos = 0;                 // 中段に来ているコマ番号(実数)
+      this.vel = 0;
+      this.state = "stop";          // stop | spinup | spin | stopping
+      this.target = null;
+      this.onStop = null;
+      this.build();
+      this.render();
+    }
+    build(){
+      // 表示上は i=-2..23 のコマを積む。上方向に高いコマ番号が並び、回転で下へ流れる。
+      this.strip.innerHTML = "";
+      for(let i = -2; i <= KOMA + 2; i++){
+        const sym = this.tape[((i % KOMA) + KOMA) % KOMA];
+        const k = document.createElement("div");
+        k.className = "koma";
+        k.style.top = `calc(var(--koma) * ${-i})`;
+        k.innerHTML = `<div class="sym ${SYM_CLASS[sym]}">${SYM_TEXT[sym]}</div>`;
+        this.strip.appendChild(k);
+      }
+    }
+    render(){
+      const p = ((this.pos % KOMA) + KOMA) % KOMA;
+      this.strip.style.transform = `translateY(${(1 + p) * komaPxOf(this.el)}px)`;
+    }
+    start(){
+      this.state = "spinup"; this.vel = 0; this.target = null;
+      this.el.classList.remove("hit");
+      this.strip.classList.add("blur");
+      this.t0 = performance.now();
+    }
+    /** 押下時の中段コマ番号 */
+    pushPos(){ return Math.round(this.pos) % KOMA; }
+    /** target: 停止させたい中段コマ番号。滑りは呼び出し側で決める */
+    stopAt(target, cb){
+      if(this.state !== "spin") return false;
+      this.target = ((target % KOMA) + KOMA) % KOMA;
+      this.onStop = cb || null;
+      this.state = "stopping";
+      return true;
+    }
+    tick(dt){
+      if(this.state === "stop") return;
+      if(this.state === "spinup"){
+        const t = (performance.now() - this.t0) / 1000;
+        this.vel = SPEED * Math.min(1, t / SPINUP);
+        if(t >= SPINUP){ this.state = "spin"; this.vel = SPEED; onArmed(this.idx); }
+      }
+      let step = this.vel * dt;
+      if(this.state === "stopping"){
+        const remain = ((this.target - this.pos) % KOMA + KOMA) % KOMA;
+        if(step >= remain){
+          this.pos = this.target; this.vel = 0; this.state = "stop";
+          this.strip.classList.remove("blur");
+          this.render();
+          this.bounce();
+          const cb = this.onStop; this.onStop = null;
+          if(cb) cb(this);
+          return;
+        }
+      }
+      this.pos = (this.pos + step) % KOMA;
+      this.render();
+    }
+    bounce(){
+      this.strip.style.transition = "transform .06s";
+      const p = this.pos, px = komaPxOf(this.el);
+      this.strip.style.transform = `translateY(${(1 + p) * px + px * 0.09}px)`;
+      setTimeout(()=>{ this.strip.style.transition = "transform .09s"; this.render(); }, 60);
+      setTimeout(()=>{ this.strip.style.transition = ""; }, 170);
+    }
+    symbolAt(pos){ return this.tape[((pos % KOMA) + KOMA) % KOMA]; }
+  }
+
+  const reels = [0,1,2].map(i => new Reel(i));
+  let last = performance.now();
+  (function loop(now){
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    reels.forEach(r => r.tick(dt));
+    requestAnimationFrame(loop);
+  })(performance.now());
+
+  // ---------------------------------------------------------------
+  // 停止制御(主制御 stop_reel と同じ規則)
+  //   引き込み: 目的図柄が押下位置から4コマ以内なら引き込む。届かなければ4コマ滑り(取りこぼし)。
+  //   蹴り    : 非成立の 神 / 赤7 は中段に止めない。
+  // ---------------------------------------------------------------
+  function stopControl(reel, pushPos, targetSym){
+    if(targetSym){
+      for(let s = 0; s <= MAX_SLIP; s++){
+        if(reel.symbolAt(pushPos + s) === targetSym) return (pushPos + s) % KOMA;
+      }
+      return (pushPos + MAX_SLIP) % KOMA;
+    }
+    for(let s = 0; s <= MAX_SLIP; s++){
+      const sym = reel.symbolAt(pushPos + s);
+      if(sym !== "神" && sym !== "赤7") return (pushPos + s) % KOMA;
+    }
+    return pushPos;
+  }
+
+  // ---------------------------------------------------------------
+  // UI 要素
+  // ---------------------------------------------------------------
+  const $ = id => document.getElementById(id);
+  const lcd = $("lcd"), lcdState = $("lcd-state"), lcdSub = $("lcd-sub"), lcdNote = $("lcd-note"), lcdFlash = $("lcd-flash");
+  const segCredit = $("seg-credit"), segPay = $("seg-pay");
+  const naviEls = [...$("navi").querySelectorAll("span")];
+  const stopBtns = [0,1,2].map(i => $(`stop-${i}`));
+  const lever = $("lever"), maxbet = $("maxbet");
+  const autoStop = $("auto-stop");
+
+  function setSeg(el, label, val){ el.innerHTML = `<small>${label}</small>${val}`; }
+  function setLcd(state, sub, cls){
+    lcdState.textContent = state; lcdSub.textContent = sub;
+    lcd.className = "lcd" + (cls ? " " + cls : "");
+  }
+  let flashTimer = null;
+  function flash(text, god){
+    lcdFlash.textContent = text;
+    lcdFlash.className = "lcd-flash show" + (god ? " god" : "");
+    clearTimeout(flashTimer);
+    flashTimer = setTimeout(()=>{ lcdFlash.className = "lcd-flash"; }, god ? 2600 : 1500);
+  }
+  function setNavi(order){
+    // 押し順番号(1-6) → 各リールに押す順序を表示。null で消灯
+    const ORDER = {1:[1,2,3],2:[1,3,2],3:[2,1,3],4:[3,1,2],5:[2,3,1],6:[3,2,1]};
+    const seq = order ? ORDER[order] : null;
+    naviEls.forEach((el,i)=>{ el.textContent = seq ? seq[i] : i + 1; el.classList.toggle("on", !!seq); });
+  }
+  function press(btn){ btn.classList.add("down"); setTimeout(()=>btn.classList.remove("down"), 120); }
+  function onArmed(i){ if(mode === "local") stopBtns[i].classList.add("armed"); }
+  function disarm(i){ stopBtns[i].classList.remove("armed"); }
+
+  // ---------------------------------------------------------------
+  // ローカル試打: 内部抽選(通常時テーブルと同じ重み) → リール → 入賞判定
+  // ---------------------------------------------------------------
+  const LOTTERY = [["神揃い",8],["押順ベル",40000],["共通ベル",260],["リプレイ",6000],["スイカ",650],["弱チェリー",760],["強チェリー",190],["チャンス目",360]];
+  const TARGET = {"神揃い":"神","赤7揃い":"赤7","リプレイ":"リプ","共通ベル":"ベル","押順ベル":"ベル","スイカ":"スイカ","弱チェリー":"チェリー","強チェリー":"チェリー"};
+  const PAYOUT = {"リプレイ":3,"共通ベル":8,"押順ベル":8,"こぼし":1,"スイカ":3,"弱チェリー":2,"強チェリー":2};
+
+  let mode = "local";
+  let credit = 50, bet = 0, games = 0;
+  let game = null;               // 進行中のゲーム
+  let stopped = 0;
+
+  function lottery(){
+    let r = Math.floor(Math.random() * 65536), acc = 0;
+    for(const [name, w] of LOTTERY){ acc += w; if(r < acc) return name; }
+    return "ハズレ";
+  }
+
+  function leverOn(){
+    if(mode !== "local" || game) return;
+    if(bet < 3){ if(credit < 3){ setLcd("神域","メダルがありません。MAX BETで補充", ""); credit += 50; setSeg(segCredit,"CREDIT",credit); return; } credit -= 3; bet = 3; setSeg(segCredit,"CREDIT",credit); }
+    press(lever);
+    games++;
+    const flag = lottery();
+    const answer = Math.floor(Math.random() * 6) + 1;
+    game = { flag, answer, order: [], target: TARGET[flag] || null, pushOrder: 1 };
+    // 押し順ベルはナビなし(通常時)。正解押し順と一致したときだけ引き込む
+    setSeg(segPay, "PAY", 0);
+    setLcd("通常", `${games}G`, "");
+    stopped = 0;
+    reels.forEach(r => r.start());
+    if(autoStop.checked){
+      [0,1,2].forEach((i,k)=> setTimeout(()=> stopReel(i), 900 + k * 420));
+    }
+  }
+
+  function stopReel(i){
+    if(mode !== "local" || !game) return;
+    const reel = reels[i];
+    if(reel.state !== "spin") return;
+    press(stopBtns[i]); disarm(i);
+    game.order.push(i);
+    let target = game.target;
+    if(game.flag === "押順ベル"){
+      // 押し順の正誤は3リール目まで確定しないが、実機同様に1停止目から正解順どおりか判定して引き込みを決める
+      const ORDER = {1:[0,1,2],2:[0,2,1],3:[1,0,2],4:[2,0,1],5:[1,2,0],6:[2,1,0]}[game.answer];
+      const k = game.order.length - 1;
+      if(ORDER[k] !== i) game.miss = true;
+      if(game.miss) target = null;
+    }
+    const pos = stopControl(reel, reel.pushPos(), target);
+    reel.stopAt(pos, ()=>{ if(++stopped === 3) judge(); });
+  }
+
+  function judge(){
+    const line = reels.map(r => r.symbolAt(r.pos));
+    let prize = "ハズレ";
+    const t = game.target;
+    if(t && line.every(s => s === t)) prize = game.flag;
+    else if(game.flag === "押順ベル") prize = "こぼし";
+    else if((game.flag === "弱チェリー" || game.flag === "強チェリー") && line[0] === "チェリー") prize = game.flag;
+    else if(game.flag === "チャンス目") prize = "チャンス目";
+    const pay = PAYOUT[prize] || 0;
+    if(prize === "リプレイ"){ bet = 3; } else { credit += pay; bet = 0; }
+    setSeg(segPay, "PAY", pay); setSeg(segCredit, "CREDIT", credit);
+    const hit = line[0] === line[1] && line[1] === line[2] && (line[0] === "神" || line[0] === "赤7");
+    reels.forEach(r => r.el.classList.toggle("hit", hit || (prize !== "ハズレ" && prize !== "こぼし" && line.every(s => s === line[0]))));
+    if(prize === "神揃い"){ flash("神　揃　い", true); setLcd("神揃い", "ローカル試打では演出のみ", "gg"); }
+    else if(prize === "チャンス目"){ flash("チャンス目"); }
+    else if(prize === "強チェリー"){ flash("強チェリー"); }
+    setTimeout(()=>{ game = null; }, 120);
+  }
+
+  // ---------------------------------------------------------------
+  // 主制御連動: 中継サーバーからの mainBoard メッセージで回す
+  //   state: reelPos に向けて 左→中→右 の順に自動停止。stock / atLeft / diff を表示
+  //   event: 液晶にフラッシュ
+  // ---------------------------------------------------------------
+  let ws = null, queue = [], busy = false;
+  const wsUrl = $("ws-url"), wsSt = $("ws-st"), btnConn = $("btn-conn");
+
+  function connect(){
+    if(ws){ ws.close(); ws = null; return; }
+    try{ ws = new WebSocket(wsUrl.value.trim()); }catch(e){ wsSt.textContent = "URLが不正です"; return; }
+    wsSt.textContent = "接続中..."; btnConn.textContent = "切断";
+    ws.addEventListener("open", ()=>{ wsSt.textContent = "接続済み（主制御の送信待ち）"; wsSt.className = "st on"; });
+    ws.addEventListener("message", ev => {
+      let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
+      if(!d || d.action !== "mainBoard") return;
+      if(d.type === "state"){ queue.push(d); pump(); }
+      else if(d.type === "event") linkEvent(d);
+      else if(d.type === "summary"){ setLcd("停止", `${(d.games||0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${d.diff}`, ""); }
+    });
+    ws.addEventListener("close", ()=>{ ws = null; wsSt.textContent = "未接続"; wsSt.className = "st"; btnConn.textContent = "接続"; });
+    ws.addEventListener("error", ()=>{ wsSt.textContent = "接続できません（run_server.bat は起動していますか）"; });
+  }
+
+  function pump(){
+    if(busy || mode !== "link") return;
+    const d = queue.shift();
+    if(!d) return;
+    busy = true;
+    // 詰まっているときは短縮テンポで消化する
+    const fast = queue.length > 1;
+    const T = fast ? {s0:0.45, s1:0.65, s2:0.85} : {s0:1.15, s1:1.6, s2:2.05};
+    wsSt.textContent = `受信中 / 設定${d.setting ?? "?"}`;
+    setNavi(d.navi || null);
+    setSeg(segPay, "PAY", 0);
+    lcdNote.textContent = `${d.game}G  成立役: ${d.flag}`;
+    linkLcd(d);
+    reels.forEach(r => r.start());
+    const pos = Array.isArray(d.reelPos) ? d.reelPos : null;
+    let done = 0;
+    const finish = ()=>{
+      setSeg(segPay, "PAY", d.pay ?? 0);
+      const line = reels.map(r => r.symbolAt(r.pos));
+      const hit = line.every(s => s === line[0]) && (line[0] === "神" || line[0] === "赤7");
+      reels.forEach(r => r.el.classList.toggle("hit", hit));
+      setTimeout(()=>{ setNavi(null); busy = false; pump(); }, fast ? 120 : 300);
+    };
+    [0,1,2].forEach((i,k)=>{
+      setTimeout(()=>{
+        const reel = reels[i];
+        let target;
+        if(pos) target = pos[i];
+        else target = stopControl(reel, reel.pushPos(), (d.reel && d.reel[i]) || null);  // 旧形式(図柄名のみ)への後方互換
+        press(stopBtns[i]);
+        if(reel.state !== "spin"){ reel.state = "spin"; reel.vel = SPEED; }
+        reel.stopAt(target, ()=>{ if(++done === 3) finish(); });
+      }, T["s"+k] * 1000);
+    });
+  }
+
+  function linkLcd(d){
+    const diff = Number(d.diff ?? 0);
+    setSeg(segCredit, "差枚", (diff > 0 ? "+" : "") + diff);
+    if(d.state === "GG"){
+      setLcd("ゴッドゲーム", `残${d.ggLeft ?? "-"}G　ストック ${d.stock ?? 0}`, "gg");
+    }else if(d.state === "AT"){
+      setLcd("神々の宴", `残${d.atLeft ?? "-"}G　ストック ${d.stock ?? 0}`, "at");
+    }else{
+      setLcd("通常", `${d.gameCount ?? 0}G　天井まで ${d.ceilingLeft ?? "-"}G`, "");
+    }
+  }
+
+  function linkEvent(d){
+    const map = {
+      gg_start: ["ゴッドゲーム突入", false],
+      god: ["神　揃　い", true],
+      stock_up: ["ストック獲得", false],
+      at_start: ["AT開始", false],
+      add_games: [d.text || "上乗せ", false],
+      stock_release: ["継　続", false],
+      at_end: ["終　了", false],
+    };
+    const m = map[d.event];
+    if(m) flash(m[0], m[1]);
+  }
+
+  // ---------------------------------------------------------------
+  // 入力
+  // ---------------------------------------------------------------
+  lever.addEventListener("click", leverOn);
+  lever.addEventListener("keydown", e => { if(e.key === "Enter" || e.key === " "){ e.preventDefault(); leverOn(); } });
+  stopBtns.forEach((b,i)=> b.addEventListener("click", ()=> stopReel(i)));
+  maxbet.addEventListener("click", ()=>{
+    if(mode !== "local" || game) return;
+    if(bet < 3 && credit >= 3){ credit -= 3; bet = 3; setSeg(segCredit, "CREDIT", credit); }
+    else if(credit < 3){ credit += 50; setSeg(segCredit, "CREDIT", credit); }
+  });
+  document.addEventListener("keydown", e => {
+    if(e.target && e.target.tagName === "INPUT") return;
+    const k = e.key;
+    if(k === " " || k === "Enter"){ e.preventDefault(); leverOn(); }
+    else if(k === "ArrowLeft" || k === "j" || k === "J") stopReel(0);
+    else if(k === "ArrowDown" || k === "k" || k === "K") stopReel(1);
+    else if(k === "ArrowRight" || k === "l" || k === "L") stopReel(2);
+    else if(k === "m" || k === "M") maxbet.click();
+  });
+  document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener("change", ()=>{
+    mode = r.value;
+    if(mode === "link"){
+      lcdNote.textContent = "主制御と連動";
+      setLcd("神域", "god_main_board.py --serve を待っています", "");
+      stopBtns.forEach(b => b.classList.remove("armed"));
+      if(!ws) connect();
+      pump();
+    }else{
+      lcdNote.textContent = "ローカル試打";
+      setLcd("神域", "レバーを叩いてください", "");
+      setSeg(segCredit, "CREDIT", credit);
+      setNavi(null);
+    }
+  }));
+  btnConn.addEventListener("click", connect);
+  $("toggle-bar").addEventListener("click", ()=> $("bar").classList.toggle("hidden"));
+  window.addEventListener("resize", ()=> reels.forEach(r => r.render()));
+
+  // 起動時に URL クエリで連動モードを指定できる: kyotai.html?mode=link&ws=ws://localhost:8787&hidebar=1
+  const q = new URLSearchParams(location.search);
+  if(q.get("ws")) wsUrl.value = q.get("ws");
+  if(q.get("hidebar") === "1") $("bar").classList.add("hidden");
+  if(q.get("mode") === "link"){ document.querySelector('input[name=mode][value=link]').checked = true; document.querySelector('input[name=mode][value=link]').dispatchEvent(new Event("change")); }
+})();
+</script>
+</body>
+</html>
