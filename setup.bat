@@ -136,7 +136,7 @@ goto MAIN_BOARD
 echo [警告] Chrome/Edgeが見つからなかったため、通常のブラウザウィンドウで開きます。
 if exist "main_control.html" start "" "%BASEURL%/main_control.html"
 if exist "enshutsu\enshutsu_overlay.html" start "" "%BASEURL%/enshutsu/enshutsu_overlay.html"
-if exist "kyotai.html" start "" "%BASEURL%/kyotai.html?mode=link&hidebar=1"
+if exist "kyotai.html" start "" "%BASEURL%/kyotai/kyotai.html?mode=link&hidebar=1"
 
 :MAIN_BOARD
 echo.
