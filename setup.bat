@@ -102,6 +102,13 @@ echo V‚µ‚¢ƒT[ƒo[‚Í‹N“®‚¹‚¸A‘€ìƒpƒlƒ‹‚Ì‚İŠJ‚«‚Ü‚·B
 echo.
 echo [5/6] main_control ‚Æ enshutsu_overlay(‚Æâ‘Ìƒrƒ…[ kyotai)‚ğƒ{[ƒ_ƒŒƒXƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·...
 
+rem â‘Ìƒrƒ…[(kyotai.html)‚ÌêŠ‚ğ’T‚·Bkyotai\ / enshutsu\ / ƒ‹[ƒg ‚Ì‚Ç‚±‚É’u‚¢‚Ä‚à‚æ‚¢B
+rem Œ©‚Â‚©‚Á‚½êŠ‚ğ‚»‚Ì‚Ü‚ÜURL‚Ég‚¤‚Ì‚ÅAˆÚ“®‚µ‚Ä‚àˆÈ~‚Ì‘‚«Š·‚¦‚Í•s—vB
+set "KYOTAI_URL="
+if exist "kyotai\kyotai.html" set "KYOTAI_URL=kyotai/kyotai.html"
+if not defined KYOTAI_URL if exist "enshutsu\kyotai.html" set "KYOTAI_URL=enshutsu/kyotai.html"
+if not defined KYOTAI_URL if exist "kyotai.html" set "KYOTAI_URL=kyotai.html"
+
 set "BROWSER_PATH="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "BROWSER_PATH=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
 if not defined BROWSER_PATH if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "BROWSER_PATH=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
@@ -128,15 +135,21 @@ echo [Œx] enshutsu\enshutsu_overlay.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñBenshutsuƒtƒHƒ‹ƒ_“à‚
 
 :CHECK_KYOTAI
 rem â‘Ìƒrƒ…[(kyotai.html)Bå§Œä‚Æ˜A“®ƒ‚[ƒhE‘€ìƒpƒlƒ‹”ñ•\¦‚ÅŠJ‚­B”CˆÓƒtƒ@ƒCƒ‹‚È‚Ì‚Å–³‚­‚Ä‚à‘±sB
-if not exist "kyotai.html" goto MAIN_BOARD
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/kyotai/kyotai.html?mode=link&hidebar=1" --window-size=420,980 --window-position=1490,0
+if defined KYOTAI_URL goto OPEN_KYOTAI
+echo [î•ñ] kyotai.html ‚ªŒ©‚Â‚©‚ç‚È‚¢‚½‚ßAâ‘Ìƒrƒ…[‚ÍƒXƒLƒbƒv‚µ‚Ü‚·B
+echo         kyotai\ / enshutsu\ / ƒ‹[ƒg ‚Ì‚¢‚¸‚ê‚©‚É’u‚­‚Æ©“®‚ÅŠJ‚«‚Ü‚·B
+goto MAIN_BOARD
+
+:OPEN_KYOTAI
+echo [î•ñ] â‘Ìƒrƒ…[: %KYOTAI_URL%
+start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1" --window-size=420,980 --window-position=1490,0
 goto MAIN_BOARD
 
 :NO_BROWSER
 echo [Œx] Chrome/Edge‚ªŒ©‚Â‚©‚ç‚È‚©‚Á‚½‚½‚ßA’Êí‚Ìƒuƒ‰ƒEƒUƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·B
 if exist "main_control.html" start "" "%BASEURL%/main_control.html"
 if exist "enshutsu\enshutsu_overlay.html" start "" "%BASEURL%/enshutsu/enshutsu_overlay.html"
-if exist "kyotai.html" start "" "%BASEURL%/kyotai/kyotai.html?mode=link&hidebar=1"
+if defined KYOTAI_URL start "" "%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1"
 
 :MAIN_BOARD
 echo.
@@ -244,6 +257,7 @@ echo  ^‰º‚Éå§Œä‚ÌÀ’l‚ªo‚é‚Ì‚ÅAH‚¢ˆá‚Á‚½‚Æ‚«‚ÍÀ’l‘¤‚ªÔ‚­‚È‚è‚Ü‚·B
 echo  “¯‚¶‰æ–Ê‚ÌuM†’“üv‚©‚ç2ƒoƒCƒgƒRƒ}ƒ“ƒh‚â‰‰oƒCƒxƒ“ƒg‚ğ—¬‚µ‚ß‚Ü‚·B
 echo.
 echo  â‘Ìƒrƒ…[(kyotai.html)‚Íå§Œä‚Ì1GŒ‹‰Ê‚ğó‚¯‚ÄƒŠ[ƒ‹‚ª~‚Ü‚è‚Ü‚·B¶ã‚Ì•Ôƒ{ƒ^ƒ“‚Åƒ[ƒJƒ‹‘Å‚ÉØ‘Ö‰ÂB
+if defined KYOTAI_URL echo  â‘Ìƒrƒ…[‚ÌURL: %BASEURL%/%KYOTAI_URL%
 echo  ƒEƒBƒ“ƒhƒE‚ÌƒTƒCƒYEˆÊ’u‚Í’[‚ğƒhƒ‰ƒbƒO‚µ‚Ä©—R‚É’²®‚µ‚Ä‚­‚¾‚³‚¢B
 echo ============================================
 echo.
