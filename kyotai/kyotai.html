@@ -58,7 +58,6 @@
   .sym{display:flex;align-items:center;justify-content:center;width:82%;height:74%;border-radius:6px;font-size:1.7em;line-height:1;}
   .sym-god{font-family:var(--font-sym);color:var(--frame-shadow);background:linear-gradient(180deg,#fff3c8,var(--frame-bright) 45%,var(--frame));box-shadow:0 2px 0 var(--frame-dim);}
   .sym-seven{font-family:var(--font-sym);font-size:2.4em;color:var(--red);text-shadow:0 2px 0 #7a1811,0 0 2px #fff;transform:skewX(-8deg);}
-  .sym-bar{background:#151515;color:#fff;font-size:1.05em;letter-spacing:.25em;height:46%;border-radius:2px;box-shadow:inset 0 0 0 2px #444;}
   .sym-bell{color:#8a5f00;background:radial-gradient(circle at 50% 35%,#ffe27a,var(--yellow) 60%,#c8931a);border-radius:50% 50% 45% 45%;width:52%;height:60%;font-size:.9em;}
   .sym-melon{color:#eaf7e9;background:radial-gradient(circle at 40% 40%,#6cc47f,var(--green) 55%,#1f6b35);border-radius:50%;width:56%;height:64%;font-size:.75em;}
   .sym-cherry{color:#ffe0dc;background:radial-gradient(circle at 40% 40%,#ff7f74,var(--red) 55%,#7a1811);border-radius:50%;width:42%;height:48%;font-size:.7em;}
@@ -111,13 +110,13 @@
 
   // 図柄配列: god_main_board.py の REEL_L / REEL_C / REEL_R と同一
   const REELS = [
-    ["神","ベル","リプ","スイカ","赤7","ベル","チェリー","リプ","ベル","ブランク","スイカ","リプ","ベル","BAR","リプ","ベル","スイカ","リプ","ベル","チェリー","リプ"],
-    ["神","リプ","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","赤7","ベル","スイカ","リプ","ベル","BAR","リプ","ベル","スイカ","リプ"],
-    ["神","ベル","リプ","赤7","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","ベル","BAR","リプ","ベル","スイカ","リプ","ベル","スイカ"],
+    ["神","ベル","リプ","スイカ","赤7","ベル","チェリー","リプ","ベル","ブランク","スイカ","リプ","ベル","ブランク","リプ","ベル","スイカ","リプ","ベル","チェリー","リプ"],
+    ["神","リプ","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","赤7","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","スイカ","リプ"],
+    ["神","ベル","リプ","赤7","ベル","スイカ","リプ","ベル","ブランク","リプ","ベル","チェリー","リプ","ベル","ブランク","リプ","ベル","スイカ","リプ","ベル","スイカ"],
   ];
   const KOMA = 21, MAX_SLIP = 4;
-  const SYM_CLASS = {"神":"sym-god","赤7":"sym-seven","BAR":"sym-bar","ベル":"sym-bell","スイカ":"sym-melon","チェリー":"sym-cherry","リプ":"sym-rep","ブランク":"sym-blank"};
-  const SYM_TEXT  = {"神":"神","赤7":"7","BAR":"BAR","ベル":"ベル","スイカ":"スイカ","チェリー":"チェ","リプ":"RP","ブランク":""};
+  const SYM_CLASS = {"神":"sym-god","赤7":"sym-seven","ベル":"sym-bell","スイカ":"sym-melon","チェリー":"sym-cherry","リプ":"sym-rep","ブランク":"sym-blank"};
+  const SYM_TEXT  = {"神":"神","赤7":"7","ベル":"ベル","スイカ":"スイカ","チェリー":"チェ","リプ":"RP","ブランク":""};
 
   // ---------------------------------------------------------------
   // リール物理
