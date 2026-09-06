@@ -415,6 +415,10 @@
       <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
       <button class="btn" id="btn-settings" disabled>⚙️ 設定パネル開閉</button>
     </div>
+    <div class="row2" style="margin-top:8px">
+      <button class="btn" id="btn-reel-in" disabled>🎰 リールを液晶に入れる</button>
+      <button class="btn" id="btn-reel-out" disabled>リールを液晶から出す</button>
+    </div>
   </div>
 
   <div class="card">
@@ -546,6 +550,8 @@
     lock3: document.getElementById("btn-lock3"),
     slow: document.getElementById("btn-slow"),
     settings: document.getElementById("btn-settings"),
+    reelIn: document.getElementById("btn-reel-in"),
+    reelOut: document.getElementById("btn-reel-out"),
     injMain: document.getElementById("inj-send"),
     injEvt: document.getElementById("inj-evt-send"),
   };
@@ -685,6 +691,8 @@
   });
 
   buttons.settings.addEventListener("click", ()=> sendAction("toggleSettings","設定パネルの開閉"));
+  buttons.reelIn.addEventListener("click", ()=> sendAction("reelIn","リールを液晶に入れる"));
+  buttons.reelOut.addEventListener("click", ()=> sendAction("reelOut","リールを液晶から出す"));
 
   // ゲーム画面(ウィンドウキャプチャ)をWebRTCで実際にenshutsu側へ映像配信する。
   // WSの中継サーバーはSDP/ICEのシグナリング(制御メッセージ)を運ぶだけで、映像本体はP2P(WebRTC)で流れる。
