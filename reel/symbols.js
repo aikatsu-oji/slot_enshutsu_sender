@@ -27,7 +27,6 @@
     "ベル":     { id: "bell",   en: "BELL",   role: "共通ベル / 押順ベル(6択)",   pay: "払出 8枚" },
     "リプ":     { id: "rep",    en: "REPLAY", role: "リプレイ (再遊技)",          pay: "払出 3枚" },
     "スイカ":   { id: "melon",  en: "MELON",  role: "スイカ (レア役)",            pay: "払出 3枚" },
-    "チェリー": { id: "cherry", en: "CHERRY", role: "弱/強チェリー (左リール単独)", pay: "払出 2枚" },
     "ブランク": { id: "blank",  en: "BLANK",  role: "ブランク図柄 (入賞役なし)",  pay: "—" },
   };
   const ORDER = Object.keys(INFO);
@@ -70,12 +69,6 @@
 <ellipse cx="136" cy="52" rx="3.5" ry="6" fill="${C.frameShadow}" transform="rotate(20 136 52)"></ellipse>
 <ellipse cx="120" cy="60" rx="3.5" ry="6" fill="${C.frameShadow}"></ellipse>
 <line x1="56" y1="70" x2="184" y2="70" stroke="${C.greenDk}" stroke-width="3" stroke-linecap="round"></line>`,
-    "チェリー": `
-<defs><radialGradient id="g-cherry" cx="0.4" cy="0.4" r="0.7"><stop offset="0" stop-color="${C.redHi}"></stop><stop offset="0.55" stop-color="${C.red}"></stop><stop offset="1" stop-color="${C.redDk}"></stop></radialGradient></defs>
-<path d="M100,46 Q104,20 130,8 M142,50 Q140,24 130,8" fill="none" stroke="${C.greenDk}" stroke-width="5" stroke-linecap="round"></path>
-<path d="M130,8 Q152,4 160,20 Q140,26 130,8 Z" fill="${C.green}" stroke="${C.greenDk}" stroke-width="2" stroke-linejoin="round"></path>
-<circle cx="98" cy="58" r="19" fill="url(#g-cherry)" stroke="${C.redDk}" stroke-width="2"></circle>
-<circle cx="142" cy="62" r="17" fill="url(#g-cherry)" stroke="${C.redDk}" stroke-width="2"></circle>`,
     "ブランク": `
 <defs><pattern id="p-blank" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(135)"><rect width="4" height="8" fill="${C.blankA}"></rect><rect x="4" width="4" height="8" fill="${C.blankB}"></rect></pattern></defs>
 <rect x="36" y="24" width="168" height="32" fill="url(#p-blank)" stroke="${C.blankA}" stroke-width="1"></rect>`,

@@ -997,7 +997,7 @@
   //   流し込む。主制御へ状態を問い合わせる経路ではない(単方向は崩れない)。
   // ---------------------------------------------------------------
   const INJ_FLAG = ["ハズレ","リプレイ","共通ベル","押順ベル","こぼし","スイカ",
-                    "弱チェリー","強チェリー","チャンス目","赤7揃い","神揃い"];
+                    "チャンス目","赤7揃い","神揃い"];
   const INJ_STATE = ["通常","GG","AT"];
   const asEnum = arr => arr.map((v, i) => [i, v]);
   const asRange = (n, f) => Array.from({length:n}, (_, i) => [i, f(i)]);
@@ -1006,7 +1006,7 @@
     0x01:{name:"電源投入",     args:asEnum(INJ_STATE)},
     0x10:{name:"メダル投入",   args:null, def:3},
     0x11:{name:"遊技開始",     args:asEnum(INJ_STATE)},
-    0x20:{name:"内部当選",     args:asEnum(INJ_FLAG), def:7},
+    0x20:{name:"内部当選",     args:asEnum(INJ_FLAG), def:6},
     0x21:{name:"押し順ナビ",   args:asRange(6, i => `押し順${i+1}`).concat([[255,"ナビなし"]]), def:255},
     0x30:{name:"リール回転",   args:[[0,"—"]]},
     0x31:{name:"左リール停止", args:asRange(21, i => `${i}コマ`)},
@@ -1022,7 +1022,7 @@
   };
   const INJ_EVT = {
     freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
-    banner:    ["バナー予告",     {type:"banner", rank:"赤", trigger:"強チェリー", heat:3}],
+    banner:    ["バナー予告",     {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
     navi:      ["押し順ナビ",     {type:"navi", order:0}],
     gg_start:  ["GG開始",         {type:"gg_start"}],
     stock_up:  ["ストック加算",   {type:"stock_up", stock:2, gain:1}],
