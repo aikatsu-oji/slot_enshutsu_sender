@@ -93,6 +93,13 @@ LOTTERY_TABLE = {
     "チャンス目": (  360,    370,    385,    405,    425,    470),
 }
 
+# AT中の抽選テーブル（通常時と異なる役だけ上書き）。共通ベルを設定差で引き上げ、
+# 設定3以上で機械割100%超、設定6で114%前後を狙う。
+LOTTERY_TABLE_AT = dict(LOTTERY_TABLE, **{
+    #  役          設定1   設定2   設定3   設定4   設定5   設定6
+    "共通ベル":   ( 1900,   3000,   5000,   6200,   7300,   8500),
+})
+
 # ---------------------------------------------------------------------------
 # 3. 状態定義
 # ---------------------------------------------------------------------------
@@ -235,7 +242,8 @@ class MainBoard:
         r = self.get_random()
         acc = 0
         idx = self.setting - 1
-        for name, values in LOTTERY_TABLE.items():
+        table = LOTTERY_TABLE_AT if self.state == ST_AT else LOTTERY_TABLE
+        for name, values in table.items():
             acc += values[idx]
             if r < acc:
                 self.flag = name
