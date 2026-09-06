@@ -15,7 +15,8 @@
       "Bash(python main_board/god_main_board.py:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(gh pr merge:*)"
     ]
   }
 }
