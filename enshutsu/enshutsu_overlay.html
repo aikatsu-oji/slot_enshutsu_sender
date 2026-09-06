@@ -120,11 +120,9 @@
   }
 
   /* ---------- 設定UI(配信画面には映らない想定・OBSでは操作しない限り操作不可) ---------- */
-  /* 設定ギアはオーバーレイ上には出さない。開閉は main_control.html などのコンパネから
-     WebSocketの toggleSettings アクション経由でのみ行う。
-     要素自体は残してあるので、コンパネ側が #settings-toggle を click() する従来の方式もそのまま動く。 */
+  /* 設定ギアはオーバーレイ上に表示する。コンパネからの toggleSettings 経由でも開閉できる。 */
   #settings-toggle{
-    display:none;
+    display:flex;
     position:fixed; top:12px; right:12px;
     width:34px; height:34px;
     border-radius:50%;
@@ -281,32 +279,17 @@
     <div class="tabs">
       <button class="tab-btn active" data-tab="controls">操作</button>
       <button class="tab-btn" data-tab="settings">設定</button>
+      <button class="tab-btn" data-tab="yokoku">予告</button>
     </div>
 
     <div class="tab-content" id="tab-controls">
-      <div class="note" id="state-indicator">状態: 待機中</div>
       <button class="action" id="slow-toggle">🐢 スロー再生: OFF</button>
-      <div class="hr"></div>
-      <div class="note">終了パターンを確認(ロック1から順に再生し、そこで終了)</div>
-      <div class="btn-row">
-        <button class="action" id="pattern-lock1">ロック1で終了</button>
-        <button class="action" id="pattern-lock2">ロック2で終了</button>
-        <button class="action" id="pattern-lock3">ロック3まで到達</button>
-      </div>
-      <div class="hr"></div>
-      <div class="note">各段階を単体で確認(前段を経由せずその段階だけ再生)</div>
-      <div class="btn-row">
-        <button class="action" id="preview-lock1">ロック1</button>
-        <button class="action" id="preview-lock2">ロック2</button>
-        <button class="action" id="preview-lock3">ロック3</button>
-      </div>
+      <div class="note">スロー再生は演出全体に効きます。各演出の再生ボタンは「予告」タブの各項目にあります。</div>
     </div>
 
     <div class="tab-content" id="tab-settings" hidden>
       <div class="tabs subtabs">
         <button class="subtab-btn active" data-subtab="basic">基本設定</button>
-        <button class="subtab-btn" data-subtab="image">画像指定</button>
-        <button class="subtab-btn" data-subtab="freeze">フリーズ演出</button>
         <button class="subtab-btn" data-subtab="io">入出力</button>
       </div>
 
@@ -314,10 +297,6 @@
         <div class="field-row">
           <label for="shakeDuration">ロック1の時間(秒)</label>
           <input type="number" id="shakeDuration" min="0.3" max="15" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="illustDuration">萌えカットインの時間(秒)</label>
-          <input type="number" id="illustDuration" min="0.5" max="30" step="0.1">
         </div>
         <div class="field-row">
           <label for="blackInDuration">ロック3: 暗転にかかる時間(秒)</label>
@@ -333,7 +312,27 @@
         </div>
       </div>
 
-      <div class="subtab-content" id="subtab-image" hidden>
+      <div class="subtab-content" id="subtab-io" hidden>
+        <div class="btn-row">
+          <button class="action" id="export-settings">エクスポート</button>
+          <button class="action" id="import-settings">インポート</button>
+        </div>
+        <input type="file" id="import-file" accept=".json" hidden>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-yokoku" hidden>
+      <div class="tabs subtabs">
+        <button class="subtab-btn active" data-subtab="yokoku-cutin">萌えカットイン</button>
+        <button class="subtab-btn" data-subtab="yokoku-freeze">フリーズ</button>
+      </div>
+
+      <div class="subtab-content" id="subtab-yokoku-cutin">
+        <div class="field-row">
+          <label for="illustDuration">萌えカットインの時間(秒)</label>
+          <input type="number" id="illustDuration" min="0.5" max="30" step="0.1">
+        </div>
+        <div class="hr"></div>
         <div id="cutin-mode-note" class="note" hidden></div>
         <button class="action" id="reload-folder" hidden>🔄 カットイン画像フォルダを再読込</button>
         <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダ(freeze/cutin)を選択</button>
@@ -348,25 +347,33 @@
         </div>
       </div>
 
-      <div class="subtab-content" id="subtab-freeze" hidden>
+      <div class="subtab-content" id="subtab-yokoku-freeze" hidden>
+      <div class="note" id="state-indicator">状態: 待機中</div>
+      <div class="hr"></div>
+      <div class="note">終了パターンを確認(ロック1から順に再生し、そこで終了)</div>
+      <div class="btn-row">
+        <button class="action" id="pattern-lock1">ロック1で終了</button>
+        <button class="action" id="pattern-lock2">ロック2で終了</button>
+        <button class="action" id="pattern-lock3">ロック3まで到達</button>
+      </div>
+      <div class="hr"></div>
+      <div class="note">各段階を単体で確認(前段を経由せずその段階だけ再生)</div>
+      <div class="btn-row">
+        <button class="action" id="preview-lock1">ロック1</button>
+        <button class="action" id="preview-lock2">ロック2</button>
+        <button class="action" id="preview-lock3">ロック3</button>
+      </div>
+        <div class="hr"></div>
         <div id="freeze-mode-note" class="note" hidden></div>
-        <button class="action" id="reload-freeze-folder" hidden>🔄 暗転後フォルダを再読込</button>
-        <button class="action" id="pick-freeze-folder">📁 暗転後の演出フォルダ(freeze/afterblackout)を選択</button>
+        <button class="action" id="reload-freeze-folder" hidden>🔄 フリーズフォルダを再読込</button>
+        <button class="action" id="pick-freeze-folder">📁 フリーズ演出フォルダ(freeze/afterblackout)を選択</button>
         <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="freeze-status" class="note">未選択</div>
         <div class="note">
-          cutin フォルダとは別に、enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
+          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
           ロック2の番号などの状況に関わらず、freezeフォルダにGIFが1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。GIFと同じ番号のsound内の音声があれば一緒に再生され、なければGIFのみ再生されます。GIFが1つもない場合はこの演出はスキップされます。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
-      </div>
-
-      <div class="subtab-content" id="subtab-io" hidden>
-        <div class="btn-row">
-          <button class="action" id="export-settings">エクスポート</button>
-          <button class="action" id="import-settings">インポート</button>
-        </div>
-        <input type="file" id="import-file" accept=".json" hidden>
       </div>
     </div>
   </div>
@@ -559,12 +566,20 @@
     });
   });
 
-  document.querySelectorAll(".subtab-btn").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      document.querySelectorAll(".subtab-btn").forEach(b=>b.classList.remove("active"));
-      document.querySelectorAll(".subtab-content").forEach(c=>c.hidden = true);
-      btn.classList.add("active");
-      el("subtab-" + btn.dataset.subtab).hidden = false;
+  document.querySelectorAll(".tabs.subtabs").forEach(group=>{
+    const btns = Array.from(group.querySelectorAll(":scope > .subtab-btn"));
+    btns.forEach(btn=>{
+      btn.addEventListener("click", ()=>{
+        // 同じグループのボタンとその対応コンテンツだけを操作する
+        btns.forEach(b=>{
+          b.classList.remove("active");
+          const c = el("subtab-" + b.dataset.subtab);
+          if(c) c.hidden = true;
+        });
+        btn.classList.add("active");
+        const target = el("subtab-" + btn.dataset.subtab);
+        if(target) target.hidden = false;
+      });
     });
   });
 
@@ -1194,7 +1209,18 @@
 
     lock3Gif.style.transition = "none";
     lock3Gif.style.opacity = "0";
-    try{ lock3Audio.pause(); }catch(e){}
+    // サウンドはここでは止めない。
+    // targetMs は blackInDuration(既定0.4秒)に連動しており、blackout.mp3(約0.94秒)より
+    // 短いため、ここで止めると音がほとんど聞こえないまま切れてしまう。
+    // 最後まで鳴らし切り、演出全体のリセット時に停止する。
+  }
+
+  // ロック3のサウンドを停止して先頭に戻す(演出のリセット・中断時に呼ぶ)
+  function stopLock3Audio(){
+    try{
+      lock3Audio.pause();
+      lock3Audio.currentTime = 0;
+    }catch(e){}
   }
 
 
@@ -1292,6 +1318,7 @@
     blackoutLayer.style.opacity = "0";
     lock3Gif.style.transition = "none";
     lock3Gif.style.opacity = "0";
+    stopLock3Audio();
     freezeRevealGif.style.transition = "none";
     freezeRevealGif.style.opacity = "0";
   }

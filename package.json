@@ -1,0 +1,19 @@
+{
+  "name": "slot_enshutsu_sender",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Twitch配信用 パチスロ演出オーバーレイ: WebSocket中継サーバー + 主制御/副制御シミュレータ + コンパネ + 筐体ビュー",
+  "scripts": {
+    "start": "node server/trigger_relay_server.js",
+    "dev": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "dev:start": "npm run dev -- start",
+    "dev:stop": "npm run dev -- stop",
+    "dev:status": "npm run dev -- status",
+    "dev:open": "npm run dev -- open",
+    "test": "npm run dev -- test",
+    "check": "node --check server/trigger_relay_server.js && node --check scripts/ws_send.js"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}

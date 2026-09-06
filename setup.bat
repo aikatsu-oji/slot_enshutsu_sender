@@ -102,6 +102,11 @@ echo 新しいサーバーは起動せず、操作パネルのみ開きます。
 echo.
 echo [5/6] main_control と enshutsu_overlay(と筐体ビュー kyotai)をボーダレスウィンドウで開きます...
 
+rem コンパネ(main_control.html)の場所。control\ が正規の配置。旧配置(ルート)にも対応。
+set "CONTROL_URL="
+if exist "control\main_control.html" set "CONTROL_URL=control/main_control.html"
+if not defined CONTROL_URL if exist "main_control.html" set "CONTROL_URL=main_control.html"
+
 rem 筐体ビュー(kyotai.html)の場所を探す。kyotai\ / enshutsu\ / ルート のどこに置いてもよい。
 rem 見つかった場所をそのままURLに使うので、移動しても以降の書き換えは不要。
 set "KYOTAI_URL="
@@ -118,12 +123,12 @@ if not defined BROWSER_PATH if exist "%ProgramFiles%\Microsoft\Edge\Application\
 
 if not defined BROWSER_PATH goto NO_BROWSER
 
-if not exist "main_control.html" goto SKIP_MAIN_CONTROL
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/main_control.html" --window-size=480,900 --window-position=0,0
+if not defined CONTROL_URL goto SKIP_MAIN_CONTROL
+start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/%CONTROL_URL%" --window-size=480,900 --window-position=0,0
 goto CHECK_ENSHUTSU
 
 :SKIP_MAIN_CONTROL
-echo [警告] main_control.html が見つかりません。
+echo [警告] control\main_control.html が見つかりません。
 
 :CHECK_ENSHUTSU
 if not exist "enshutsu\enshutsu_overlay.html" goto SKIP_ENSHUTSU
@@ -147,7 +152,7 @@ goto MAIN_BOARD
 
 :NO_BROWSER
 echo [警告] Chrome/Edgeが見つからなかったため、通常のブラウザウィンドウで開きます。
-if exist "main_control.html" start "" "%BASEURL%/main_control.html"
+if defined CONTROL_URL start "" "%BASEURL%/%CONTROL_URL%"
 if exist "enshutsu\enshutsu_overlay.html" start "" "%BASEURL%/enshutsu/enshutsu_overlay.html"
 if defined KYOTAI_URL start "" "%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1"
 
@@ -155,10 +160,10 @@ if defined KYOTAI_URL start "" "%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1"
 echo.
 echo [6/6] 主制御(god_main_board.py)を起動します...
 
-rem 主制御スクリプトの場所。ルート / main_board / server のいずれかに置く。
+rem 主制御スクリプトの場所。main_board\ が正規の配置。旧配置(ルート / server)にも対応。
 set "MB="
-if exist "god_main_board.py" set "MB=god_main_board.py"
-if not defined MB if exist "main_board\god_main_board.py" set "MB=main_board\god_main_board.py"
+if exist "main_board\god_main_board.py" set "MB=main_board\god_main_board.py"
+if not defined MB if exist "god_main_board.py" set "MB=god_main_board.py"
 if not defined MB if exist "server\god_main_board.py" set "MB=server\god_main_board.py"
 if not defined MB goto NO_MAIN_BOARD
 
@@ -217,7 +222,7 @@ goto DONE
 
 :NO_MAIN_BOARD
 echo [情報] god_main_board.py が見つからないため、主制御の起動はスキップします。
-echo         ルート / main_board\ / server\ のいずれかに置くと自動で起動対象になります。
+echo         main_board\ に置くと自動で起動対象になります。
 goto DONE
 
 :NO_PYTHON
@@ -257,7 +262,9 @@ echo  真下に主制御の実値が出るので、食い違ったときは実値側が赤くなります。
 echo  同じ画面の「信号注入」から2バイトコマンドや演出イベントを流し込めます。
 echo.
 echo  筐体ビュー(kyotai.html)は主制御の1G結果を受けてリールが止まります。左上の歯車ボタンでローカル試打に切替可。
+if defined CONTROL_URL echo  コンパネのURL: %BASEURL%/%CONTROL_URL%
 if defined KYOTAI_URL echo  筐体ビューのURL: %BASEURL%/%KYOTAI_URL%
+echo  コマンドラインから操作する場合は scripts\dev.cmd help を参照(Claude Code 向け)。
 echo  ウィンドウのサイズ・位置は端をドラッグして自由に調整してください。
 echo ============================================
 echo.

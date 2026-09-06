@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "dev: start (normal)", "type": "shell", "command": "scripts\\dev.cmd start", "problemMatcher": [] },
+    { "label": "dev: start (fast)",   "type": "shell", "command": "scripts\\dev.cmd start -Mode fast", "problemMatcher": [] },
+    { "label": "dev: stop",           "type": "shell", "command": "scripts\\dev.cmd stop", "problemMatcher": [] },
+    { "label": "dev: status",         "type": "shell", "command": "scripts\\dev.cmd status", "problemMatcher": [] },
+    { "label": "dev: test",           "type": "shell", "command": "scripts\\dev.cmd test", "group": { "kind": "test", "isDefault": true }, "problemMatcher": [] },
+    { "label": "dev: open windows",   "type": "shell", "command": "scripts\\dev.cmd open", "problemMatcher": [] },
+    { "label": "dev: logs",           "type": "shell", "command": "scripts\\dev.cmd logs", "problemMatcher": [] }
+  ]
+}

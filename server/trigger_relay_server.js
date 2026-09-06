@@ -9,7 +9,11 @@
 //   1. npm install ws                      ※プロジェクトルートで実行。setup.bat を使えば自動で行われます
 //   2. node server\trigger_relay_server.js ※プロジェクトルートで実行。setup.bat を使えば自動で起動します
 //   3. OBSのブラウザソースに http://localhost:8787/enshutsu/enshutsu_overlay.html を指定する
-//   4. http://localhost:8787/main_control.html をブラウザで開く(自動で接続します)
+//   4. http://localhost:8787/control/main_control.html をブラウザで開く(自動で接続します)
+//      ※ 旧URL http://localhost:8787/main_control.html は新URLへ自動転送します
+//
+//   コマンドラインからの起動/停止は scripts\dev.cmd (Claude Code 向け) を参照。
+//   ポートは環境変数 PORT で変更できます(既定 8787)。
 //
 //   ※ このサーバーはWebSocket中継に加えて、プロジェクトルートを静的配信します。
 //     http:// 経由で開いた enshutsu_overlay.html は cutin / freeze フォルダを
@@ -36,7 +40,13 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
-const PORT = 8787;
+const PORT = Number(process.env.PORT) || 8787;
+
+// 旧配置(ルート直下)のURLを新配置へ転送する。ブックマークやOBSの設定を壊さないための互換措置。
+const LEGACY_REDIRECTS = {
+  "/main_control.html": "/control/main_control.html",
+  "/kyotai.html": "/kyotai/kyotai.html",
+};
 
 // ===================== 静的配信 + フォルダ一覧API =====================
 // プロジェクトルート(このファイルの1つ上)を公開ルートとして配信します。
@@ -123,6 +133,18 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  // 死活確認用(scripts/dev.ps1 の status や Claude Code からの疎通確認に使う)
+  if (url.pathname === "/api/health") {
+    sendJson(res, 200, { ok: true, port: PORT, clients: wss.clients.size, root: ROOT });
+    return;
+  }
+
+  if (LEGACY_REDIRECTS[url.pathname]) {
+    res.writeHead(302, { Location: LEGACY_REDIRECTS[url.pathname] + url.search });
+    res.end();
+    return;
+  }
+
   const full = resolveSafe(url.pathname);
   if (!full) {
     res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" });
@@ -158,6 +180,8 @@ server.listen(PORT, () => {
   console.log(`[演出トリガー中継サーバー] ws://localhost:${PORT} で待機中...`);
   console.log(`[静的配信] http://localhost:${PORT}/ (公開ルート: ${ROOT})`);
   console.log(`[オーバーレイURL] http://localhost:${PORT}/enshutsu/enshutsu_overlay.html`);
+  console.log(`[コンパネURL]     http://localhost:${PORT}/control/main_control.html`);
+  console.log(`[筐体ビューURL]   http://localhost:${PORT}/kyotai/kyotai.html?mode=link&hidebar=1`);
   console.log("このウィンドウは起動したまま(閉じない)にしておいてください。");
 });
 
