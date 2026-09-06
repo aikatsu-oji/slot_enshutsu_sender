@@ -172,7 +172,7 @@
     font-weight:900;
   }
 
-  /* ---------- リールユニット(kyotai/kyotai.html)を液晶内に出し入れする ----------
+  /* ---------- リールユニット(reel/reel.html)を液晶内に出し入れする ----------
      iframe で筐体ビューを埋め込み、.in で下からスライドして表示、外すと下へ抜ける。
      位置(中心)・幅は設定パネルの「リール」タブから %(ステージ比)で指定する。
      HUD(z-index:1, DOM順で後)と萌えカットイン/暗転レイヤーの下、ゲーム画面の上に置く。 */
@@ -768,7 +768,7 @@
       <div class="note" id="reel-state">状態: 非表示</div>
       <button class="action" id="reel-toggle">🎰 リールを液晶に入れる</button>
       <div class="note">
-        筐体ビュー(kyotai/kyotai.html)をオーバーレイ内に埋め込み、下からスライドして出し入れします。
+        筐体ビュー(reel/reel.html)をオーバーレイ内に埋め込み、下からスライドして出し入れします。
         主制御と連動(mode=link)し、中継サーバー(8787)の state を受けてリールが回ります。
         出し入れの状態は保存され、次回起動時も引き継がれます。<br><br>
         コンパネの「リールを液晶に入れる / 出す」ボタン、または
@@ -852,7 +852,7 @@
     endDuration: 2.5,
     sfxVolume: 0.8,
     subWsUrl: "ws://127.0.0.1:8765",
-    // リールユニット(kyotai.html)の出し入れ
+    // リールユニット(reel.html)の出し入れ
     reelIn: false,
     reelX: 50,
     reelY: 62,
@@ -2144,7 +2144,7 @@ function hideGameVideo(){
     "赤": { text:"激アツ",         c1:"#7a0008", c2:"#ff3b3b", fg:"#fff4d6" },
     "金": { text:"GOD CHANCE",     c1:"#8a6400", c2:"#ffe27a", fg:"#3a2400" },
   };
-  // 押し順番号(0起点) → 押す順にリール番号(0=左,1=中,2=右)を並べた配列。kyotai.html の ORDER と同じ並び
+  // 押し順番号(0起点) → 押す順にリール番号(0=左,1=中,2=右)を並べた配列。reel.html の ORDER と同じ並び
   const NAVI_ORDER = [[0,1,2],[0,2,1],[1,0,2],[2,0,1],[1,2,0],[2,1,0]];
 
   /* --- 効果音(任意)。サーバーモードのときだけ /api/list で探す。無ければ無音のまま --- */
@@ -2337,7 +2337,7 @@ function hideGameVideo(){
     });
   });
 
-  /* ===================== リールユニット(kyotai/kyotai.html)の出し入れ =====================
+  /* ===================== リールユニット(reel/reel.html)の出し入れ =====================
      筐体ビューを iframe で埋め込み、液晶(ステージ)内に入れたり出したりする。
      筐体ビューは自分で中継サーバー(8787)へ接続し、主制御の state を受けてリールを回す
      (mode=link)。こちらはその表示位置と出し入れだけを担当する。 */
@@ -2348,7 +2348,7 @@ function hideGameVideo(){
   function reelFrameUrl(){
     const p = new URLSearchParams({ mode:"link", hidebar:"1" });
     if(!settings.reelNavi) p.set("navi", "0");
-    return "../kyotai/kyotai.html?" + p.toString();
+    return "../reel/reel.html?" + p.toString();
   }
   function loadReelFrame(){
     const url = reelFrameUrl();

@@ -13,11 +13,15 @@ slot_enshutsu_sender/
 ├── server/
 │   └── trigger_relay_server.js  WebSocket 中継 + 静的配信 + /api/list + /api/health (port 8787)
 ├── main_board/
-│   └── god_main_board.py        主制御(MainBoard)・副制御(SubBoard) シミュレータ。--serve で ws://127.0.0.1:8765
+│   ├── god_main_board.py        主制御(MainBoard)・副制御(SubBoard) シミュレータ。--serve で ws://127.0.0.1:8765
+│   └── reels.json               図柄配列 (1リール21コマ) の唯一の定義。主制御と筐体ビューの両方が読む
 ├── control/
 │   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)
-├── kyotai/
-│   └── kyotai.html              筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
+├── reel/
+│   ├── reel.html                筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
+│   ├── symbols.js               図柄定義 (SVG スプライト、viewBox 240×80)。globalThis.SlotSymbols
+│   ├── reel_window.js           リール窓の DOM 構築・停止位置描画 (ReelView)、reels.json の読込。globalThis.SlotReels
+│   └── symbols.html             図柄カタログ。全図柄・リール窓の停止形・配列表の確認と SVG/PNG 書き出し
 ├── enshutsu/
 │   ├── enshutsu_overlay.html    OBS ブラウザソース用オーバーレイ本体
 │   ├── real/                    実機系素材 (start.wav など)
@@ -44,8 +48,9 @@ slot_enshutsu_sender/
 - URL (すべて 8787 経由で開くこと。file:// で開くと素材フォルダ選択が必要になる)
   - コンパネ     http://localhost:8787/control/main_control.html
   - オーバーレイ http://localhost:8787/enshutsu/enshutsu_overlay.html  (OBS ブラウザソース)
-  - 筐体ビュー   http://localhost:8787/kyotai/kyotai.html?mode=link&hidebar=1
-  - 旧 URL `/main_control.html` `/kyotai.html` はサーバーが 302 で新 URL へ転送する。
+  - 筐体ビュー   http://localhost:8787/reel/reel.html?mode=link&hidebar=1
+  - 図柄カタログ http://localhost:8787/reel/symbols.html
+  - 旧 URL `/main_control.html` `/kyotai.html` `/kyotai/kyotai.html` はサーバーが 302 で新 URL へ転送する。
 
 ## コマンド (Claude Code から実行してよいもの)
 
@@ -76,16 +81,20 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - オーバーレイの HUD (バナー・ナビ・ポップアップ) の文字サイズは CSS 変数 `--sh` (16:9 ステージの高さ) 比で指定する。
   px 固定にしない (OBS の解像度に依存させない)。スロー再生は `--spd` でトランジション時間にも効く。
 - 設定パネル (歯車) の「予告」「AT」タブに各演出のテストボタンがある。本物のイベントと同じ `handleSubEvent` を通る。
-- 「リール」タブ: 筐体ビュー `kyotai/kyotai.html?mode=link&hidebar=1` を iframe (`#reel-frame`) で液晶内に埋め込み、
+- 「リール」タブ: 筐体ビュー `reel/reel.html?mode=link&hidebar=1` を iframe (`#reel-frame`) で液晶内に埋め込み、
   `#reel-layer.in` で下からスライドして出し入れする。位置・幅は % 指定 (`reelX/reelY/reelW`)、状態は `reelIn` として保存。
   筐体ビューは自分で 8787 に接続して主制御の state でリールを回すので、オーバーレイ側は表示位置と出し入れだけを持つ。
-  オーバーレイと kyotai/ の相対位置 (`../kyotai/`) を変えないこと。
+  オーバーレイと reel/ の相対位置 (`../reel/`) を変えないこと。
 - 動画素材: `afterblackout/` と `cutin/` は GIF/画像と同じ扱いで mp4/webm/mov を置ける (`assetRecord` の `kind` で分岐)。
   固定素材は `freeze/frz.webm|mp4`・`freeze/moe.webm|mp4` があれば GIF より優先 (`probeVideoVariant`)。
   `<video>` の再生は必ず `startVideo` / `stopVideo` を通す (src 変更直後の play() は Chrome で失敗することがあるため
   `loadedmetadata` を待ってから再生している)。静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の
   巻き戻し・シークはサーバー側で完結する。
-- `main_control.html` と `kyotai.html` は相対パス依存なし。接続先は画面内の ws URL 入力欄 (既定 ws://localhost:8787)。
+- `main_control.html` は相対パス依存なし。接続先は画面内の ws URL 入力欄 (既定 ws://localhost:8787)。
+- 図柄と配列: 図柄は `reel/symbols.js` に SVG として定義し、`reel.html` / `symbols.html` はスプライトを `<svg><use>` で
+  参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
+  起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
+  図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
 - 主制御 → 副制御は 2 バイトコマンド (単方向)。副制御は主制御の内部状態を直接見ない。この境界を守る
   (仕様は doc/主制御・副制御仕様書.docx)。
 - 中継サーバーはメッセージを「受信したら他の全クライアントへ転送するだけ」。ロジックを足さない。

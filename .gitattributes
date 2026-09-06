@@ -1,2 +1,22 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# 改行コードを .gitattributes で固定する (core.autocrlf の設定に依存させない)
+* text=auto eol=lf
+
+# Windows バッチは CRLF 必須 (Shift-JIS/CRLF で保存すること)
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# バイナリ素材
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.mp3 binary
+*.wav binary
+*.m4a binary
+*.ogg binary
+*.mp4 binary
+*.webm binary
+*.mov binary
+*.docx binary
+*.pdf binary

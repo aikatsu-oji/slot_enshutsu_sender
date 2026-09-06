@@ -24,7 +24,7 @@ scripts\dev.cmd stop
 | --- | --- |
 | コンパネ | http://localhost:8787/control/main_control.html |
 | オーバーレイ (OBS ブラウザソース) | http://localhost:8787/enshutsu/enshutsu_overlay.html |
-| 筐体ビュー | http://localhost:8787/kyotai/kyotai.html?mode=link&hidebar=1 |
+| 筐体ビュー | http://localhost:8787/reel/reel.html?mode=link&hidebar=1 |
 
 ## フォルダ
 
@@ -33,7 +33,7 @@ scripts\dev.cmd stop
 | `server/` | WebSocket 中継 + 静的配信サーバー (port 8787) |
 | `main_board/` | 主制御・副制御シミュレータ `god_main_board.py` (port 8765) |
 | `control/` | コンパネ `main_control.html` |
-| `kyotai/` | 筐体ビュー `kyotai.html` |
+| `reel/` | 筐体ビュー `reel.html` |
 | `enshutsu/` | オーバーレイ本体と演出素材 (`at/sound/`, `yokoku/banner/sound/` に効果音を置くと自動で鳴る。フリーズ素材・萌えカットインは GIF/画像のほか mp4/webm 動画も可) |
 | `doc/` | 仕様書 |
 | `scripts/` | CLI 用ツール |
