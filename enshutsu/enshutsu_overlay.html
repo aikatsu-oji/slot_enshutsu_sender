@@ -172,6 +172,33 @@
     font-weight:900;
   }
 
+  /* ---------- リールユニット(kyotai/kyotai.html)を液晶内に出し入れする ----------
+     iframe で筐体ビューを埋め込み、.in で下からスライドして表示、外すと下へ抜ける。
+     位置(中心)・幅は設定パネルの「リール」タブから %(ステージ比)で指定する。
+     HUD(z-index:1, DOM順で後)と萌えカットイン/暗転レイヤーの下、ゲーム画面の上に置く。 */
+  #reel-layer{
+    position:absolute; left:50%; top:62%;
+    width:46%;
+    aspect-ratio: 2 / 1;
+    --reel-anim:.5s;
+    transform: translate(-50%,-50%) translateY(calc(var(--sh) * 0.6)) scale(.92);
+    opacity:0;
+    z-index:1;
+    pointer-events:none;
+    transition: transform calc(var(--reel-anim) * var(--spd)) cubic-bezier(.2,.9,.3,1),
+                opacity calc(var(--reel-anim) * .7 * var(--spd)) ease;
+    filter: drop-shadow(0 calc(var(--sh) * 0.02) calc(var(--sh) * 0.03) rgba(0,0,0,.6));
+  }
+  #reel-layer.in{
+    opacity:1;
+    transform: translate(-50%,-50%) translateY(0) scale(1);
+  }
+  #reel-frame{
+    width:100%; height:100%;
+    border:0; display:block;
+    background:transparent;
+  }
+
   /* 予告バナー: 左から滑り込み → 右へ抜ける。色はランク(白/青/緑/赤/金)ごとにJSで --b1/--b2/--fg を設定 */
   #hud-banner{
     position:absolute; left:0; width:100%;
@@ -503,6 +530,9 @@
     <div id="screen-wrapper">
       <video id="game-screen-video" autoplay muted playsinline></video>
     </div>
+    <div id="reel-layer">
+      <iframe id="reel-frame" title="リールユニット" allowtransparency="true"></iframe>
+    </div>
     <div id="hud-layer">
       <div id="hud-banner"><div id="hud-banner-text" class="hud-font"></div></div>
       <div id="hud-navi" class="hud-font"><div class="digit"></div><div class="digit"></div><div class="digit"></div></div>
@@ -538,6 +568,7 @@
       <button class="tab-btn" data-tab="settings">設定</button>
       <button class="tab-btn" data-tab="yokoku">予告</button>
       <button class="tab-btn" data-tab="at">AT</button>
+      <button class="tab-btn" data-tab="reel">リール</button>
     </div>
 
     <div class="tab-content" id="tab-controls">
@@ -732,6 +763,40 @@
       <div class="note">最近受信した副制御イベント</div>
       <div id="sub-log">(まだ受信していません)</div>
     </div>
+
+    <div class="tab-content" id="tab-reel" hidden>
+      <div class="note" id="reel-state">状態: 非表示</div>
+      <button class="action" id="reel-toggle">🎰 リールを液晶に入れる</button>
+      <div class="note">
+        筐体ビュー(kyotai/kyotai.html)をオーバーレイ内に埋め込み、下からスライドして出し入れします。
+        主制御と連動(mode=link)し、中継サーバー(8787)の state を受けてリールが回ります。
+        出し入れの状態は保存され、次回起動時も引き継がれます。<br><br>
+        コンパネの「リールを液晶に入れる / 出す」ボタン、または
+        <code>dev.cmd send reelIn</code> / <code>reelOut</code> / <code>reelToggle</code> でも操作できます。
+      </div>
+      <div class="hr"></div>
+      <div class="field-row">
+        <label for="reelX">横位置(中心・ステージ幅の%)</label>
+        <input type="number" id="reelX" min="0" max="100" step="1">
+      </div>
+      <div class="field-row">
+        <label for="reelY">縦位置(中心・ステージ高さの%)</label>
+        <input type="number" id="reelY" min="0" max="100" step="1">
+      </div>
+      <div class="field-row">
+        <label for="reelW">幅(ステージ幅の%)</label>
+        <input type="number" id="reelW" min="10" max="100" step="1">
+      </div>
+      <div class="field-row">
+        <label for="reelAnim">出し入れにかかる時間(秒)</label>
+        <input type="number" id="reelAnim" min="0" max="5" step="0.1">
+      </div>
+      <div class="field-row">
+        <label for="reelNavi">リール上のナビランプも表示</label>
+        <input type="checkbox" id="reelNavi">
+      </div>
+      <div class="note">押し順ナビは既定では HUD 側だけに出します。オンにすると筐体ビュー側のナビランプも表示します(切替時に筐体ビューを読み直します)。</div>
+    </div>
   </div>
 
 <script>
@@ -786,7 +851,14 @@
     popupDuration: 2.0,
     endDuration: 2.5,
     sfxVolume: 0.8,
-    subWsUrl: "ws://127.0.0.1:8765"
+    subWsUrl: "ws://127.0.0.1:8765",
+    // リールユニット(kyotai.html)の出し入れ
+    reelIn: false,
+    reelX: 50,
+    reelY: 62,
+    reelW: 46,
+    reelAnim: 0.5,
+    reelNavi: false
   };
 
   const STORAGE_KEY = "enshutsu_overlay_settings_v1";
@@ -986,13 +1058,26 @@
     el("endDuration").value = settings.endDuration;
     el("sfxVolume").value = settings.sfxVolume;
     el("subWsUrl").value = settings.subWsUrl;
+    el("reelX").value = settings.reelX;
+    el("reelY").value = settings.reelY;
+    el("reelW").value = settings.reelW;
+    el("reelAnim").value = settings.reelAnim;
+    el("reelNavi").checked = !!settings.reelNavi;
     applyHudLayout();
   }
-  // HUDの位置設定をCSSへ反映する(数値設定の変更時と起動時)
+  // HUD・リールの位置設定をCSSへ反映する(数値設定の変更時・起動時・設定インポート時)
   function applyHudLayout(){
-    const banner = el("hud-banner"), navi = el("hud-navi");
+    const banner = el("hud-banner"), navi = el("hud-navi"), reel = el("reel-layer");
     if(banner) banner.style.top = `${settings.bannerY}%`;
     if(navi) navi.style.top = `${settings.naviY}%`;
+    if(reel){
+      reel.style.left = `${settings.reelX}%`;
+      reel.style.top = `${settings.reelY}%`;
+      reel.style.width = `${settings.reelW}%`;
+      reel.style.setProperty("--reel-anim", `${Math.max(0, Number(settings.reelAnim) || 0)}s`);
+      reel.classList.toggle("in", !!settings.reelIn);
+    }
+    updateReelUi(); // 関数宣言なので巻き上げにより定義前でも呼べる
   }
   applySettingsToUI();
 
@@ -1015,8 +1100,11 @@
   bindNumber("popupDuration","popupDuration");
   bindNumber("endDuration","endDuration");
   bindNumber("sfxVolume","sfxVolume");
-  el("bannerY").addEventListener("change", applyHudLayout);
-  el("naviY").addEventListener("change", applyHudLayout);
+  bindNumber("reelX","reelX");
+  bindNumber("reelY","reelY");
+  bindNumber("reelW","reelW");
+  bindNumber("reelAnim","reelAnim");
+  ["bannerY","naviY","reelX","reelY","reelW","reelAnim"].forEach(id=> el(id).addEventListener("change", applyHudLayout));
   el("subWsUrl").addEventListener("change", e=>{
     const v = String(e.target.value || "").trim();
     settings.subWsUrl = v || DEFAULT_SETTINGS.subWsUrl;
@@ -2249,6 +2337,53 @@ function hideGameVideo(){
     });
   });
 
+  /* ===================== リールユニット(kyotai/kyotai.html)の出し入れ =====================
+     筐体ビューを iframe で埋め込み、液晶(ステージ)内に入れたり出したりする。
+     筐体ビューは自分で中継サーバー(8787)へ接続し、主制御の state を受けてリールを回す
+     (mode=link)。こちらはその表示位置と出し入れだけを担当する。 */
+  const reelLayer = el("reel-layer");
+  const reelFrame = el("reel-frame");
+  const reelToggleBtn = el("reel-toggle");
+
+  function reelFrameUrl(){
+    const p = new URLSearchParams({ mode:"link", hidebar:"1" });
+    if(!settings.reelNavi) p.set("navi", "0");
+    return "../kyotai/kyotai.html?" + p.toString();
+  }
+  function loadReelFrame(){
+    const url = reelFrameUrl();
+    if(reelFrame.getAttribute("src") !== url) reelFrame.setAttribute("src", url);
+  }
+  function updateReelUi(){
+    // 起動時は applySettingsToUI から(上の const 定義より前に)呼ばれるため、要素はここで都度取得する
+    const btn = el("reel-toggle"), st = el("reel-state");
+    if(!btn || !st) return;
+    btn.textContent = settings.reelIn ? "🎰 リールを液晶から出す" : "🎰 リールを液晶に入れる";
+    btn.classList.toggle("primary", !!settings.reelIn);
+    st.textContent = "状態: " + (settings.reelIn ? "液晶内に表示中" : "非表示(液晶の外)");
+  }
+  function setReelIn(on){
+    settings.reelIn = !!on;
+    saveSettings();
+    reelLayer.classList.toggle("in", settings.reelIn);
+    updateReelUi();
+  }
+  window.reelIn = ()=> setReelIn(true);
+  window.reelOut = ()=> setReelIn(false);
+  window.reelToggle = ()=> setReelIn(!settings.reelIn);
+  reelToggleBtn.addEventListener("click", window.reelToggle);
+  el("reelNavi").addEventListener("change", e=>{
+    settings.reelNavi = !!e.target.checked;
+    saveSettings();
+    loadReelFrame();
+  });
+  // 起動時: 保存された状態をアニメーションなしで反映してから、筐体ビューを読み込む
+  reelLayer.style.transition = "none";
+  applyHudLayout();
+  void reelLayer.offsetWidth;
+  reelLayer.style.transition = "";
+  loadReelFrame();
+
   /* ===================== 副制御ポート(ws://127.0.0.1:8765)への接続 =====================
      god_main_board.py --serve の EnshutsuServer へ接続し、演出イベント(JSON)を受信する。
      単方向(こちらからは何も送らない)。切断時は3秒ごとに再接続する。 */
@@ -2323,6 +2458,10 @@ function hideGameVideo(){
       // 副制御の演出イベントを中継サーバー経由で直接流し込む(scripts\dev.cmd send での確認用)。
       //   例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
       subEvent: (ev, msg) => { if(window.handleSubEvent) window.handleSubEvent(ev || (msg && msg.event)); },
+      // リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切り替える
+      reelIn: () => { if(window.reelIn) window.reelIn(); },
+      reelOut: () => { if(window.reelOut) window.reelOut(); },
+      reelToggle: () => { if(window.reelToggle) window.reelToggle(); },
       // main_control側で選択した「ゲーム画面」のメタ情報(名前/サイズ)。実際の映像は下のWebRTC系アクションで届く。
       gameScreenInfo: (info) => {
         window.currentGameScreen = info || null;

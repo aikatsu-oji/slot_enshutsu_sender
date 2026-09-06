@@ -32,6 +32,7 @@
 //     "triggerEnshutsu"                              … フル演出(ロック1→2→3)を1回再生
 //     "toggleSlow"                                   … スロー再生の切り替え
 //     "toggleSettings"                               … 設定パネルの開閉
+//     "reelIn" / "reelOut" / "reelToggle"            … リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切替
 //     "subEvent" (event: {...})                      … 副制御の演出イベントをオーバーレイへ直接流す(確認用)
 //                                                      例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
 //

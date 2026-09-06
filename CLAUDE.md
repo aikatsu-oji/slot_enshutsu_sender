@@ -55,6 +55,7 @@ scripts\dev.cmd status                                 # ポート・health・PI
 scripts\dev.cmd test                                   # 主制御 2000G / 副制御 300 イベント / JS 構文チェック
 scripts\dev.cmd send triggerEnshutsu                  # コンパネのボタンと同じメッセージを送る (JSON 直指定も可)
 scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","rank":"赤"}}'   # 副制御イベントをオーバーレイへ直送
+scripts\dev.cmd send reelIn                          # リールユニットを液晶(オーバーレイ)内に入れる (reelOut / reelToggle も可)
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
@@ -75,6 +76,10 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - オーバーレイの HUD (バナー・ナビ・ポップアップ) の文字サイズは CSS 変数 `--sh` (16:9 ステージの高さ) 比で指定する。
   px 固定にしない (OBS の解像度に依存させない)。スロー再生は `--spd` でトランジション時間にも効く。
 - 設定パネル (歯車) の「予告」「AT」タブに各演出のテストボタンがある。本物のイベントと同じ `handleSubEvent` を通る。
+- 「リール」タブ: 筐体ビュー `kyotai/kyotai.html?mode=link&hidebar=1` を iframe (`#reel-frame`) で液晶内に埋め込み、
+  `#reel-layer.in` で下からスライドして出し入れする。位置・幅は % 指定 (`reelX/reelY/reelW`)、状態は `reelIn` として保存。
+  筐体ビューは自分で 8787 に接続して主制御の state でリールを回すので、オーバーレイ側は表示位置と出し入れだけを持つ。
+  オーバーレイと kyotai/ の相対位置 (`../kyotai/`) を変えないこと。
 - 動画素材: `afterblackout/` と `cutin/` は GIF/画像と同じ扱いで mp4/webm/mov を置ける (`assetRecord` の `kind` で分岐)。
   固定素材は `freeze/frz.webm|mp4`・`freeze/moe.webm|mp4` があれば GIF より優先 (`probeVideoVariant`)。
   `<video>` の再生は必ず `startVideo` / `stopVideo` を通す (src 変更直後の play() は Chrome で失敗することがあるため
