@@ -48,7 +48,8 @@ const PORT = Number(process.env.PORT) || 8787;
 // 旧配置(ルート直下)のURLを新配置へ転送する。ブックマークやOBSの設定を壊さないための互換措置。
 const LEGACY_REDIRECTS = {
   "/main_control.html": "/control/main_control.html",
-  "/kyotai.html": "/kyotai/kyotai.html",
+  "/kyotai.html": "/reel/reel.html",
+  "/kyotai/kyotai.html": "/reel/reel.html",
 };
 
 // ===================== 静的配信 + フォルダ一覧API =====================
@@ -245,7 +246,7 @@ server.listen(PORT, () => {
   console.log(`[静的配信] http://localhost:${PORT}/ (公開ルート: ${ROOT})`);
   console.log(`[オーバーレイURL] http://localhost:${PORT}/enshutsu/enshutsu_overlay.html`);
   console.log(`[コンパネURL]     http://localhost:${PORT}/control/main_control.html`);
-  console.log(`[筐体ビューURL]   http://localhost:${PORT}/kyotai/kyotai.html?mode=link&hidebar=1`);
+  console.log(`[筐体ビューURL]   http://localhost:${PORT}/reel/reel.html?mode=link&hidebar=1`);
   console.log("このウィンドウは起動したまま(閉じない)にしておいてください。");
 });
 

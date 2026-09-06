@@ -179,7 +179,7 @@ function Do-Status {
   Write-Host ""
   Write-Host "コンパネ     $BaseUrl/control/main_control.html"
   Write-Host "オーバーレイ $BaseUrl/enshutsu/enshutsu_overlay.html   (OBS ブラウザソース用)"
-  Write-Host "筐体ビュー   $BaseUrl/kyotai/kyotai.html?mode=link&hidebar=1"
+  Write-Host "筐体ビュー   $BaseUrl/reel/reel.html?mode=link&hidebar=1"
   exit $(if ($s) { 0 } else { 1 })
 }
 
@@ -199,6 +199,11 @@ function Do-Test {
     Info "中継サーバー 構文チェック"
     & node --check $ServerJs
     if ($LASTEXITCODE -ne 0) { Fail "trigger_relay_server.js の構文エラー" }
+    Info "筐体ビュー 構文チェック (reel/symbols.js, reel/reel_window.js)"
+    foreach ($js in @("reel/symbols.js", "reel/reel_window.js")) {
+      & node --check (Join-Path $Root $js)
+      if ($LASTEXITCODE -ne 0) { Fail "$js の構文エラー" }
+    }
     Ok "すべてのテストに成功しました"
   } finally { Pop-Location }
 }
@@ -215,7 +220,7 @@ function Do-Open {
   $pages = @(
     @("$BaseUrl/control/main_control.html", "480,900", "0,0"),
     @("$BaseUrl/enshutsu/enshutsu_overlay.html", "960,576", "520,0"),
-    @("$BaseUrl/kyotai/kyotai.html?mode=link&hidebar=1", "420,980", "1490,0")
+    @("$BaseUrl/reel/reel.html?mode=link&hidebar=1", "420,980", "1490,0")
   )
   foreach ($pg in $pages) {
     if ($browser) { Start-Process $browser -ArgumentList @("--new-window", "--app=$($pg[0])", "--window-size=$($pg[1])", "--window-position=$($pg[2])") }

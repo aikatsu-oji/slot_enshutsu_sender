@@ -39,6 +39,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import queue
 import random
 import socket
@@ -50,22 +51,17 @@ from urllib.parse import urlparse
 
 # ---------------------------------------------------------------------------
 # 1. 図柄配列（リールテープ）  各リール21コマ
+#    定義は同じフォルダの reels.json（筐体ビュー reel/reel.html も同じファイルを読む）
 # ---------------------------------------------------------------------------
 
-REEL_L = ["神", "ベル", "リプ", "スイカ", "赤7", "ベル", "チェリー",
-          "リプ", "ベル", "ブランク", "スイカ", "リプ", "ベル", "BAR",
-          "リプ", "ベル", "スイカ", "リプ", "ベル", "チェリー", "リプ"]
+with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "reels.json"), encoding="utf-8") as _f:
+    _REEL_DATA = json.load(_f)
 
-REEL_C = ["神", "リプ", "ベル", "スイカ", "リプ", "ベル", "ブランク",
-          "リプ", "ベル", "チェリー", "リプ", "赤7", "ベル", "スイカ",
-          "リプ", "ベル", "BAR", "リプ", "ベル", "スイカ", "リプ"]
-
-REEL_R = ["神", "ベル", "リプ", "赤7", "ベル", "スイカ", "リプ",
-          "ベル", "ブランク", "リプ", "ベル", "チェリー", "リプ", "ベル",
-          "BAR", "リプ", "ベル", "スイカ", "リプ", "ベル", "スイカ"]
+REEL_L, REEL_C, REEL_R = (list(t) for t in _REEL_DATA["reels"])
 
 REELS = (REEL_L, REEL_C, REEL_R)
-KOMA = 21          # 1リールのコマ数
+KOMA = int(_REEL_DATA["koma"])   # 1リールのコマ数
+assert all(len(t) == KOMA for t in REELS), "reels.json: コマ数が一致しません"
 MAX_SLIP = 4       # 最大滑りコマ数（法定：190ms以内 = 4コマ）
 BET = 3            # 規定投入枚数
 
