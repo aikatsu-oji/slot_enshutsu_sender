@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>図柄カタログ</title>
+<style>
+  :root{
+    --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --frame-shadow:#0b1226;
+    --reel-bg:#fdfbf3; --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d;
+    --unit:900px;                       /* リール窓の幅。reel.html は 100vw */
+    --koma:calc(var(--unit) / 8.4);     /* 1コマの高さ。reel.html と同じ比率 */
+    --font-sym:"Yu Mincho","Hiragino Mincho ProN",serif;
+    --font-ui:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--frame-shadow);color:var(--text);font-family:var(--font-ui);}
+  main{max-width:1440px;margin:0 auto;padding:40px 48px 80px;display:flex;flex-direction:column;gap:48px;}
+  h1,h2{font-family:var(--font-sym);font-weight:700;letter-spacing:4px;color:var(--frame-bright);margin:0;line-height:1;}
+  h1{font-size:44px;} h2{font-size:30px;}
+  header,section>.head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:2px solid var(--frame-dim);padding-bottom:14px;}
+  .sub{font-size:13px;color:var(--sub);margin-top:8px;}
+  .right{font-size:12px;color:var(--sub);white-space:nowrap;}
+  section{display:flex;flex-direction:column;gap:22px;}
+  button{background:#1e1a2c;border:1px solid var(--frame-dim);color:var(--text);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-family:inherit;}
+  button:hover{border-color:var(--frame);}
+  input[type=number]{width:64px;background:#08060a;border:1px solid #3a3348;color:var(--text);padding:5px 8px;border-radius:6px;font-size:13px;font-family:inherit;}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--sub);}
+
+  /* ---- 図柄一覧 ---- */
+  .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
+  .card{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;}
+  .card .koma{position:static;height:var(--koma);border-bottom:none;background:var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .card .name{display:flex;align-items:baseline;gap:10px;}
+  .card .name b{font-size:20px;} .card .name span{font-size:11px;letter-spacing:2px;color:var(--frame);}
+  .card .role{font-size:13px;font-weight:700;} .card .pay{font-size:12px;color:var(--frame-bright);}
+  .card .act{display:flex;gap:8px;margin-top:4px;}
+
+  /* ---- リール窓 (reel.html の .unit / .window / .reel と同じ) ---- */
+  .unit{width:var(--unit);}
+  .navi{display:flex;justify-content:space-around;padding:0 2% 6px;}
+  .navi span{
+    width:1.6em;height:1.6em;border-radius:50%;font-size:calc(var(--unit) / 40);
+    display:flex;align-items:center;justify-content:center;
+    border:2px solid var(--frame-dim);background:#08060a;color:#3a3020;font-weight:700;
+  }
+  .navi span.on{background:var(--frame-bright);color:var(--frame-shadow);border-color:#fff3c8;box-shadow:0 0 14px var(--frame-bright);}
+  .window{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;
+    background:linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim));
+    box-shadow:0 6px 0 var(--frame-shadow), inset 0 1px 0 rgba(255,255,255,.4);
+  }
+  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;}
+  .reel::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent);}
+  .reel::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.45),transparent);}
+  .reel .line{position:absolute;left:0;right:0;top:var(--koma);height:var(--koma);z-index:2;pointer-events:none;}
+  .reel.hit .line{box-shadow:inset 0 0 0 3px rgba(241,210,122,.95), 0 0 18px rgba(241,210,122,.8);}
+  .strip{position:absolute;left:0;right:0;top:0;}
+  .koma{position:absolute;left:0;right:0;height:var(--koma);display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(20,33,61,.12);}
+  .sym{display:block;width:82%;height:74%;}
+
+  /* ---- リール配列表 ---- */
+  .strips{display:flex;gap:28px;align-items:flex-start;}
+  .nums{display:flex;flex-direction:column;width:52px;padding-top:4px;}
+  .nums div{height:var(--koma);display:flex;align-items:center;justify-content:center;}
+  .nums b{width:40px;height:40px;border-radius:50%;background:var(--frame-bright);color:var(--frame-shadow);border:2px solid var(--frame-dim);display:flex;align-items:center;justify-content:center;font-size:18px;}
+  .tape{display:flex;flex-direction:column;gap:10px;align-items:center;}
+  .tape h3{margin:0;font-family:var(--font-sym);font-size:28px;color:var(--frame-bright);font-weight:700;}
+  .tape .body{display:flex;flex-direction:column;width:calc((var(--unit) - 24px) / 3);background:var(--reel-bg);border:4px solid var(--frame);border-radius:4px;overflow:hidden;box-shadow:0 4px 0 var(--frame-dim);}
+  .tape .body .koma{position:static;}
+  table{border-collapse:collapse;font-size:13px;color:var(--sub);}
+  th,td{padding:6px 14px;text-align:center;} th{color:var(--text);}
+  tr+tr td{border-top:1px solid var(--line);}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>図柄カタログ</h1><div class="sub">図柄は reel/symbols.js、配列は main_board/reels.json から生成。筐体ビュー reel.html と同じ定義</div></div>
+    <div class="right" id="meta">読み込み中…</div>
+  </header>
+
+  <section id="sec-symbols">
+    <div class="head"><div><h2>図柄</h2><div class="sub">viewBox 240×80。クリーム地 (#fdfbf3) のコマに幅82%・高さ74%で置く</div></div>
+      <div class="row"><button id="dl-sprite">スプライトSVGを保存</button></div></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section id="sec-window">
+    <div class="head"><div><h2>リール窓</h2><div class="sub">中段のコマ番号 (主制御の reelPos) を指定して停止形を確認する。神 / 赤7 の中段揃いで発光</div></div>
+      <div class="row">
+        <label>左 <input type="number" id="pos-0" min="0" value="0"></label>
+        <label>中 <input type="number" id="pos-1" min="0" value="0"></label>
+        <label>右 <input type="number" id="pos-2" min="0" value="0"></label>
+        <label>ナビ <input type="number" id="navi" min="0" max="6" value="0"></label>
+        <label>幅 <input type="number" id="unit" min="300" max="1400" step="50" value="900"></label>
+      </div></div>
+    <div id="window"></div>
+  </section>
+
+  <section id="sec-strip">
+    <div class="head"><div><h2>リール配列</h2><div class="sub">番号 = reelPos (0〜20)。番号が大きいコマほど上、リールは上から下へ流れる</div></div>
+      <div class="right">中段揃いのみ有効 / 最大滑り4コマ</div></div>
+    <div class="strips" id="strips"></div>
+    <table id="counts"></table>
+  </section>
+</main>
+
+<script src="symbols.js"></script>
+<script src="reel_window.js"></script>
+<script>
+(async function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const S = SlotSymbols;
+  S.install(document);
+
+  let data;
+  try{ data = await SlotReels.load("../main_board/reels.json"); }
+  catch(e){ $("meta").textContent = "配列を読めません: " + e.message + "（8787 経由で開いていますか）"; return; }
+  const K = data.koma;
+  $("meta").textContent = `${S.ORDER.length}図柄 / 1リール${K}コマ`;
+
+  // ---- 書き出し (ブラウザのダウンロード) ----
+  function download(name, text, type){
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([text], { type }));
+    a.download = name; a.click();
+    setTimeout(()=> URL.revokeObjectURL(a.href), 1000);
+  }
+  async function downloadPng(name, svgText, w, h){
+    const img = new Image();
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+    await img.decode();
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(img, 0, 0, w, h);
+    c.toBlob(b => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = name; a.click(); }, "image/png");
+  }
+  const standalone = name => '<?xml version="1.0" encoding="UTF-8"?>\n' + S.svg(name, 240, 80) + "\n";
+  $("dl-sprite").addEventListener("click", ()=> download("symbols-sprite.svg", '<?xml version="1.0" encoding="UTF-8"?>\n' + S.sprite().replace(/ style="[^"]*"| aria-hidden="true"/g, "") + "\n", "image/svg+xml"));
+
+  // ---- 図柄一覧 ----
+  $("cards").innerHTML = S.ORDER.map(n => {
+    const i = S.INFO[n];
+    return `<div class="card">
+      <div class="koma">${S.use(n)}</div>
+      <div class="name"><b>${n}</b><span>${i.en}</span></div>
+      <div class="role">${i.role}</div><div class="pay">${i.pay}</div>
+      <div class="act"><button data-svg="${n}">SVG</button><button data-png="${n}">PNG (960×320)</button></div>
+    </div>`;
+  }).join("");
+  $("cards").addEventListener("click", e => {
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.dataset.svg) download(`${S.INFO[b.dataset.svg].id}.svg`, standalone(b.dataset.svg), "image/svg+xml");
+    if(b.dataset.png) downloadPng(`${S.INFO[b.dataset.png].id}.png`, S.svg(b.dataset.png, 960, 320), 960, 320);
+  });
+
+  // ---- リール窓 ----
+  const views = SlotReels.buildWindow($("window"), data);
+  const ORDER = {1:[0,1,2],2:[0,2,1],3:[1,0,2],4:[2,0,1],5:[1,2,0],6:[2,1,0]};
+  function refresh(){
+    views.forEach((v,i) => { const el = $(`pos-${i}`); el.max = K - 1; v.setPos(Number(el.value) || 0); });
+    SlotReels.highlight(views);
+    const seq = ORDER[Number($("navi").value)] || null;
+    [...$("window").querySelectorAll(".navi span")].forEach((el,i)=>{ el.textContent = seq ? seq.indexOf(i) + 1 : i + 1; el.classList.toggle("on", !!seq); });
+  }
+  ["pos-0","pos-1","pos-2","navi"].forEach(id => $(id).addEventListener("input", refresh));
+  $("unit").addEventListener("input", ()=>{ document.documentElement.style.setProperty("--unit", $("unit").value + "px"); requestAnimationFrame(refresh); });
+  refresh();
+
+  // ---- リール配列表 ----
+  const desc = tape => tape.map((s,i)=>({s,i})).reverse();
+  $("strips").innerHTML =
+    `<div class="tape"><h3>&nbsp;</h3><div class="nums">${desc(data.reels[0]).map(c=>`<div><b>${c.i}</b></div>`).join("")}</div></div>` +
+    ["左","中","右"].map((h,r)=>`<div class="tape"><h3>${h}</h3><div class="body">${desc(data.reels[r]).map(c=>`<div class="koma" title="${c.i}: ${c.s}">${S.use(c.s)}</div>`).join("")}</div></div>`).join("");
+  const rows = data.reels.map(t => S.ORDER.map(n => t.filter(s => s === n).length));
+  $("counts").innerHTML = `<tr><th>配置数</th>${S.ORDER.map(n=>`<th>${n}</th>`).join("")}</tr>` +
+    ["左","中","右"].map((h,r)=>`<tr><td>${h}</td>${rows[r].map(c=>`<td>${c}</td>`).join("")}</tr>`).join("");
+})();
+</script>
+</body>
+</html>
