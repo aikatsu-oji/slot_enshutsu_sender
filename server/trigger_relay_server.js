@@ -127,6 +127,70 @@ function handleApiList(res, url) {
   });
 }
 
+// ファイル1件を配信する。動画(mp4/webm)の再生・シーク・巻き戻しに必要な Range リクエスト(206)と、
+// 大きな素材を毎回ダウンロードし直さないための Last-Modified / 304 に対応する。
+// Cache-Control: no-cache は「使う前に必ず再検証する」の意味なので、素材を差し替えれば即座に反映される。
+function serveFile(req, res, target) {
+  fs.stat(target, (err, st) => {
+    if (err) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+      res.end("404 Not Found");
+      return;
+    }
+    const type = MIME[path.extname(target).toLowerCase()] || "application/octet-stream";
+    const size = st.size;
+    const lastModified = st.mtime.toUTCString();
+    const baseHeaders = {
+      "Content-Type": type,
+      "Cache-Control": "no-cache",
+      "Last-Modified": lastModified,
+      "Accept-Ranges": "bytes",
+    };
+
+    const since = req.headers["if-modified-since"];
+    if (since && !req.headers.range) {
+      const sinceMs = Date.parse(since);
+      if (!Number.isNaN(sinceMs) && Math.floor(st.mtimeMs / 1000) * 1000 <= sinceMs) {
+        res.writeHead(304, baseHeaders);
+        res.end();
+        return;
+      }
+    }
+
+    const range = req.headers.range;
+    const m = range && /^bytes=(\d*)-(\d*)$/.exec(range);
+    if (m && (m[1] !== "" || m[2] !== "")) {
+      let start, end;
+      if (m[1] === "") {
+        // bytes=-N … 末尾N バイト
+        const suffix = parseInt(m[2], 10);
+        start = Math.max(0, size - suffix);
+        end = size - 1;
+      } else {
+        start = parseInt(m[1], 10);
+        end = m[2] === "" ? size - 1 : Math.min(parseInt(m[2], 10), size - 1);
+      }
+      if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= size) {
+        res.writeHead(416, { "Content-Range": `bytes */${size}` });
+        res.end();
+        return;
+      }
+      res.writeHead(206, {
+        ...baseHeaders,
+        "Content-Length": end - start + 1,
+        "Content-Range": `bytes ${start}-${end}/${size}`,
+      });
+      if (req.method === "HEAD") { res.end(); return; }
+      fs.createReadStream(target, { start, end }).pipe(res);
+      return;
+    }
+
+    res.writeHead(200, { ...baseHeaders, "Content-Length": size });
+    if (req.method === "HEAD") { res.end(); return; }
+    fs.createReadStream(target).pipe(res);
+  });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
@@ -167,10 +231,7 @@ const server = http.createServer((req, res) => {
         res.end("404 Not Found: " + url.pathname);
         return;
       }
-      const type = MIME[path.extname(target).toLowerCase()] || "application/octet-stream";
-      // フォルダに画像を追加・差し替えたら即座に反映されるようキャッシュを無効化
-      res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-cache" });
-      fs.createReadStream(target).pipe(res);
+      serveFile(req, res, target);
     });
   });
 });
