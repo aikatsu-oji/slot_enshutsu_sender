@@ -1,5 +1,6 @@
 # 依存パッケージ (setup.bat / npm install で再生成される)
 /node_modules/
+package-lock.json
 
 # scripts/dev.ps1 が作る実行時ファイル (PID・ログ)
 /.run/
@@ -11,12 +12,11 @@ __pycache__/
 # オーバーレイ設定のエクスポート (enshutsu_overlay.html の「設定を保存」)
 enshutsu_settings*.json
 
-# OS / エディタ
+# OS
 Thumbs.db
 .DS_Store
 desktop.ini
-.vscode/*
-!.vscode/tasks.json
 
-# Claude Code の個人設定 (共有するのは settings.json のみ)
-.claude/settings.local.json
+# エディタ / Claude Code の設定 (元ファイルは scripts/config/ にあり、scripts\migrate_layout.bat が配置する)
+.vscode/
+.claude/
