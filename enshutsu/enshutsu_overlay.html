@@ -82,6 +82,24 @@
     pointer-events:none;
     mix-blend-mode: screen;
   }
+  /* 動画版(同名の .webm/.mp4 があればGIFの代わりに使う)。見た目はGIF側と同じ */
+  #illustration-video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+    background:transparent;
+    opacity:0;
+    display:none;
+    transition: opacity .5s ease;
+  }
+  #illustration-effect-video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+    opacity:0;
+    pointer-events:none;
+    mix-blend-mode: screen;
+  }
   #illustration-placeholder{
     position:absolute; inset:0;
     display:none; align-items:center; justify-content:center;
@@ -110,6 +128,24 @@
     background:#000;
   }
   #freeze-reveal-gif{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:contain;
+    opacity:0;
+    z-index:4;
+    pointer-events:none;
+    background:#000;
+  }
+  #lock3-transition-video{
+    position:absolute; inset:0;
+    width:100%; height:100%;
+    object-fit:cover;
+    opacity:0;
+    z-index:3;
+    pointer-events:none;
+    background:#000;
+  }
+  #freeze-reveal-video{
     position:absolute; inset:0;
     width:100%; height:100%;
     object-fit:contain;
@@ -444,9 +480,10 @@
     display:flex; flex-wrap:wrap; gap:6px;
     max-height:140px; overflow-y:auto;
   }
-  #image-list img{
+  #image-list img, #image-list video{
     width:44px; height:44px; object-fit:cover;
     border-radius:4px; border:1px solid rgba(212,175,55,0.4);
+    background:#000;
   }
 
   .hr{ height:1px; background: rgba(212,175,55,0.2); margin:2px 0; }
@@ -476,14 +513,18 @@
       <div id="illustration-white-bg"></div>
       <div id="illustration-placeholder">萌えカットイン画像未読込<br>「画像指定」タブでフォルダを選択してください</div>
       <img id="illustration-img" alt="">
+      <video id="illustration-video" playsinline preload="auto"></video>
       <img id="illustration-effect-gif" alt="">
+      <video id="illustration-effect-video" playsinline muted preload="auto"></video>
       <audio id="illustration-effect-audio" preload="auto"></audio>
       <audio id="illustration-voice-audio" preload="auto"></audio>
     </div>
     <div id="blackout-layer"></div>
     <img id="lock3-transition-gif" alt="">
+    <video id="lock3-transition-video" playsinline muted preload="auto"></video>
     <audio id="lock3-transition-audio" preload="auto"></audio>
     <img id="freeze-reveal-gif" alt="">
+    <video id="freeze-reveal-video" playsinline preload="auto"></video>
     <audio id="freeze-reveal-audio" preload="auto"></audio>
     <div id="gg-layer">
       <div id="gg-text"><div class="main hud-font">GOD GAME</div><div class="sub">ゴッドゲーム突入</div></div>
@@ -568,7 +609,7 @@
         <div class="hr"></div>
         <div id="cutin-mode-note" class="note" hidden></div>
         <button class="action" id="reload-folder" hidden>🔄 カットイン画像フォルダを再読込</button>
-        <button class="action" id="pick-folder">📁 萌えカットイン画像フォルダ(freeze/cutin)を選択</button>
+        <button class="action" id="pick-folder">📁 萌えカットイン素材フォルダ(freeze/cutin)を選択</button>
         <button class="action" id="reauth-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="folder-status">未選択(enshutsu/yokoku/freeze/cutin を選んでください)</div>
         <div id="image-list"></div>
@@ -603,8 +644,9 @@
         <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="freeze-status" class="note">未選択</div>
         <div class="note">
-          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFと、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
-          ロック2の番号などの状況に関わらず、freezeフォルダにGIFが1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。GIFと同じ番号のsound内の音声があれば一緒に再生され、なければGIFのみ再生されます。GIFが1つもない場合はこの演出はスキップされます。<br><br>
+          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFまたは動画(mp4 / webm / mov)と、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
+          ロック2の番号などの状況に関わらず、素材が1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。同じ番号のsound内の音声があれば一緒に再生されます。動画は音声付きならそのまま鳴り、動画の再生終了(音声があれば両方の終了)で演出が終わります。GIFは音声の終了、音声が無ければ既定秒数で終わります。素材が1つもない場合はこの演出はスキップされます。<br><br>
+          ロック3のつなぎ(frz.gif)と萌えカットインの重ね演出(moe.gif)も、同じ場所に frz.webm / frz.mp4、moe.webm / moe.mp4 を置くとGIFより優先して動画を使います(音は従来どおり blackout.mp3 / moecut.mp3)。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
       </div>
@@ -812,6 +854,103 @@
   const lock3Audio = el("lock3-transition-audio");
   const freezeRevealGif = el("freeze-reveal-gif");
   const freezeRevealAudio = el("freeze-reveal-audio");
+  const illustVideo = el("illustration-video");
+  const illustEffectVideo = el("illustration-effect-video");
+  const lock3Video = el("lock3-transition-video");
+  const freezeRevealVideo = el("freeze-reveal-video");
+
+  /* ===================== 動画ヘルパー =====================
+     <video> を頭から再生する。opacity は呼び出し側で制御する(フェードのタイミングが演出ごとに違うため)。
+     戻り値は再生終了(ended)で解決する Promise。loop=true のときは stopVideo されるまで解決しない。
+     自動再生ポリシーで音付き再生が拒否された場合は、無音にして再生だけは続ける。 */
+  function clampRate(){ return Math.min(4, Math.max(0.25, speedFactor)); }
+  function startVideo(v, url, opts){
+    const { loop = false, muted = false } = opts || {};
+    return new Promise(resolve=>{
+      let done = false;
+      const finish = (why)=>{ if(done) return; done = true; resolve(why); };
+      try{
+        v.onended = null; v.onerror = null;
+        v.pause();
+        // 同じURLなら再読込せず先頭へ戻す(大きい動画を毎回ダウンロードし直さない)
+        const needLoad = v.getAttribute("src") !== url;
+        if(needLoad){ v.setAttribute("src", url); v.load(); }
+        v.loop = loop;
+        v.muted = muted;
+        v.volume = Math.min(1, Math.max(0, Number(settings.sfxVolume)));
+        v.playbackRate = clampRate();
+        v.onended = ()=> finish("ended");
+        v.onerror = ()=>{ console.log("[動画] 再生に失敗しました:", url); finish("error"); };
+        const go = ()=>{
+          if(done) return;
+          try{ v.currentTime = 0; }catch(e){}
+          const p = v.play();
+          if(p && p.catch){
+            p.catch(()=>{
+              if(done) return;
+              if(v.muted){ finish("error"); return; }
+              v.muted = true;   // 音付き自動再生が拒否された → 無音で再生を続ける
+              const p2 = v.play();
+              if(p2 && p2.catch) p2.catch(()=> finish("error"));
+            });
+          }
+        };
+        // src を替えた直後に play() すると、読込処理と競合して再生が始まらないことがある
+        // (Chrome で再現)。メタデータが読めてから再生を開始する
+        if(needLoad && v.readyState < 1){
+          v.addEventListener("loadedmetadata", go, { once:true });
+          setTimeout(()=>{ if(!done && v.paused) go(); }, 3000); // 保険: 読込イベントが来なくても再生を試みる
+        }else{
+          go();
+        }
+      }catch(e){
+        finish("error");
+      }
+    });
+  }
+  function stopVideo(v){
+    try{ v.onended = null; v.onerror = null; v.pause(); v.currentTime = 0; }catch(e){}
+    v.style.transition = "none";
+    v.style.opacity = "0";
+  }
+  // 固定素材(frz / moe)の動画版があるか調べる。.webm → .mp4 の順に読めた方のURLを返す(無ければ null)。
+  // http:// でも file:// でも、実際に <video> でメタデータを読めるかで判定する。
+  function probeVideoVariant(dir, base){
+    return (async ()=>{
+      // サーバーモードならまず /api/list で存在するファイルだけに絞る(無いファイルを読みに行って404を出さない)
+      let existing = null;
+      if(SERVER_MODE){
+        try{ existing = new Set((await apiList(dir)).map(n=> n.toLowerCase())); }catch(e){ existing = null; }
+      }
+      for(const ext of [".webm", ".mp4"]){
+        if(existing && !existing.has((base + ext).toLowerCase())) continue;
+        const url = assetPath(dir, base + ext);
+        const ok = await new Promise(res=>{
+          const v = document.createElement("video");
+          v.preload = "metadata"; v.muted = true;
+          v.onloadedmetadata = ()=> res(true);
+          v.onerror = ()=> res(false);
+          v.src = url;
+        });
+        if(ok) return url;
+      }
+      return null;
+    })();
+  }
+  let LOCK3_VIDEO_SRC = null;          // frz.webm / frz.mp4 があれば frz.gif より優先
+  let ILLUST_EFFECT_VIDEO_SRC = null;  // moe.webm / moe.mp4 があれば moe.gif より優先
+  // 見つかった動画は起動時に読み込んでおく(初回再生の遅れと、読込と再生の競合を避ける)
+  function preloadVideo(v, url){
+    try{ v.setAttribute("src", url); v.load(); }catch(e){}
+  }
+  probeVideoVariant(FREEZE_ROOT, "frz").then(u=>{
+    LOCK3_VIDEO_SRC = u;
+    if(u){ preloadVideo(lock3Video, u); console.log("[動画] ロック3のつなぎに動画を使用:", u); }
+  });
+  probeVideoVariant(FREEZE_ROOT, "moe").then(u=>{
+    ILLUST_EFFECT_VIDEO_SRC = u;
+    if(u){ preloadVideo(illustEffectVideo, u); console.log("[動画] 萌えカットインの重ね演出に動画を使用:", u); }
+  });
   /* ロック3の白→暗転つなぎ用GIF/サウンドは、フリーズ演出ルート直下から読み込む。
      以前はBase64でHTMLに埋め込んでいたが、差し替えを容易にするためファイル参照に変更した。 */
   const LOCK3_GIF_SRC = assetPath(FREEZE_ROOT, LOCK3_GIF_FILE);
@@ -1022,6 +1161,14 @@
   /* ===================== 画像フォルダ読み込み ===================== */
   const IMAGE_EXT = [".png",".jpg",".jpeg",".webp",".gif"];
   const VOICE_EXT = [".mp3",".wav",".ogg",".m4a"];
+  const VIDEO_EXT = [".mp4",".webm",".mov",".m4v"];   // 動画。<video> で再生する
+  function isVideoName(name){ return VIDEO_EXT.some(ext=> name.toLowerCase().endsWith(ext)); }
+  // フォルダ内の素材1件分のレコード。kind は "image" | "gif" | "video"
+  function assetRecord(name, url){
+    const lower = name.toLowerCase();
+    const kind = isVideoName(lower) ? "video" : (lower.endsWith(".gif") ? "gif" : "image");
+    return { name, url, number: extractNumber(name), kind };
+  }
   let illustrationPool = []; // { name, url, number }
   let voiceMap = new Map(); // number(string) -> url
   let freezeGifPool = []; // { name, url, number } (freezeフォルダ直下のGIF)
@@ -1042,10 +1189,10 @@
     for await (const [name, handle] of dirHandle.entries()){
       if(handle.kind !== "file") continue;
       const lower = name.toLowerCase();
-      if(!IMAGE_EXT.some(ext=> lower.endsWith(ext))) continue;
+      if(!IMAGE_EXT.some(ext=> lower.endsWith(ext)) && !isVideoName(lower)) continue;
       const file = await handle.getFile();
       const url = URL.createObjectURL(file);
-      pool.push({name, url, number: extractNumber(name)});
+      pool.push(assetRecord(name, url));
     }
     return pool;
   }
@@ -1082,10 +1229,10 @@
     for await (const [name, handle] of dirHandle.entries()){
       if(handle.kind === "file"){
         const lower = name.toLowerCase();
-        if(lower.endsWith(".gif")){
+        if(lower.endsWith(".gif") || isVideoName(lower)){
           const file = await handle.getFile();
           const url = URL.createObjectURL(file);
-          pool.push({name, url, number: extractNumber(name)});
+          pool.push(assetRecord(name, url));
         }
       }else if(handle.kind === "directory" && name.toLowerCase() === "sound"){
         for await (const [sname, shandle] of handle.entries()){
@@ -1128,8 +1275,8 @@
   async function loadImagesFromServer(){
     const files = await apiList(CUTIN_DIR);
     return files
-      .filter(name=> hasExt(name, IMAGE_EXT))
-      .map(name=> ({name, url: assetUrl(CUTIN_DIR, name), number: extractNumber(name)}));
+      .filter(name=> hasExt(name, IMAGE_EXT) || isVideoName(name))
+      .map(name=> assetRecord(name, assetUrl(CUTIN_DIR, name)));
   }
 
   async function loadVoicesFromServer(){
@@ -1153,8 +1300,8 @@
     const soundMap = new Map();
     const gifFiles = await apiList(FREEZE_DIR);
     gifFiles.forEach(name=>{
-      if(!name.toLowerCase().endsWith(".gif")) return;
-      pool.push({name, url: assetUrl(FREEZE_DIR, name), number: extractNumber(name)});
+      if(!name.toLowerCase().endsWith(".gif") && !isVideoName(name)) return;
+      pool.push(assetRecord(name, assetUrl(FREEZE_DIR, name)));
     });
     try{
       const soundFiles = await apiList(FREEZE_SOUND_DIR);
@@ -1177,8 +1324,8 @@
       sequentialIndex = 0;
       renderImageList();
       el("folder-status").textContent = illustrationPool.length > 0
-        ? `${illustrationPool.length} 枚の萌えカットイン画像を読込済み(自動 / ${CUTIN_DIR} フォルダ)`
-        : `${CUTIN_DIR} フォルダに画像が見つかりませんでした`;
+        ? `萌えカットイン ${describePool(illustrationPool)}を読込済み(自動 / ${CUTIN_DIR} フォルダ)`
+        : `${CUTIN_DIR} フォルダに画像/動画が見つかりませんでした`;
       return true;
     }catch(err){
       console.log("cutinフォルダの自動読み込みに失敗:", err);
@@ -1193,8 +1340,8 @@
       freezeGifPool = pool;
       freezeSoundMap = soundMap;
       el("freeze-status").textContent = pool.length > 0
-        ? `GIF ${pool.length}件を読込済み(対応サウンド ${soundMap.size}件 / 自動 / ${FREEZE_DIR} フォルダ)`
-        : `${FREEZE_DIR} フォルダにGIFが見つかりませんでした`;
+        ? `${describePool(pool)}を読込済み(対応サウンド ${soundMap.size}件 / 自動 / ${FREEZE_DIR} フォルダ)`
+        : `${FREEZE_DIR} フォルダにGIF/動画が見つかりませんでした`;
       return true;
     }catch(err){
       console.log("freezeフォルダの自動読み込みに失敗:", err);
@@ -1203,21 +1350,40 @@
     }
   }
 
+  // 素材数の説明文(例: "GIF 2件・動画 1件")
+  function describePool(pool){
+    const videos = pool.filter(p=> p.kind === "video").length;
+    const gifs = pool.filter(p=> p.kind === "gif").length;
+    const images = pool.length - videos - gifs;
+    const parts = [];
+    if(images > 0) parts.push(`画像 ${images}件`);
+    if(gifs > 0) parts.push(`GIF ${gifs}件`);
+    if(videos > 0) parts.push(`動画 ${videos}件`);
+    return parts.join("・") || "0件";
+  }
+
   function renderImageList(){
     const list = el("image-list");
     list.innerHTML = "";
     illustrationPool.forEach(item=>{
-      const img = document.createElement("img");
-      img.src = item.url;
-      img.title = item.name;
-      list.appendChild(img);
+      let node;
+      if(item.kind === "video"){
+        node = document.createElement("video");
+        node.muted = true;
+        node.preload = "metadata";
+      }else{
+        node = document.createElement("img");
+      }
+      node.src = item.url;
+      node.title = item.name;
+      list.appendChild(node);
     });
   }
 
   async function refreshFolderStatus(count){
     el("folder-status").textContent = count > 0
-      ? `${count} 枚の萌えカットイン画像を読込済み`
-      : "画像が見つかりませんでした";
+      ? `萌えカットイン ${describePool(illustrationPool)}を読込済み`
+      : "画像/動画が見つかりませんでした";
   }
 
   let restoredDirHandle = null; // 前回選択したフォルダのハンドル(権限失効時の再許可用に保持)
@@ -1317,8 +1483,8 @@
     freezeSoundMap = soundMap;
     const soundCount = soundMap.size;
     el("freeze-status").textContent = pool.length > 0
-      ? `GIF ${pool.length}件を読込済み(対応サウンド ${soundCount}件)`
-      : "GIFが見つかりませんでした";
+      ? `${describePool(pool)}を読込済み(対応サウンド ${soundCount}件)`
+      : "GIF/動画が見つかりませんでした";
   }
 
   el("pick-freeze-folder").addEventListener("click", async ()=>{
@@ -1443,12 +1609,19 @@
   }
 
   function playIllustEffect(){
-    // 萌えカットインのタイミングで演出GIF(moe2.gif)とサウンド(moecut.mp3)を再生する
-    illustEffectGif.style.transition = "none";
-    illustEffectGif.src = "";
-    void illustEffectGif.offsetWidth; // 強制リフローでアニメーションを最初から再生し直す
-    illustEffectGif.src = ILLUST_EFFECT_GIF_SRC;
-    illustEffectGif.style.opacity = "1";
+    // 萌えカットインのタイミングで演出GIF(moe.gif)またはその動画版とサウンド(moecut.mp3)を再生する
+    if(ILLUST_EFFECT_VIDEO_SRC){
+      illustEffectGif.style.opacity = "0";
+      illustEffectVideo.style.transition = "none";
+      illustEffectVideo.style.opacity = "1";
+      startVideo(illustEffectVideo, ILLUST_EFFECT_VIDEO_SRC, { loop:true, muted:true }); // 音は moecut.mp3 が担当
+    }else{
+      illustEffectGif.style.transition = "none";
+      illustEffectGif.src = "";
+      void illustEffectGif.offsetWidth; // 強制リフローでアニメーションを最初から再生し直す
+      illustEffectGif.src = ILLUST_EFFECT_GIF_SRC;
+      illustEffectGif.style.opacity = "1";
+    }
 
     try{
       illustEffectAudio.currentTime = 0;
@@ -1462,6 +1635,7 @@
     illustEffectGif.style.transition = "none";
     illustEffectGif.style.opacity = "0";
     illustEffectGif.src = "";
+    stopVideo(illustEffectVideo);
     try{ illustEffectAudio.pause(); }catch(e){}
   }
 
@@ -1498,21 +1672,33 @@
     illustWhiteBg.style.opacity = "1";
     illustImg.style.transition = "none";
     illustImg.style.opacity = "0";
+    illustVideo.style.transition = "none";
+    illustVideo.style.opacity = "0";
+    illustVideo.style.display = "none";
     stopIllustEffect();
     stopCharacterVoice();
     void illustLayer.offsetWidth; // 強制リフローで即時反映
 
     if(picked){
-      illustImg.style.display = "block";
-      illustImg.src = picked.url;
-      resetImagePosition(illustImg);
+      // 表示する要素: 静止画/GIFは <img>、動画は <video>(表示時間中はループ再生)
+      const isVideo = picked.kind === "video";
+      const shown = isVideo ? illustVideo : illustImg;
+      if(isVideo){
+        illustImg.style.display = "none";
+        illustVideo.style.display = "block";
+        startVideo(illustVideo, picked.url, { loop:true }); // 動画自身の音声はそのまま鳴る(音量は効果音の音量)
+      }else{
+        illustImg.style.display = "block";
+        illustImg.src = picked.url;
+        resetImagePosition(illustImg);
+      }
 
       // 1.5) 白背景だけをはっきり見せる時間を確保(短すぎると通常速度で白が見えなくなるため)
       await sleep(250);
 
       // 2) 萌えカットインを素早くちら見せると同時に、白背景は役目を終えてフェードアウトする
-      illustImg.style.transition = `opacity ${sec(.15)}s ease`;
-      illustImg.style.opacity = "1";
+      shown.style.transition = `opacity ${sec(.15)}s ease`;
+      shown.style.opacity = "1";
       illustWhiteBg.style.transition = `opacity ${sec(.4)}s ease`;
       illustWhiteBg.style.opacity = "0";
       playIllustEffect();
@@ -1521,11 +1707,12 @@
       await sleep(totalMs);
 
       // 素早くフェードアウト(ちら見せなので短め)
-      illustImg.style.transition = `opacity ${sec(.2)}s ease`;
-      illustImg.style.opacity = "0";
+      shown.style.transition = `opacity ${sec(.2)}s ease`;
+      shown.style.opacity = "0";
       stopIllustEffect();
       stopCharacterVoice();
       await sleep(220);
+      if(isVideo){ stopVideo(illustVideo); illustVideo.style.display = "none"; }
     }else{
       // 画像が読み込めていない場合は、案内テキスト等は出さず白のみを一瞬見せてからフェードアウト
       illustImg.style.display = "none";
@@ -1547,13 +1734,21 @@
   async function playLock3GifSound(){
     const targetMs = Math.max(200, settings.blackInDuration * 1000);
 
-    // GIFはJSで一時停止/巻き戻しができないため、srcを一度クリアしてから
-    // 再設定することでアニメーションを最初から再生し直す
-    lock3Gif.style.transition = "none";
-    lock3Gif.src = "";
-    void lock3Gif.offsetWidth; // 強制リフロー
-    lock3Gif.src = LOCK3_GIF_SRC;
-    lock3Gif.style.opacity = "1";
+    if(LOCK3_VIDEO_SRC){
+      // 動画版がある場合はそちらを使う(音は従来どおり blackout.mp3)
+      lock3Gif.style.opacity = "0";
+      lock3Video.style.transition = "none";
+      lock3Video.style.opacity = "1";
+      startVideo(lock3Video, LOCK3_VIDEO_SRC, { muted:true });
+    }else{
+      // GIFはJSで一時停止/巻き戻しができないため、srcを一度クリアしてから
+      // 再設定することでアニメーションを最初から再生し直す
+      lock3Gif.style.transition = "none";
+      lock3Gif.src = "";
+      void lock3Gif.offsetWidth; // 強制リフロー
+      lock3Gif.src = LOCK3_GIF_SRC;
+      lock3Gif.style.opacity = "1";
+    }
 
     try{
       lock3Audio.currentTime = 0;
@@ -1566,6 +1761,7 @@
 
     lock3Gif.style.transition = "none";
     lock3Gif.style.opacity = "0";
+    stopVideo(lock3Video);
     // サウンドはここでは止めない。
     // targetMs は blackInDuration(既定0.4秒)に連動しており、blackout.mp3(約0.94秒)より
     // 短いため、ここで止めると音がほとんど聞こえないまま切れてしまう。
@@ -1582,15 +1778,15 @@
 
 
   function pickFreezeGif(){
-    // 状況(ロック2の番号など)を問わず、freezeフォルダにGIFがあればランダムに1つ選ぶ
+    // 状況(ロック2の番号など)を問わず、freezeフォルダにGIF/動画があればランダムに1つ選ぶ
     if(!freezeGifPool || freezeGifPool.length === 0) return null;
     return freezeGifPool[Math.floor(Math.random() * freezeGifPool.length)];
   }
 
   function playFreezeReveal(){
-    // freezeフォルダにGIFがあれば、状況を問わずランダムに1つ選んで再生する。
+    // freezeフォルダにGIF/動画があれば、状況を問わずランダムに1つ選んで再生する。
     // 対応する「freeze/sound」内の音声(同じ番号のもの)があれば一緒に再生する。
-    // GIFが1つもない場合は何もせず即座に完了とする。
+    // 素材が1つもない場合は何もせず即座に完了とする。
     return new Promise(resolve=>{
       const pick = pickFreezeGif();
       if(!pick){
@@ -1600,16 +1796,43 @@
       const soundUrl = pick.number !== null ? freezeSoundMap.get(pick.number) : null;
 
       let done = false;
+      let oneDone = null; // 動画のときだけ使う「片方終了」ハンドラ
       const finish = ()=>{
         if(done) return;
         done = true;
         freezeRevealAudio.removeEventListener("ended", finish);
+        if(oneDone) freezeRevealAudio.removeEventListener("ended", oneDone);
         freezeRevealGif.style.transition = "none";
         freezeRevealGif.style.opacity = "0";
         freezeRevealGif.src = "";
+        stopVideo(freezeRevealVideo);
         try{ freezeRevealAudio.pause(); }catch(e){}
         resolve();
       };
+
+      if(pick.kind === "video"){
+        // 動画: 動画の再生終了で終わる。対応サウンドがあれば両方が終わった時点で終わる
+        let pending = 1 + (soundUrl ? 1 : 0);
+        oneDone = ()=>{ if(--pending <= 0) finish(); };
+        freezeRevealVideo.style.transition = "none";
+        freezeRevealVideo.style.opacity = "1";
+        startVideo(freezeRevealVideo, pick.url).then(oneDone);
+        if(soundUrl){
+          try{
+            freezeRevealAudio.src = soundUrl;
+            freezeRevealAudio.currentTime = 0;
+            freezeRevealAudio.playbackRate = clampRate();
+            freezeRevealAudio.addEventListener("ended", oneDone);
+            const playPromise = freezeRevealAudio.play();
+            if(playPromise && playPromise.catch){ playPromise.catch(()=> oneDone()); }
+          }catch(e){
+            oneDone();
+          }
+        }
+        // 保険: ended が発火しない場合に備えたタイムアウト(最大120秒)
+        setTimeout(finish, 120000 / Math.max(0.25, speedFactor));
+        return;
+      }
 
       // GIFを最初から再生し直す(srcを一度クリアしてから再設定)
       freezeRevealGif.style.transition = "none";
@@ -1675,9 +1898,11 @@
     blackoutLayer.style.opacity = "0";
     lock3Gif.style.transition = "none";
     lock3Gif.style.opacity = "0";
+    stopVideo(lock3Video);
     stopLock3Audio();
     freezeRevealGif.style.transition = "none";
     freezeRevealGif.style.opacity = "0";
+    stopVideo(freezeRevealVideo);
   }
 
 function hideGameVideo(){
