@@ -34,7 +34,7 @@ scripts\dev.cmd stop
 | `main_board/` | 主制御・副制御シミュレータ `god_main_board.py` (port 8765) |
 | `control/` | コンパネ `main_control.html` |
 | `kyotai/` | 筐体ビュー `kyotai.html` |
-| `enshutsu/` | オーバーレイ本体と演出素材 |
+| `enshutsu/` | オーバーレイ本体と演出素材 (`at/sound/`, `yokoku/banner/sound/` に効果音を置くと自動で鳴る) |
 | `doc/` | 仕様書 |
 | `scripts/` | CLI 用ツール |
 

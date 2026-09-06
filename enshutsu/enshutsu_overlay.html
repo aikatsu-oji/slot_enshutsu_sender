@@ -119,6 +119,213 @@
     background:#000;
   }
 
+  /* ---------- 副制御演出HUD(予告バナー・押し順ナビ・ポップアップ・GG突入・AT終了) ----------
+     副制御(ws://127.0.0.1:8765)から届く演出イベントを表示するレイヤー。
+     --sh はステージ(16:9領域)の高さ。文字サイズはすべてこれに比例させ、OBSの解像度に依存しない。
+     --spd はスロー再生の倍率(1=通常)。トランジション/アニメーションの時間に掛ける。 */
+  :root{ --sh: min(100vh, calc(100vw * 9 / 16)); --spd: 1; }
+  #illustration-layer{ z-index:1; }   /* HUDより上(同じz-indexでDOM順が後のため勝つ) */
+  #hud-layer{
+    position:absolute; inset:0;
+    z-index:1;
+    pointer-events:none;
+    overflow:hidden;
+  }
+  .hud-font{
+    font-family: "Impact", "Arial Black", "Yu Gothic UI", "Yu Gothic", sans-serif;
+    font-weight:900;
+  }
+
+  /* 予告バナー: 左から滑り込み → 右へ抜ける。色はランク(白/青/緑/赤/金)ごとにJSで --b1/--b2/--fg を設定 */
+  #hud-banner{
+    position:absolute; left:0; width:100%;
+    top:60%;
+    height:calc(var(--sh) * 0.17);
+    display:flex; align-items:center; justify-content:center;
+    opacity:0;
+    transform:translateX(-105%);
+    --b1:#333; --b2:#fff; --fg:#fff;
+    background: linear-gradient(90deg, transparent 0%, var(--b1) 10%, var(--b2) 50%, var(--b1) 90%, transparent 100%);
+    box-shadow: 0 0 calc(var(--sh) * 0.04) var(--b2);
+  }
+  #hud-banner.show{
+    opacity:1; transform:translateX(0);
+    transition: transform calc(.35s * var(--spd)) cubic-bezier(.2,.9,.3,1), opacity calc(.2s * var(--spd));
+  }
+  #hud-banner.hide{
+    opacity:0; transform:translateX(105%);
+    transition: transform calc(.35s * var(--spd)) cubic-bezier(.7,.1,.8,.9), opacity calc(.3s * var(--spd));
+  }
+  #hud-banner-text{
+    position:relative;
+    color:var(--fg);
+    font-size:calc(var(--sh) * 0.085);
+    letter-spacing:.12em;
+    white-space:nowrap;
+    text-shadow: 0 0 calc(var(--sh) * .01) rgba(0,0,0,.5), 0 calc(var(--sh) * .006) 0 rgba(0,0,0,.35);
+  }
+  #hud-banner[data-rank="金"]::after{
+    content:""; position:absolute; inset:0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
+    background-size:200% 100%;
+    animation: bannerShine calc(1.2s * var(--spd)) linear infinite;
+    mix-blend-mode:screen;
+  }
+  @keyframes bannerShine{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }
+
+  /* 押し順ナビ: 左・中・右の順に押す番号を3枚のプレートで表示。番号1のプレートを金で点滅 */
+  #hud-navi{
+    position:absolute; left:50%; top:78%;
+    transform:translate(-50%,-50%) scale(.6);
+    display:flex; gap:calc(var(--sh) * 0.05);
+    opacity:0;
+    transition: opacity calc(.2s * var(--spd)), transform calc(.2s * var(--spd));
+  }
+  #hud-navi.show{
+    opacity:1; transform:translate(-50%,-50%) scale(1);
+    transition: opacity calc(.12s * var(--spd)), transform calc(.28s * var(--spd)) cubic-bezier(.2,1.5,.4,1);
+  }
+  #hud-navi .digit{
+    width:calc(var(--sh) * 0.15); height:calc(var(--sh) * 0.15);
+    border-radius:14%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--sh) * 0.11);
+    color:#fff3c8;
+    background: radial-gradient(circle at 50% 30%, #6b3a12, #2a1206 70%);
+    border: calc(var(--sh) * 0.006) solid var(--gold);
+    box-shadow: 0 0 calc(var(--sh) * 0.02) rgba(255,215,106,.5), inset 0 0 calc(var(--sh) * 0.02) rgba(0,0,0,.6);
+    text-shadow: 0 0 calc(var(--sh) * .012) var(--gold-bright);
+  }
+  #hud-navi .digit.first{
+    background: radial-gradient(circle at 50% 30%, #ffe27a, #d4af37 70%);
+    color:#3a2400;
+    text-shadow:none;
+    animation: naviPulse calc(.8s * var(--spd)) ease-in-out infinite alternate;
+  }
+  @keyframes naviPulse{
+    from{ box-shadow: 0 0 calc(var(--sh) * 0.02) rgba(255,215,106,.6); }
+    to{   box-shadow: 0 0 calc(var(--sh) * 0.05) rgba(255,215,106,1); }
+  }
+
+  /* ポップアップ(ストック加算・上乗せ): 中央上部にバウンドして出る */
+  #hud-popup{
+    position:absolute; left:50%; top:30%;
+    transform:translate(-50%,-50%) scale(.4);
+    opacity:0;
+    text-align:center;
+    transition: opacity calc(.3s * var(--spd)) ease, transform calc(.3s * var(--spd)) ease;
+  }
+  #hud-popup.show{
+    opacity:1; transform:translate(-50%,-50%) scale(1);
+    transition: opacity calc(.12s * var(--spd)) ease, transform calc(.3s * var(--spd)) cubic-bezier(.2,1.5,.4,1);
+  }
+  #hud-popup-main{
+    font-size:calc(var(--sh) * 0.16); line-height:1;
+    color:#fff;
+    -webkit-text-stroke: calc(var(--sh) * 0.004) #7a0008;
+    text-shadow: 0 0 calc(var(--sh) * .02) rgba(255,59,59,.8), 0 calc(var(--sh) * .008) 0 #4a0000;
+  }
+  #hud-popup.stock #hud-popup-main{
+    color:#ffe27a;
+    -webkit-text-stroke-color:#5a4000;
+    text-shadow: 0 0 calc(var(--sh) * .02) rgba(255,215,106,.9), 0 calc(var(--sh) * .008) 0 #3a2400;
+  }
+  #hud-popup-sub{
+    margin-top:calc(var(--sh) * 0.01);
+    font-size:calc(var(--sh) * 0.05);
+    color:#f0e6d2; letter-spacing:.15em;
+    font-family:"Yu Gothic UI","Yu Gothic",sans-serif; font-weight:bold;
+    text-shadow: 0 0 calc(var(--sh) * .01) #000, 0 0 calc(var(--sh) * .004) #000;
+  }
+
+  /* AT終了: 中央の黒帯 */
+  #hud-end{
+    position:absolute; left:0; width:100%; top:50%;
+    height:calc(var(--sh) * 0.22);
+    transform:translateY(-50%) scaleY(0);
+    background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.85) 20%, rgba(0,0,0,.85) 80%, rgba(0,0,0,0));
+    display:flex; align-items:center; justify-content:center;
+    opacity:0;
+    transition: opacity calc(.4s * var(--spd)), transform calc(.4s * var(--spd));
+  }
+  #hud-end.show{ opacity:1; transform:translateY(-50%) scaleY(1); }
+  #hud-end::before, #hud-end::after{
+    content:""; position:absolute; left:8%; right:8%; height:calc(var(--sh) * 0.004);
+    background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold-bright) 50%, var(--gold) 80%, transparent);
+  }
+  #hud-end::before{ top:18%; }
+  #hud-end::after{ bottom:18%; }
+  #hud-end .main{
+    font-size:calc(var(--sh) * 0.1);
+    color:#f0e6d2; letter-spacing:.2em;
+    -webkit-text-stroke: calc(var(--sh) * 0.002) #3a2400;
+    text-shadow: 0 0 calc(var(--sh) * .02) rgba(212,175,55,.8), 0 calc(var(--sh) * .006) 0 #000;
+  }
+
+  /* GG突入: 金の全面フラッシュ + 回転する光条 + GOD GAME。フリーズ演出より上(z-index:5) */
+  #gg-layer{
+    position:absolute; inset:0;
+    z-index:5;
+    pointer-events:none;
+    opacity:0;
+    overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    background: radial-gradient(ellipse at 50% 50%, #fff6d0 0%, #ffd76a 30%, #b8860b 70%, #5a3a00 100%);
+  }
+  #gg-layer::before{
+    content:""; position:absolute; left:50%; top:50%;
+    width:300vmax; height:300vmax;
+    transform:translate(-50%,-50%);
+    background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.35) 0deg 6deg, transparent 6deg 18deg);
+    opacity:.7;
+  }
+  #gg-layer.flash{ opacity:1; animation: ggFlash calc(.3s * var(--spd)) ease-out both; }
+  #gg-layer.hold{ opacity:1; }
+  #gg-layer.hold::before, #gg-layer.flash::before{ animation: ggRays calc(12s * var(--spd)) linear infinite; }
+  #gg-layer.out{ opacity:0; transition: opacity calc(.5s * var(--spd)) ease; }
+  @keyframes ggFlash{
+    0%{ opacity:0; filter:brightness(3); }
+    40%{ opacity:1; filter:brightness(2); }
+    100%{ opacity:1; filter:brightness(1); }
+  }
+  @keyframes ggRays{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
+  #gg-text{
+    position:relative; text-align:center;
+    transform:scale(3); opacity:0;
+  }
+  #gg-layer.show #gg-text{
+    opacity:1; transform:scale(1);
+    transition: transform calc(.35s * var(--spd)) cubic-bezier(.1,1.3,.4,1), opacity calc(.15s * var(--spd));
+  }
+  #gg-text .main{
+    font-size:calc(var(--sh) * 0.22); line-height:1;
+    color:#fff8e6;
+    -webkit-text-stroke: calc(var(--sh) * 0.005) #7a4a00;
+    text-shadow: 0 calc(var(--sh) * .01) 0 #a06a00, 0 0 calc(var(--sh) * .04) rgba(255,255,255,.9);
+    letter-spacing:.06em;
+  }
+  #gg-text .sub{
+    margin-top:calc(var(--sh) * 0.02);
+    font-size:calc(var(--sh) * 0.06);
+    color:#5a2a00; letter-spacing:.3em;
+    font-family:"Yu Gothic UI","Yu Gothic",sans-serif; font-weight:bold;
+  }
+
+  /* 設定パネル内: 接続状態と副制御イベントログ */
+  .conn-line{ display:flex; gap:10px; font-size:11px; color:#9c8b6a; }
+  .conn-line b{ color:#d8c9a3; font-weight:normal; }
+  .conn-line .on{ color:#7ddc8a; }
+  .conn-line .off{ color:#e06060; }
+  #sub-log{
+    font-family: Consolas, "Courier New", monospace;
+    font-size:10.5px; line-height:1.5; color:#bfae8e;
+    max-height:120px; overflow-y:auto;
+    background: rgba(0,0,0,0.25); border-radius:5px; padding:6px 8px;
+    white-space:pre;
+  }
+  .btn-row.wrap{ flex-wrap:wrap; }
+  .btn-row.wrap button{ flex:1 1 30%; }
+
   /* ---------- 設定UI(配信画面には映らない想定・OBSでは操作しない限り操作不可) ---------- */
   /* 設定ギアはオーバーレイ上に表示する。コンパネからの toggleSettings 経由でも開閉できる。 */
   #settings-toggle{
@@ -259,6 +466,12 @@
     <div id="screen-wrapper">
       <video id="game-screen-video" autoplay muted playsinline></video>
     </div>
+    <div id="hud-layer">
+      <div id="hud-banner"><div id="hud-banner-text" class="hud-font"></div></div>
+      <div id="hud-navi" class="hud-font"><div class="digit"></div><div class="digit"></div><div class="digit"></div></div>
+      <div id="hud-popup"><div id="hud-popup-main" class="hud-font"></div><div id="hud-popup-sub"></div></div>
+      <div id="hud-end"><div class="main hud-font">AT END</div></div>
+    </div>
     <div id="illustration-layer">
       <div id="illustration-white-bg"></div>
       <div id="illustration-placeholder">萌えカットイン画像未読込<br>「画像指定」タブでフォルダを選択してください</div>
@@ -272,6 +485,9 @@
     <audio id="lock3-transition-audio" preload="auto"></audio>
     <img id="freeze-reveal-gif" alt="">
     <audio id="freeze-reveal-audio" preload="auto"></audio>
+    <div id="gg-layer">
+      <div id="gg-text"><div class="main hud-font">GOD GAME</div><div class="sub">ゴッドゲーム突入</div></div>
+    </div>
   </div>
 
   <button id="settings-toggle" title="設定">&#9881;</button>
@@ -280,11 +496,16 @@
       <button class="tab-btn active" data-tab="controls">操作</button>
       <button class="tab-btn" data-tab="settings">設定</button>
       <button class="tab-btn" data-tab="yokoku">予告</button>
+      <button class="tab-btn" data-tab="at">AT</button>
     </div>
 
     <div class="tab-content" id="tab-controls">
       <button class="action" id="slow-toggle">🐢 スロー再生: OFF</button>
-      <div class="note">スロー再生は演出全体に効きます。各演出の再生ボタンは「予告」タブの各項目にあります。</div>
+      <div class="note">スロー再生は演出全体に効きます。各演出の再生ボタンは「予告」「AT」タブの各項目にあります。</div>
+      <div class="hr"></div>
+      <div class="conn-line"><b>中継(8787):</b><span id="relay-status" class="off">未接続</span></div>
+      <div class="conn-line"><b>副制御(8765):</b><span id="sub-status" class="off">未接続</span></div>
+      <div class="note">副制御は god_main_board.py --serve が配信する演出イベント(予告バナー・押し順ナビ・フリーズ・GG突入など)の受信口です。切断中も3秒ごとに再接続を試みます。</div>
     </div>
 
     <div class="tab-content" id="tab-settings" hidden>
@@ -310,6 +531,16 @@
           <label for="blackOutDuration">ロック3: 暗転からの復帰時間(秒)</label>
           <input type="number" id="blackOutDuration" min="0.1" max="10" step="0.1">
         </div>
+        <div class="hr"></div>
+        <div class="field-row">
+          <label for="sfxVolume">効果音の音量</label>
+          <input type="range" id="sfxVolume" min="0" max="1" step="0.05">
+        </div>
+        <div class="field-row">
+          <label for="subWsUrl">副制御ポートURL</label>
+          <input type="text" id="subWsUrl" style="width:150px" spellcheck="false">
+        </div>
+        <div class="note">副制御ポートURLを変えると即座に再接続します。既定は ws://127.0.0.1:8765 です。</div>
       </div>
 
       <div class="subtab-content" id="subtab-io" hidden>
@@ -325,6 +556,8 @@
       <div class="tabs subtabs">
         <button class="subtab-btn active" data-subtab="yokoku-cutin">萌えカットイン</button>
         <button class="subtab-btn" data-subtab="yokoku-freeze">フリーズ</button>
+        <button class="subtab-btn" data-subtab="yokoku-banner">バナー</button>
+        <button class="subtab-btn" data-subtab="yokoku-navi">ナビ</button>
       </div>
 
       <div class="subtab-content" id="subtab-yokoku-cutin">
@@ -375,6 +608,87 @@
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
       </div>
+
+      <div class="subtab-content" id="subtab-yokoku-banner" hidden>
+        <div class="field-row">
+          <label for="bannerDuration">バナーの表示時間(秒)</label>
+          <input type="number" id="bannerDuration" min="0.5" max="15" step="0.1">
+        </div>
+        <div class="field-row">
+          <label for="bannerY">バナーの縦位置(上端からの%)</label>
+          <input type="number" id="bannerY" min="0" max="90" step="1">
+        </div>
+        <div class="hr"></div>
+        <div class="note">ランク別に再生して確認(副制御から届く banner イベントと同じ経路で表示します)</div>
+        <div class="btn-row wrap">
+          <button class="action" data-test-banner="白">白</button>
+          <button class="action" data-test-banner="青">青</button>
+          <button class="action" data-test-banner="緑">緑</button>
+          <button class="action" data-test-banner="赤">赤</button>
+          <button class="action" data-test-banner="金">金</button>
+        </div>
+        <div class="note">
+          通常時にレア役を引くと副制御が白/青/緑/赤/金のランクを抽選して送ってきます。成立役そのものは表示しません(ランクだけで期待度を示します)。<br><br>
+          効果音は enshutsu/yokoku/banner/sound/ に「赤.mp3」または「banner_赤.mp3」のようにランク名のファイルを置くと自動で鳴ります(無ければ無音)。
+        </div>
+      </div>
+
+      <div class="subtab-content" id="subtab-yokoku-navi" hidden>
+        <div class="field-row">
+          <label for="naviDuration">ナビの表示時間(秒)</label>
+          <input type="number" id="naviDuration" min="0.5" max="15" step="0.1">
+        </div>
+        <div class="field-row">
+          <label for="naviY">ナビの縦位置(中心の上端からの%)</label>
+          <input type="number" id="naviY" min="5" max="95" step="1">
+        </div>
+        <div class="hr"></div>
+        <div class="note">押し順1〜6を再生して確認(左・中・右の順に押す番号を表示します)</div>
+        <div class="btn-row wrap">
+          <button class="action" data-test-navi="0">1: 左中右</button>
+          <button class="action" data-test-navi="1">2: 左右中</button>
+          <button class="action" data-test-navi="2">3: 中左右</button>
+          <button class="action" data-test-navi="3">4: 右左中</button>
+          <button class="action" data-test-navi="4">5: 中右左</button>
+          <button class="action" data-test-navi="5">6: 右中左</button>
+        </div>
+        <div class="note">
+          AT/GG中に押順ベルが成立すると副制御が navi イベントを送ってきます。1ゲームのウェイト(4.1秒)に合わせて自動で消えます。<br><br>
+          効果音は enshutsu/at/sound/navi.mp3 を置くと鳴ります。
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-at" hidden>
+      <div class="field-row">
+        <label for="ggDuration">GG突入: 文字の表示時間(秒)</label>
+        <input type="number" id="ggDuration" min="0.5" max="15" step="0.1">
+      </div>
+      <div class="field-row">
+        <label for="popupDuration">ストック/上乗せの表示時間(秒)</label>
+        <input type="number" id="popupDuration" min="0.5" max="15" step="0.1">
+      </div>
+      <div class="field-row">
+        <label for="endDuration">AT終了の表示時間(秒)</label>
+        <input type="number" id="endDuration" min="0.5" max="15" step="0.1">
+      </div>
+      <div class="hr"></div>
+      <div class="note">各イベントを再生して確認(副制御から届くイベントと同じ経路で表示します)</div>
+      <div class="btn-row wrap">
+        <button class="action" data-test-event='{"type":"gg_start"}'>GG突入</button>
+        <button class="action" data-test-event='{"type":"stock_up","stock":2,"gain":1}'>ストック+1</button>
+        <button class="action" data-test-event='{"type":"stock_up","stock":6,"gain":5}'>ストック+5</button>
+        <button class="action" data-test-event='{"type":"add_games","games":30}'>上乗せ+30G</button>
+        <button class="action" data-test-event='{"type":"at_end","total":0}'>AT終了</button>
+        <button class="action" data-test-event='{"type":"freeze","seq":["lock1","lock2","lock3"],"rank":"金"}'>神揃い(フリーズ)</button>
+      </div>
+      <div class="note">
+        神揃いのときは主制御から「全停止→払出→ストック→状態移行」が連続で届くため、フリーズ演出とGG突入が同時に発生します。オーバーレイ側でフリーズ→GG突入の順に直列再生します。<br><br>
+        効果音は enshutsu/at/sound/ に gg_start / stock_up / add_games / at_end / navi の名前(拡張子は mp3/wav/ogg/m4a)で置くと自動で鳴ります。
+      </div>
+      <div class="hr"></div>
+      <div class="note">最近受信した副制御イベント</div>
+      <div id="sub-log">(まだ受信していません)</div>
     </div>
   </div>
 
@@ -420,7 +734,17 @@
     blackInDuration: 0.4,
     holdDuration: 1.2,
     blackOutDuration: 0.4,
-    pickMode: "random"
+    pickMode: "random",
+    // 副制御演出(HUD)
+    bannerDuration: 2.5,
+    bannerY: 60,
+    naviDuration: 4.0,
+    naviY: 78,
+    ggDuration: 2.5,
+    popupDuration: 2.0,
+    endDuration: 2.5,
+    sfxVolume: 0.8,
+    subWsUrl: "ws://127.0.0.1:8765"
   };
 
   const STORAGE_KEY = "enshutsu_overlay_settings_v1";
@@ -514,6 +838,22 @@
     el("blackInDuration").value = settings.blackInDuration;
     el("holdDuration").value = settings.holdDuration;
     el("blackOutDuration").value = settings.blackOutDuration;
+    el("bannerDuration").value = settings.bannerDuration;
+    el("bannerY").value = settings.bannerY;
+    el("naviDuration").value = settings.naviDuration;
+    el("naviY").value = settings.naviY;
+    el("ggDuration").value = settings.ggDuration;
+    el("popupDuration").value = settings.popupDuration;
+    el("endDuration").value = settings.endDuration;
+    el("sfxVolume").value = settings.sfxVolume;
+    el("subWsUrl").value = settings.subWsUrl;
+    applyHudLayout();
+  }
+  // HUDの位置設定をCSSへ反映する(数値設定の変更時と起動時)
+  function applyHudLayout(){
+    const banner = el("hud-banner"), navi = el("hud-navi");
+    if(banner) banner.style.top = `${settings.bannerY}%`;
+    if(navi) navi.style.top = `${settings.naviY}%`;
   }
   applySettingsToUI();
 
@@ -528,6 +868,23 @@
   bindNumber("blackInDuration","blackInDuration");
   bindNumber("holdDuration","holdDuration");
   bindNumber("blackOutDuration","blackOutDuration");
+  bindNumber("bannerDuration","bannerDuration");
+  bindNumber("bannerY","bannerY");
+  bindNumber("naviDuration","naviDuration");
+  bindNumber("naviY","naviY");
+  bindNumber("ggDuration","ggDuration");
+  bindNumber("popupDuration","popupDuration");
+  bindNumber("endDuration","endDuration");
+  bindNumber("sfxVolume","sfxVolume");
+  el("bannerY").addEventListener("change", applyHudLayout);
+  el("naviY").addEventListener("change", applyHudLayout);
+  el("subWsUrl").addEventListener("change", e=>{
+    const v = String(e.target.value || "").trim();
+    settings.subWsUrl = v || DEFAULT_SETTINGS.subWsUrl;
+    e.target.value = settings.subWsUrl;
+    saveSettings();
+    if(window.reconnectSubBoard) window.reconnectSubBoard();
+  });
 
   /* ===================== 設定パネル開閉・タブ切替 ===================== */
   const settingsToggle = el("settings-toggle");
@@ -1443,6 +1800,283 @@ function hideGameVideo(){
   el("pattern-lock2").addEventListener("click", playUpToLock2);
   el("pattern-lock3").addEventListener("click", playUpToLock3);
 
+  /* ===================== 副制御の演出イベント(HUD) =====================
+     god_main_board.py の SubBoard が出す演出イベント(仕様書4.5節)を表示する。
+       navi{order}            押し順ナビ
+       banner{rank,trigger}   予告バナー(白/青/緑/赤/金)
+       freeze{seq,rank}       神揃いフリーズ → 既存のロック1→2→3
+       gg_start               ゴッドゲーム突入
+       stock_up{stock,gain}   ストック獲得
+       add_games{games}       上乗せ
+       at_end{total}          AT終了
+     受信経路は2つ: 副制御ポート(8765, setupSubBoardLink) と、中継サーバー経由の
+     {action:"subEvent", event:{...}}(scripts\dev.cmd send での確認用)。どちらも handleSubEvent に集約する。 */
+
+  const hudBanner = el("hud-banner");
+  const hudBannerText = el("hud-banner-text");
+  const hudNavi = el("hud-navi");
+  const naviDigits = Array.from(hudNavi.querySelectorAll(".digit"));
+  const hudPopup = el("hud-popup");
+  const hudPopupMain = el("hud-popup-main");
+  const hudPopupSub = el("hud-popup-sub");
+  const hudEnd = el("hud-end");
+  const ggLayer = el("gg-layer");
+  const subLogEl = el("sub-log");
+
+  // ランク別の見た目。成立役(trigger)は表示しない(ランクだけで期待度を示す)
+  const BANNER_STYLE = {
+    "白": { text:"チャンス？",     c1:"#9aa3ad", c2:"#ffffff", fg:"#2a2a2a" },
+    "青": { text:"チャンス",       c1:"#0b3d91", c2:"#4fa3ff", fg:"#ffffff" },
+    "緑": { text:"チャンスアップ", c1:"#145a1f", c2:"#6fdc7a", fg:"#ffffff" },
+    "赤": { text:"激アツ",         c1:"#7a0008", c2:"#ff3b3b", fg:"#fff4d6" },
+    "金": { text:"GOD CHANCE",     c1:"#8a6400", c2:"#ffe27a", fg:"#3a2400" },
+  };
+  // 押し順番号(0起点) → 押す順にリール番号(0=左,1=中,2=右)を並べた配列。kyotai.html の ORDER と同じ並び
+  const NAVI_ORDER = [[0,1,2],[0,2,1],[1,0,2],[2,0,1],[1,2,0],[2,1,0]];
+
+  /* --- 効果音(任意)。サーバーモードのときだけ /api/list で探す。無ければ無音のまま --- */
+  const SFX_DIRS = ["at/sound", "yokoku/banner/sound"];
+  const sfxMap = new Map(); // ファイル名(拡張子なし・小文字) -> URL
+  async function loadSfxFromServer(){
+    if(!SERVER_MODE) return;
+    for(const dir of SFX_DIRS){
+      try{
+        const files = await apiList(dir);
+        files.forEach(name=>{
+          if(!hasExt(name, VOICE_EXT)) return;
+          const key = name.replace(/\.[^.]+$/, "").toLowerCase();
+          if(!sfxMap.has(key)) sfxMap.set(key, assetUrl(dir, name));
+        });
+      }catch(err){
+        console.log(dir + " フォルダの読み込みでエラー:", err);
+      }
+    }
+    if(sfxMap.size > 0) console.log("[効果音] " + sfxMap.size + " 件を読み込みました:", Array.from(sfxMap.keys()).join(", "));
+  }
+  loadSfxFromServer();
+  function playSfx(...keys){
+    for(const k of keys){
+      const url = sfxMap.get(String(k).toLowerCase());
+      if(!url) continue;
+      try{
+        const a = new Audio(url);
+        a.volume = Math.min(1, Math.max(0, Number(settings.sfxVolume)));
+        a.playbackRate = Math.min(4, Math.max(0.25, speedFactor));
+        const p = a.play();
+        if(p && p.catch) p.catch(()=>{});
+      }catch(e){}
+      return true;
+    }
+    return false;
+  }
+
+  /* --- 受信ログ(設定パネルのATタブに最新8件) --- */
+  const subLogLines = [];
+  function subLog(ev){
+    const detail = Object.keys(ev)
+      .filter(k=> k !== "type" && k !== "g")
+      .map(k=> `${k}=${typeof ev[k] === "object" ? JSON.stringify(ev[k]) : ev[k]}`)
+      .join(" ");
+    const g = ev.g != null ? String(ev.g).padStart(5) : "    -";
+    subLogLines.push(`${g}G ${ev.type} ${detail}`);
+    while(subLogLines.length > 8) subLogLines.shift();
+    subLogEl.textContent = subLogLines.join("\n");
+  }
+
+  /* --- 予告バナー --- */
+  let bannerTimer = null;
+  function playBanner(ev){
+    const st = BANNER_STYLE[ev.rank] || BANNER_STYLE["白"];
+    clearTimeout(bannerTimer);
+    hudBanner.className = "";
+    hudBanner.style.setProperty("--b1", st.c1);
+    hudBanner.style.setProperty("--b2", st.c2);
+    hudBanner.style.setProperty("--fg", st.fg);
+    hudBanner.dataset.rank = ev.rank || "白";
+    hudBannerText.textContent = st.text;
+    void hudBanner.offsetWidth; // 左端へ戻した状態を確定させてから滑り込ませる
+    hudBanner.classList.add("show");
+    playSfx("banner_" + (ev.rank || "白"), ev.rank || "白");
+    const ms = settings.bannerDuration * 1000 / speedFactor;
+    bannerTimer = setTimeout(()=>{
+      hudBanner.classList.remove("show");
+      hudBanner.classList.add("hide");
+      bannerTimer = setTimeout(()=>{ hudBanner.className = ""; }, 500 / speedFactor);
+    }, ms);
+  }
+
+  /* --- 押し順ナビ --- */
+  let naviTimer = null;
+  function playNavi(ev){
+    const order = Number(ev.order);
+    const seq = NAVI_ORDER[order];
+    if(!seq) return;
+    clearTimeout(naviTimer);
+    naviDigits.forEach((d, i)=>{
+      const n = seq.indexOf(i) + 1;
+      d.textContent = String(n);
+      d.classList.toggle("first", n === 1);
+    });
+    hudNavi.classList.add("show");
+    playSfx("navi");
+    naviTimer = setTimeout(()=>{ hudNavi.classList.remove("show"); }, settings.naviDuration * 1000 / speedFactor);
+  }
+
+  /* --- ポップアップ(ストック/上乗せ) --- */
+  let popupTimer = null;
+  function playPopup(main, sub, cls){
+    clearTimeout(popupTimer);
+    hudPopup.className = "";
+    hudPopupMain.textContent = main;
+    hudPopupSub.textContent = sub || "";
+    void hudPopup.offsetWidth;
+    hudPopup.classList.add("show");
+    if(cls) hudPopup.classList.add(cls);
+    popupTimer = setTimeout(()=>{ hudPopup.classList.remove("show"); }, settings.popupDuration * 1000 / speedFactor);
+  }
+
+  /* --- GG突入(フラッシュ → 文字 → フェードアウト) --- */
+  async function playGgStart(){
+    ggLayer.className = "flash";
+    playSfx("gg_start");
+    await sleep(300);
+    ggLayer.className = "hold show";
+    await sleep(settings.ggDuration * 1000);
+    ggLayer.className = "hold show out";
+    await sleep(500);
+    ggLayer.className = "";
+  }
+
+  /* --- AT終了 --- */
+  async function playAtEnd(){
+    hudEnd.classList.add("show");
+    playSfx("at_end");
+    await sleep(settings.endDuration * 1000);
+    hudEnd.classList.remove("show");
+    await sleep(400);
+  }
+
+  /* --- 神揃いフリーズ → 既存のロック演出へ。seq の最後の要素で到達段階を決める --- */
+  function clearHud(){
+    clearTimeout(bannerTimer); clearTimeout(naviTimer); clearTimeout(popupTimer);
+    hudBanner.className = ""; hudNavi.classList.remove("show"); hudPopup.className = "";
+  }
+  async function playFreezeEvent(ev){
+    const seq = Array.isArray(ev.seq) && ev.seq.length ? ev.seq : ["lock1","lock2","lock3"];
+    const last = String(seq[seq.length - 1]);
+    clearHud();
+    if(last === "lock1") await playUpToLock1();
+    else if(last === "lock2") await playUpToLock2();
+    else await playSequence();
+  }
+
+  /* --- 直列キュー。フリーズ・GG突入・AT終了は重ならないよう順番に再生する。
+         神揃い時は freeze の直後(同一ゲーム内)に stock_up と gg_start が届くため、
+         これが無いとフリーズの上にGG突入が被ってしまう。 --- */
+  let majorChain = Promise.resolve();
+  let majorPending = 0; // キューに積まれて未完了の演出数(同期的に数える。isPlaying はフリーズ開始後にしか立たないため)
+  function enqueueMajor(fn){
+    majorPending++;
+    majorChain = majorChain
+      .then(fn)
+      .catch(e=>{ console.log("[副制御] 演出エラー:", e); })
+      .then(()=>{ majorPending--; });
+    return majorChain;
+  }
+
+  function handleSubEvent(ev){
+    if(!ev || typeof ev.type !== "string") return;
+    subLog(ev);
+    // 軽い演出(バナー・ポップアップ)は通常は即時表示。
+    // ただしフリーズなどの大きい演出が再生中/待機中なら、その後ろに並べて表示時間ぶん保持する
+    // (神揃い時は freeze → stock_up → gg_start が同時に届く。フリーズ → STOCK+5 → GOD GAME の順に見せる)。
+    const minor = (fn, holdSec) => {
+      if(majorPending > 0 || isPlaying){
+        enqueueMajor(async ()=>{ fn(); await sleep(holdSec * 1000); });
+      }else{
+        fn();
+      }
+    };
+    switch(ev.type){
+      case "freeze":    enqueueMajor(()=> playFreezeEvent(ev)); break;
+      case "gg_start":  enqueueMajor(playGgStart); break;
+      case "at_end":    enqueueMajor(playAtEnd); break;
+      case "banner":    minor(()=> playBanner(ev), settings.bannerDuration); break;
+      case "navi":      playNavi(ev); break;   // ナビは即時性が命なので待たせない
+      case "stock_up":  minor(()=> { playSfx("stock_up"); playPopup(`STOCK +${ev.gain ?? 1}`, `ストック ×${ev.stock ?? "?"}`, "stock"); }, settings.popupDuration); break;
+      case "add_games": minor(()=> { playSfx("add_games"); playPopup(`+${ev.games ?? 0}G`, "上乗せ", "add"); }, settings.popupDuration); break;
+      default: console.log("[副制御] 未対応のイベント:", ev.type); break;
+    }
+  }
+  // 外部(コンソールや別スクリプト)からも同じ経路で演出を呼べるようにする
+  window.handleSubEvent = handleSubEvent;
+
+  /* --- 設定パネルのテストボタン(本物のイベントと同じ経路を通す) --- */
+  document.querySelectorAll("[data-test-banner]").forEach(btn=>{
+    btn.addEventListener("click", ()=> handleSubEvent({ type:"banner", rank: btn.dataset.testBanner, trigger:"テスト" }));
+  });
+  document.querySelectorAll("[data-test-navi]").forEach(btn=>{
+    btn.addEventListener("click", ()=> handleSubEvent({ type:"navi", order: Number(btn.dataset.testNavi) }));
+  });
+  document.querySelectorAll("[data-test-event]").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      try{ handleSubEvent(JSON.parse(btn.dataset.testEvent)); }catch(e){ console.log("テストイベントの解析に失敗:", e); }
+    });
+  });
+
+  /* ===================== 副制御ポート(ws://127.0.0.1:8765)への接続 =====================
+     god_main_board.py --serve の EnshutsuServer へ接続し、演出イベント(JSON)を受信する。
+     単方向(こちらからは何も送らない)。切断時は3秒ごとに再接続する。 */
+  (function setupSubBoardLink(){
+    const statusEl = el("sub-status");
+    let ws = null;
+    let timer = null;
+    let generation = 0; // 再接続や URL 変更で古いソケットのイベントを無視するための世代番号
+
+    function setStatus(on, text){
+      statusEl.textContent = text;
+      statusEl.classList.toggle("on", on);
+      statusEl.classList.toggle("off", !on);
+    }
+    function scheduleReconnect(gen){
+      if(gen !== generation) return;
+      if(timer) return;
+      timer = setTimeout(()=>{ timer = null; connect(); }, 3000);
+    }
+    function connect(){
+      const gen = ++generation;
+      if(timer){ clearTimeout(timer); timer = null; }
+      if(ws){ try{ ws.close(); }catch(e){} ws = null; }
+      const url = settings.subWsUrl || DEFAULT_SETTINGS.subWsUrl;
+      try{
+        ws = new WebSocket(url);
+      }catch(e){
+        setStatus(false, "URLが不正: " + url);
+        return;
+      }
+      setStatus(false, "接続中... " + url);
+      ws.addEventListener("open", ()=>{
+        if(gen !== generation) return;
+        setStatus(true, "接続済み " + url);
+        console.log("[副制御] 接続しました:", url);
+      });
+      ws.addEventListener("message", (ev)=>{
+        if(gen !== generation) return;
+        let data;
+        try{ data = JSON.parse(ev.data); }catch(e){ return; }
+        handleSubEvent(data);
+      });
+      ws.addEventListener("close", ()=>{
+        if(gen !== generation) return;
+        setStatus(false, "未接続(再接続待ち) " + url);
+        scheduleReconnect(gen);
+      });
+      ws.addEventListener("error", ()=>{ try{ ws.close(); }catch(e){} });
+    }
+    window.reconnectSubBoard = connect;
+    connect();
+  })();
+
   /* ===================== 外部の演出制御からのリモートトリガー(WebSocket) =====================
      別途起動する中継サーバー(trigger_relay_server.js)経由で、main_control.html などの
      外部コントローラーからこのオーバーレイの演出を呼び出せるようにする。
@@ -1461,6 +2095,9 @@ function hideGameVideo(){
       triggerEnshutsu: () => window.triggerEnshutsu && window.triggerEnshutsu(),
       toggleSlow: () => { const b = document.getElementById("slow-toggle"); if(b) b.click(); },
       toggleSettings: () => { if(window.toggleSettings) window.toggleSettings(); },
+      // 副制御の演出イベントを中継サーバー経由で直接流し込む(scripts\dev.cmd send での確認用)。
+      //   例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
+      subEvent: (ev, msg) => { if(window.handleSubEvent) window.handleSubEvent(ev || (msg && msg.event)); },
       // main_control側で選択した「ゲーム画面」のメタ情報(名前/サイズ)。実際の映像は下のWebRTC系アクションで届く。
       gameScreenInfo: (info) => {
         window.currentGameScreen = info || null;
@@ -1512,6 +2149,12 @@ function hideGameVideo(){
     };
     let ws = null;
     let reconnectTimer = null;
+    const relayStatusEl = el("relay-status");
+    function setRelayStatus(on, text){
+      relayStatusEl.textContent = text;
+      relayStatusEl.classList.toggle("on", on);
+      relayStatusEl.classList.toggle("off", !on);
+    }
 
     function sendGameScreenSignal(action, data){
       if(!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -1534,6 +2177,7 @@ function hideGameVideo(){
         return;
       }
       ws.addEventListener("open", ()=>{
+        setRelayStatus(true, "接続済み " + WS_URL);
         console.log("[リモートトリガー] 中継サーバーに接続しました:", WS_URL);
       });
       ws.addEventListener("message", (ev)=>{
@@ -1541,9 +2185,9 @@ function hideGameVideo(){
         try{ data = JSON.parse(ev.data); }catch(e){ return; }
         if(!data || typeof data.action !== "string") return;
         const fn = ACTIONS[data.action];
-        if(fn) fn(data.data);
+        if(fn) fn(data.data, data); // 第2引数はメッセージ全体(data 以外のキーを使うアクション向け)
       });
-      ws.addEventListener("close", scheduleReconnect);
+      ws.addEventListener("close", ()=>{ setRelayStatus(false, "未接続(再接続待ち) " + WS_URL); scheduleReconnect(); });
       ws.addEventListener("error", ()=>{ try{ ws.close(); }catch(e){} });
     }
 
@@ -1562,6 +2206,8 @@ function hideGameVideo(){
       slowToggleBtn.textContent = "🐢 スロー再生: OFF";
       slowToggleBtn.classList.remove("primary");
     }
+    // HUD(CSSトランジション/アニメーション)の速度もJS側の速度に揃える
+    document.documentElement.style.setProperty("--spd", String(1 / speedFactor));
   });
 
 })();
