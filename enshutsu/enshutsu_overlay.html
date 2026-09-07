@@ -555,7 +555,6 @@
     <audio id="lock3-transition-audio" preload="auto"></audio>
     <img id="freeze-reveal-gif" alt="">
     <video id="freeze-reveal-video" playsinline preload="auto"></video>
-    <audio id="freeze-reveal-audio" preload="auto"></audio>
     <div id="gg-layer">
       <div id="gg-text"><div class="main hud-font">GOD GAME</div><div class="sub">ゴッドゲーム突入</div></div>
     </div>
@@ -674,9 +673,13 @@
         <button class="action" id="pick-freeze-folder">📁 フリーズ演出フォルダ(freeze/afterblackout)を選択</button>
         <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
         <div id="freeze-status" class="note">未選択</div>
+        <div class="field-row">
+          <label for="freezeGifDuration">GIFの表示時間(秒)</label>
+          <input type="number" id="freezeGifDuration" min="0.5" max="60" step="0.1">
+        </div>
         <div class="note">
-          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下のGIFまたは動画(mp4 / webm / mov)と、その中の「sound」サブフォルダ(enshutsu/yokoku/freeze/afterblackout/sound/)内の音声が対象です。<br><br>
-          ロック2の番号などの状況に関わらず、素材が1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。同じ番号のsound内の音声があれば一緒に再生されます。動画は音声付きならそのまま鳴り、動画の再生終了(音声があれば両方の終了)で演出が終わります。GIFは音声の終了、音声が無ければ既定秒数で終わります。素材が1つもない場合はこの演出はスキップされます。<br><br>
+          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下の動画(mp4 / webm / mov)またはGIFが対象です。音声は動画に入れておきます(別ファイルの音声フォルダはありません)。<br><br>
+          ロック2の番号などの状況に関わらず、素材が1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。動画は音声込みでそのまま鳴り、再生終了で演出が終わります。GIFは無音で、上の「GIFの表示時間」だけ表示して終わります。素材が1つもない場合はこの演出はスキップされます。<br><br>
           ロック3のつなぎ(frz.gif)と萌えカットインの重ね演出(moe.gif)も、同じ場所に frz.webm / frz.mp4、moe.webm / moe.mp4 を置くとGIFより優先して動画を使います(音は従来どおり blackout.mp3 / moecut.mp3)。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
@@ -813,13 +816,11 @@
   //   フリーズ演出ルート : enshutsu/yokoku/freeze
   //     ├ 萌えカットイン : enshutsu/yokoku/freeze/cutin
   //     │   └ ボイス     : enshutsu/yokoku/freeze/cutin/voice
-  //     └ 暗転後の演出   : enshutsu/yokoku/freeze/afterblackout
-  //         └ サウンド   : enshutsu/yokoku/freeze/afterblackout/sound
+  //     └ 暗転後の演出   : enshutsu/yokoku/freeze/afterblackout  (mp4/webm/mov は音声込み、GIF は無音)
   const FREEZE_ROOT = "yokoku/freeze";
   const CUTIN_DIR = FREEZE_ROOT + "/cutin";
   const VOICE_DIR = CUTIN_DIR + "/voice";
   const FREEZE_DIR = FREEZE_ROOT + "/afterblackout";
-  const FREEZE_SOUND_DIR = FREEZE_DIR + "/sound";
 
   // フリーズ演出ルート直下に置く固定アセット。
   // 以前はBase64でHTMLに埋め込んでいたが、フォルダから読み込む方式に変更した。
@@ -841,6 +842,7 @@
     blackInDuration: 0.4,
     holdDuration: 1.2,
     blackOutDuration: 0.4,
+    freezeGifDuration: 5.0,   // afterblackout のGIF(無音)を表示する秒数。動画は再生終了まで
     pickMode: "random",
     // 副制御演出(HUD)
     bannerDuration: 2.5,
@@ -925,7 +927,6 @@
   const lock3Gif = el("lock3-transition-gif");
   const lock3Audio = el("lock3-transition-audio");
   const freezeRevealGif = el("freeze-reveal-gif");
-  const freezeRevealAudio = el("freeze-reveal-audio");
   const illustVideo = el("illustration-video");
   const illustEffectVideo = el("illustration-effect-video");
   const lock3Video = el("lock3-transition-video");
@@ -1049,6 +1050,7 @@
     el("blackInDuration").value = settings.blackInDuration;
     el("holdDuration").value = settings.holdDuration;
     el("blackOutDuration").value = settings.blackOutDuration;
+    el("freezeGifDuration").value = settings.freezeGifDuration;
     el("bannerDuration").value = settings.bannerDuration;
     el("bannerY").value = settings.bannerY;
     el("naviDuration").value = settings.naviDuration;
@@ -1092,6 +1094,7 @@
   bindNumber("blackInDuration","blackInDuration");
   bindNumber("holdDuration","holdDuration");
   bindNumber("blackOutDuration","blackOutDuration");
+  bindNumber("freezeGifDuration","freezeGifDuration");
   bindNumber("bannerDuration","bannerDuration");
   bindNumber("bannerY","bannerY");
   bindNumber("naviDuration","naviDuration");
@@ -1260,7 +1263,6 @@
   let illustrationPool = []; // { name, url, number }
   let voiceMap = new Map(); // number(string) -> url
   let freezeGifPool = []; // { name, url, number } (freezeフォルダ直下のGIF)
-  let freezeSoundMap = new Map(); // number(string) -> url (freeze/soundフォルダ内)
   let sequentialIndex = 0;
 
   // ファイル名から先頭の数字列を「キャラクター番号」として取り出す(例: "01_はな.png" → "01")
@@ -1311,31 +1313,18 @@
   }
 
   async function loadFreezeAssetsFromDir(dirHandle){
-    // 選択した「freeze」フォルダ直下のGIFと、その中の「sound」サブフォルダの音声を読み込む
+    // 選択した「afterblackout」フォルダ直下の動画とGIFを読み込む(サブフォルダは見ない)
     const pool = [];
-    const soundMap = new Map(); // number(string) -> url
     for await (const [name, handle] of dirHandle.entries()){
-      if(handle.kind === "file"){
-        const lower = name.toLowerCase();
-        if(lower.endsWith(".gif") || isVideoName(lower)){
-          const file = await handle.getFile();
-          const url = URL.createObjectURL(file);
-          pool.push(assetRecord(name, url));
-        }
-      }else if(handle.kind === "directory" && name.toLowerCase() === "sound"){
-        for await (const [sname, shandle] of handle.entries()){
-          if(shandle.kind !== "file") continue;
-          const lower = sname.toLowerCase();
-          if(!VOICE_EXT.some(ext=> lower.endsWith(ext))) continue;
-          const num = extractNumber(sname);
-          if(num === null) continue;
-          const file = await shandle.getFile();
-          const url = URL.createObjectURL(file);
-          soundMap.set(num, url);
-        }
+      if(handle.kind !== "file") continue;
+      const lower = name.toLowerCase();
+      if(lower.endsWith(".gif") || isVideoName(lower)){
+        const file = await handle.getFile();
+        const url = URL.createObjectURL(file);
+        pool.push(assetRecord(name, url));
       }
     }
-    return { pool, soundMap };
+    return { pool };
   }
 
   /* ===================== サーバーモード(http:// 経由での自動読み込み) =====================
@@ -1385,24 +1374,12 @@
 
   async function loadFreezeAssetsFromServer(){
     const pool = [];
-    const soundMap = new Map();
-    const gifFiles = await apiList(FREEZE_DIR);
-    gifFiles.forEach(name=>{
+    const files = await apiList(FREEZE_DIR);
+    files.forEach(name=>{
       if(!name.toLowerCase().endsWith(".gif") && !isVideoName(name)) return;
       pool.push(assetRecord(name, assetUrl(FREEZE_DIR, name)));
     });
-    try{
-      const soundFiles = await apiList(FREEZE_SOUND_DIR);
-      soundFiles.forEach(name=>{
-        if(!hasExt(name, VOICE_EXT)) return;
-        const num = extractNumber(name);
-        if(num === null) return;
-        soundMap.set(num, assetUrl(FREEZE_SOUND_DIR, name));
-      });
-    }catch(err){
-      console.log(FREEZE_SOUND_DIR + "フォルダの読み込みでエラー:", err);
-    }
-    return { pool, soundMap };
+    return { pool };
   }
 
   async function loadCutinFromServer(){
@@ -1424,12 +1401,11 @@
 
   async function loadFreezeFromServer(){
     try{
-      const { pool, soundMap } = await loadFreezeAssetsFromServer();
+      const { pool } = await loadFreezeAssetsFromServer();
       freezeGifPool = pool;
-      freezeSoundMap = soundMap;
       el("freeze-status").textContent = pool.length > 0
-        ? `${describePool(pool)}を読込済み(対応サウンド ${soundMap.size}件 / 自動 / ${FREEZE_DIR} フォルダ)`
-        : `${FREEZE_DIR} フォルダにGIF/動画が見つかりませんでした`;
+        ? `${describePool(pool)}を読込済み(自動 / ${FREEZE_DIR} フォルダ)`
+        : `${FREEZE_DIR} フォルダに動画/GIFが見つかりませんでした`;
       return true;
     }catch(err){
       console.log("freezeフォルダの自動読み込みに失敗:", err);
@@ -1566,13 +1542,11 @@
   let restoredFreezeHandle = null;
 
   async function loadFreezeAssetsAndRefreshUI(dirHandle){
-    const { pool, soundMap } = await loadFreezeAssetsFromDir(dirHandle);
+    const { pool } = await loadFreezeAssetsFromDir(dirHandle);
     freezeGifPool = pool;
-    freezeSoundMap = soundMap;
-    const soundCount = soundMap.size;
     el("freeze-status").textContent = pool.length > 0
-      ? `${describePool(pool)}を読込済み(対応サウンド ${soundCount}件)`
-      : "GIF/動画が見つかりませんでした";
+      ? `${describePool(pool)}を読込済み`
+      : "動画/GIFが見つかりませんでした";
   }
 
   el("pick-freeze-folder").addEventListener("click", async ()=>{
@@ -1872,8 +1846,9 @@
   }
 
   function playFreezeReveal(){
-    // freezeフォルダにGIF/動画があれば、状況を問わずランダムに1つ選んで再生する。
-    // 対応する「freeze/sound」内の音声(同じ番号のもの)があれば一緒に再生する。
+    // afterblackout フォルダに動画/GIFがあれば、状況を問わずランダムに1つ選んで再生する。
+    //   動画 … 音声込みでそのまま再生し、再生終了で演出を終える
+    //   GIF  … 無音で settings.freezeGifDuration 秒だけ表示して終える
     // 素材が1つもない場合は何もせず即座に完了とする。
     return new Promise(resolve=>{
       const pick = pickFreezeGif();
@@ -1881,42 +1856,22 @@
         resolve();
         return;
       }
-      const soundUrl = pick.number !== null ? freezeSoundMap.get(pick.number) : null;
 
       let done = false;
-      let oneDone = null; // 動画のときだけ使う「片方終了」ハンドラ
       const finish = ()=>{
         if(done) return;
         done = true;
-        freezeRevealAudio.removeEventListener("ended", finish);
-        if(oneDone) freezeRevealAudio.removeEventListener("ended", oneDone);
         freezeRevealGif.style.transition = "none";
         freezeRevealGif.style.opacity = "0";
         freezeRevealGif.src = "";
         stopVideo(freezeRevealVideo);
-        try{ freezeRevealAudio.pause(); }catch(e){}
         resolve();
       };
 
       if(pick.kind === "video"){
-        // 動画: 動画の再生終了で終わる。対応サウンドがあれば両方が終わった時点で終わる
-        let pending = 1 + (soundUrl ? 1 : 0);
-        oneDone = ()=>{ if(--pending <= 0) finish(); };
         freezeRevealVideo.style.transition = "none";
         freezeRevealVideo.style.opacity = "1";
-        startVideo(freezeRevealVideo, pick.url).then(oneDone);
-        if(soundUrl){
-          try{
-            freezeRevealAudio.src = soundUrl;
-            freezeRevealAudio.currentTime = 0;
-            freezeRevealAudio.playbackRate = clampRate();
-            freezeRevealAudio.addEventListener("ended", oneDone);
-            const playPromise = freezeRevealAudio.play();
-            if(playPromise && playPromise.catch){ playPromise.catch(()=> oneDone()); }
-          }catch(e){
-            oneDone();
-          }
-        }
+        startVideo(freezeRevealVideo, pick.url).then(finish);
         // 保険: ended が発火しない場合に備えたタイムアウト(最大120秒)
         setTimeout(finish, 120000 / Math.max(0.25, speedFactor));
         return;
@@ -1928,26 +1883,8 @@
       void freezeRevealGif.offsetWidth; // 強制リフロー
       freezeRevealGif.src = pick.url;
       freezeRevealGif.style.opacity = "1";
-
-      if(soundUrl){
-        try{
-          freezeRevealAudio.src = soundUrl;
-          freezeRevealAudio.currentTime = 0;
-          freezeRevealAudio.playbackRate = Math.min(4, Math.max(0.25, speedFactor));
-          freezeRevealAudio.addEventListener("ended", finish);
-          const playPromise = freezeRevealAudio.play();
-          if(playPromise && playPromise.catch){ playPromise.catch(()=> finish()); }
-        }catch(e){
-          finish();
-          return;
-        }
-        // 保険: サウンドが再生できない/endedが発火しない場合に備えたタイムアウト(最大20秒)
-        setTimeout(finish, 20000 / Math.max(0.25, speedFactor));
-      }else{
-        // 対応する音声がない場合はGIFのみ。既定の秒数(暗転にかかる時間の設定を流用)だけ表示して終了
-        const showMs = Math.max(800, settings.blackInDuration * 1000 * 4);
-        setTimeout(finish, showMs / speedFactor);
-      }
+      const showMs = Math.max(500, Number(settings.freezeGifDuration) * 1000);
+      setTimeout(finish, showMs / speedFactor);
     });
   }
 

@@ -31,6 +31,7 @@ slot_enshutsu_sender/
 │   ├── at/sound/                AT系演出の効果音 (任意: gg_start / stock_up / add_games / at_end / navi)
 │   └── yokoku/
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, blackout.mp3 ...)。GIF/画像に加え動画 (mp4/webm/mov) 可
+│       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
 ├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf)
 ├── scripts/
@@ -94,6 +95,7 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   筐体ビューは自分で 8787 に接続して主制御の state でリールを回すので、オーバーレイ側は表示位置と出し入れだけを持つ。
   オーバーレイと reel/ の相対位置 (`../reel/`) を変えないこと。
 - 動画素材: `afterblackout/` と `cutin/` は GIF/画像と同じ扱いで mp4/webm/mov を置ける (`assetRecord` の `kind` で分岐)。
+  `afterblackout/` の音声は動画に埋め込む (別ファイルの `sound/` は廃止済み)。GIF は無音で `freezeGifDuration` 秒表示する。
   固定素材は `freeze/frz.webm|mp4`・`freeze/moe.webm|mp4` があれば GIF より優先 (`probeVideoVariant`)。
   `<video>` の再生は必ず `startVideo` / `stopVideo` を通す (src 変更直後の play() は Chrome で失敗することがあるため
   `loadedmetadata` を待ってから再生している)。静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の
