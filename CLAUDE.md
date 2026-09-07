@@ -80,6 +80,9 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   (主制御連動中の筐体ビューは自動再読込)。
 - 主制御単体の挙動確認: `py -3 main_board\god_main_board.py --games 2000 --seed 1 --no-panel` (通信なし、集計のみ)。
   `--trace N` で 1G ごとのログ、`--events N` で副制御イベントを JSON 出力。
+- 設定差の確認: `py -3 main_board\god_main_board.py --ladder` (設定1〜6の機械割を並べ、逆転があれば警告。
+  既定 500万G/設定・約10秒、マルチプロセス)。抽選テーブル (`LOTTERY_TABLE` / `LOTTERY_TABLE_AT`) を
+  変更したら必ず通す。単発の `--games 10000` は±10%以上ぶれるので設定差の判断には使えない。
 
 ## 編集時の注意
 

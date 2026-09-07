@@ -27,6 +27,7 @@ GODタイプ パチスロ機 主制御（メイン基板）シミュレータ
 
 usage:
     python3 god_main_board.py --setting 1 --games 10000   # 集計のみ（コンパネ送信なし）
+    python3 god_main_board.py --ladder                    # 設定1〜6の機械割を並べて逆転を確認
     python3 god_main_board.py --trace 30                  # 1G毎ログ＋コンパネ送信
     python3 god_main_board.py --serve --games 1000        # 実機ウェイトで稼働。副→オーバーレイ、主→コンパネ
     python3 god_main_board.py --serve --panel-cmds        # 2バイトコマンド生ログもコンパネへ
@@ -83,22 +84,35 @@ PAYOUT = {
 
 # 内部抽選テーブル（分母65536・設定1〜6）
 # 押順ベルは6択（正解は1/6）。数値は主制御の抽選値そのものを模す。
+#
+# 設定差を持つ役はすべて設定1→6で単調増加させ、隣り合う設定の差も
+# 「上の設定ほど大きい」順に並べる（設定1と2だけ差が小さい・設定6だけ跳ねる、
+# といった歪みを作らない）。神揃いは設定4以上でのみ優遇する（456有利）。
 LOTTERY_TABLE = {
     #  役          設定1   設定2   設定3   設定4   設定5   設定6
-    "神揃い":     (    8,      8,      8,      9,      9,     11),
+    "神揃い":     (    8,      8,      8,      9,     10,     11),
     "押順ベル":   (40000,  40000,  40000,  40000,  40000,  40000),
-    "共通ベル":   ( 1900,   1940,   1980,   2060,   2140,   2300),   # 旧260〜320。機械割の主調整はここで行う
+    "共通ベル":   ( 1900,   1950,   2010,   2080,   2160,   2250),   # 旧260〜320。通常時の出玉調整はここ
     "リプレイ":   ( 6000,   6000,   6000,   6000,   6000,   6000),
-    "スイカ":     (  650,    660,    675,    700,    720,    780),
-    "チャンス目": (  360,    370,    385,    405,    425,    470),
+    "スイカ":     (  650,    665,    685,    710,    740,    775),
+    "チャンス目": (  360,    372,    388,    408,    432,    460),
 }
 
-# AT中の抽選テーブル（通常時と異なる役だけ上書き）。共通ベルを設定差で引き上げ、
-# 設定3以上で機械割100%超、設定6で114%前後を狙う。
+# AT中の抽選テーブル（通常時と異なる役だけ上書き）。共通ベルを設定差で引き上げる。
+# 機械割の主調整はここで行う。値は 1900 + 1100×(設定-1) の等差にしてあり、
+# AT中1Gあたりの純増が設定を1つ上げるごとに一定歩調で伸びる。
 LOTTERY_TABLE_AT = dict(LOTTERY_TABLE, **{
     #  役          設定1   設定2   設定3   設定4   設定5   設定6
-    "共通ベル":   ( 1900,   3000,   5000,   6200,   7300,   8500),
+    "共通ベル":   ( 1900,   3000,   4100,   5200,   6300,   7400),
 })
+
+# 上記テーブルでの機械割（設定ごとに8000万G測定・--ladder で再現できる）
+#   設定1  97.7%   設定2  99.8%   設定3 102.2%
+#   設定4 105.6%   設定5 109.4%   設定6 114.0%
+# 隣接設定の差は +2.2 / +2.4 / +3.4 / +3.9 / +4.6 ポイントで、
+# 「設定を1つ上げるほど伸びが大きい」順に並ぶ（どこにも逆転が無い）。
+# テーブルを触ったら --ladder で6設定を測り直し、逆転が出ていないか確認すること
+# （1万G程度の単発集計は±10%以上ぶれるので、設定差の判断には使えない）。
 
 # ---------------------------------------------------------------------------
 # 3. 状態定義
@@ -207,6 +221,7 @@ class MainBoard:
     # 副制御ポート（単方向送信専用）
     sub: "SubBoard | None" = None
     cmd_log: list = field(default_factory=list)
+    log_cmds: bool = True      # cmd_log に残すか。長時間の集計（--ladder）では切る
 
     # 試験用モニタ端子（コンパネ main_control.html 向け）。副制御とは別ポートで、
     # 内部モードを含む全レジスタを出す。遊技には一切影響しない（送信失敗は無視）。
@@ -216,7 +231,8 @@ class MainBoard:
     def send(self, cmd_type: int, data: int = 0) -> None:
         """2バイトコマンドを副制御へ送出する。戻り値は受け取らない（単方向）。"""
         cmd = ((cmd_type & 0xFF) << 8) | (data & 0xFF)
-        self.cmd_log.append(cmd)
+        if self.log_cmds:
+            self.cmd_log.append(cmd)
         if self.sub is not None:
             self.sub.recv(cmd)
         if self.panel is not None:
@@ -1029,6 +1045,9 @@ def run_single(board: MainBoard, games: int) -> None:
           (f"（1/{games / gg_hit:.0f}）" if gg_hit else ""))
     print(f"  神揃い     : {god_hit} 回")
     print(f"  AT稼働率   : {at_games / games * 100:.1f} %")
+    if games < 100_000:
+        print(f"  ※ {games:,}Gでは機械割が±10%以上ぶれる。"
+              "設定差の確認は --ladder を使うこと")
 
 
 def run_sim(setting: int, machines: int, games: int) -> None:
@@ -1049,12 +1068,76 @@ def run_sim(setting: int, machines: int, games: int) -> None:
     print(f"  +3000枚超: {sum(1 for d in diffs if d > 3000) / n * 100:.1f} %")
 
 
+def _ladder_job(arg: tuple) -> tuple:
+    """--ladder のワーカー1本。1台分を回して (投入, 払出, 状態別G数, GG初当り) を返す。"""
+    setting, seed, games = arg
+    b = MainBoard(setting=setting, rng=random.Random(seed), log_cmds=False)
+    st = [0, 0, 0]
+    hit = 0
+    for _ in range(games):
+        before = b.state
+        r = b.play()
+        st[before] += 1
+        if before == ST_NORMAL and any(n.startswith("GG突入") for n in r["notice"]):
+            hit += 1
+    return b.total_in, b.total_out, st, hit
+
+
+def run_ladder(games: int, seed: int | None = None) -> None:
+    """
+    設定1〜6の機械割をまとめて測り、設定間の逆転が無いかを確認する。
+
+    抽選テーブルを触ったら必ずこれで測り直す。単発の集計（--games 10000 など）は
+    神揃い5ストックの当否だけで±10%以上動くので、設定差の判断には使えない。
+    """
+    chunks = 4                      # 1設定を何本のプロセスに分けるか
+    per = max(1, games // chunks)
+    base = 0 if seed is None else seed
+    # 種は (base, 設定, 通し番号) を混ぜて作る。--seed を1違えるだけで全系列が入れ替わる
+    jobs = [(s, random.Random(f"{base}/{s}/{i}").randrange(1 << 32), per)
+            for s in range(1, 7) for i in range(chunks)]
+    try:
+        from multiprocessing import Pool
+        with Pool(min(len(jobs), os.cpu_count() or 1)) as pool:
+            res = pool.map(_ladder_job, jobs)
+    except (OSError, ValueError, ImportError):     # プロセスを作れない環境
+        res = [_ladder_job(j) for j in jobs]
+
+    print(f"設定1〜6 機械割ラダー（各設定 {per * chunks:,}G）")
+    # 見出しは全角の表示幅に合わせて手で詰めてある（列幅 4 / 11 / 10 / 10 / 11）
+    print("設定     機械割  前設定差    AT滞在   GG初当り")
+    print("-" * 46)
+    rates = []
+    for i, s in enumerate(range(1, 7)):
+        c = res[i * chunks:(i + 1) * chunks]
+        tin = sum(x[0] for x in c)
+        tout = sum(x[1] for x in c)
+        st = [sum(x[2][k] for x in c) for k in range(3)]
+        hit = sum(x[3] for x in c)
+        n = sum(st)
+        rate = tout / tin * 100
+        diff = "-" if not rates else f"{rate - rates[-1]:+.2f}"
+        first = "1/" + format(round(n / hit) if hit else 0, ",")
+        rates.append(rate)
+        print(f"{s:>4}{rate:>10.2f}%{diff:>10}{st[2] / n * 100:>9.1f}%{first:>11}")
+
+    bad = [s for s in range(2, 7) if rates[s - 1] <= rates[s - 2]]
+    if bad:
+        pairs = ", ".join(f"設定{s - 1}→{s}" for s in bad)
+        print(f"⚠ {pairs} で機械割が上がっていない。抽選テーブルを見直すこと")
+    else:
+        print("OK: 設定1→6で機械割は単調増加（逆転なし）")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="GODタイプ主制御シミュレータ")
     ap.add_argument("--setting", type=int, default=1, choices=range(1, 7))
-    ap.add_argument("--games", type=int, default=10000)
+    ap.add_argument("--games", type=int, default=None,
+                    help="集計ゲーム数。既定 10000（--ladder のときは設定あたり500万）")
     ap.add_argument("--trace", type=int, default=0, help="1G毎のログをNゲーム分表示")
     ap.add_argument("--sim", type=int, default=0, help="N台分の分布を集計")
+    ap.add_argument("--ladder", action="store_true",
+                    help="設定1〜6の機械割をまとめて測り、設定間の逆転を確認する")
     ap.add_argument("--commands", type=int, default=0, help="主→副コマンドをNゲーム分表示")
     ap.add_argument("--events", type=int, default=0, help="副制御の演出イベントをJSONで出力")
     ap.add_argument("--serve", action="store_true", help="演出イベントをWebSocketで配信")
@@ -1069,9 +1152,13 @@ def main() -> None:
     ap.add_argument("--panel-cmds", action="store_true",
                     help="主→副の2バイトコマンド生ログもコンパネへ送る")
     a = ap.parse_args()
+    games = a.games if a.games is not None else (5_000_000 if a.ladder else 10000)
 
+    if a.ladder:
+        run_ladder(games, a.seed)
+        return
     if a.sim:
-        run_sim(a.setting, a.sim, a.games)
+        run_sim(a.setting, a.sim, games)
         return
     board = MainBoard(setting=a.setting, rng=random.Random(a.seed))
     # --serve / --trace のときだけコンパネへ送る（集計モードでは送らない）
@@ -1079,7 +1166,7 @@ def main() -> None:
         board.panel = PanelLink(a.panel, raw_cmds=a.panel_cmds)
     try:
         if a.serve:
-            run_live(board, a.games, a.host, a.port, a.interval, a.seed)
+            run_live(board, games, a.host, a.port, a.interval, a.seed)
         elif a.commands:
             run_commands(board, a.commands)
         elif a.events:
@@ -1087,7 +1174,7 @@ def main() -> None:
         elif a.trace:
             run_trace(board, a.trace, interval=0.0)
         else:
-            run_single(board, a.games)
+            run_single(board, games)
     finally:
         if board.panel:
             board.panel.send_summary(board)
