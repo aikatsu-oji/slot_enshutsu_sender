@@ -14,8 +14,34 @@
   // 画像図柄と設定。symbol_images.js が root.SlotSymbolImages = { settings, images } を置く。
   // 図柄設定ページが差し替えたあと install(doc, true) でスプライトを作り直せるよう、参照は都度読む
   // reelBg: 地色 / reelBgAlpha: 地色の不透明度 0〜1 (0 で透過。OBS で液晶を透かすとき) / reelBgImage: リール背景画像の data URI
+  // reelBgImageAlpha: 背景画像の不透明度 (図柄設定ページが data URI に焼き込む。元 img/reel_bg.png はそのまま)
   // reelBgFit: 背景画像の敷き方 cover | contain | stretch | tile / symW, symH: コマに対する図柄の大きさ (%)
-  const DEFAULT_SETTINGS = { reelBg: "#fdfbf3", reelBgAlpha: 1, reelBgImage: "", reelBgFit: "cover", symW: 82, symH: 74 };
+  // frameColor / frameAlpha: リール枠 (窓の金枠) の色と不透明度 (0 で枠も透過) / framePad: 枠の太さ px / frameGap: リール間隔 px
+  // frameRadius: 枠の角丸 px / shade: リール上下の影の濃さ 0〜1 / lineAlpha: コマの区切り線とリール縁の濃さ 0〜1 (0 で消える)
+  const DEFAULT_SETTINGS = {
+    reelBg: "#fdfbf3", reelBgAlpha: 1, reelBgImage: "", reelBgImageAlpha: 1, reelBgFit: "cover",
+    frameColor: "#c9a24a", frameAlpha: 1, framePad: 6, frameGap: 6, frameRadius: 0, shade: 0.45, lineAlpha: 1,
+    symW: 82, symH: 74,
+  };
+  const hexRgb = (hex, fallback) => {
+    const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || ""));
+    return m ? [1, 2, 3].map((i) => parseInt(m[i], 16)) : fallback;
+  };
+  const clamp01 = (v, d) => (v == null || v === "" || Number.isNaN(Number(v)) ? d : Math.min(1, Math.max(0, Number(v))));
+  const mix = (rgb, to, t) => rgb.map((c, i) => Math.round(c + (to[i] - c) * t));
+  const rgba = (rgb, a) => `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a})`;
+  /** リール枠の背景 (金のグラデーション)。frameColor を明暗に振って frameAlpha を掛ける */
+  function frameBackground(v) {
+    const base = hexRgb(v.frameColor, [201, 162, 74]), a = clamp01(v.frameAlpha, 1);
+    const dim = mix(base, [0, 0, 0], 0.4), bright = mix(base, [255, 255, 255], 0.55);
+    return `linear-gradient(180deg, ${rgba(dim, a)}, ${rgba(base, a)} 20%, ${rgba(bright, a)} 50%, ${rgba(base, a)} 80%, ${rgba(dim, a)})`;
+  }
+  function frameShadow(v) {
+    const a = clamp01(v.frameAlpha, 1);
+    return a > 0 ? `0 6px 0 rgba(11, 18, 38, ${a}), inset 0 1px 0 rgba(255, 255, 255, ${0.4 * a})` : "none";
+  }
+  /** リール上下の影 (dir: 180deg = 上端から / 0deg = 下端から) */
+  const shade = (v, dir) => `linear-gradient(${dir}, rgba(0, 0, 0, ${clamp01(v.shade, 0.45)}), transparent)`;
   const BG_FIT = { cover: "center / cover no-repeat", contain: "center / contain no-repeat", stretch: "0 0 / 100% 100% no-repeat", tile: "0 0 / auto repeat" };
 
   /** 地色を rgba() 文字列にする (透過対応) */
@@ -130,7 +156,8 @@
     return `<svg class="${cls || "sym"}" viewBox="${VIEWBOX}" ${NS}><use href="#sym-${INFO[name].id}"></use></svg>`;
   }
 
-  /** 設定を CSS 変数に反映する: --reel-bg (rgba) / --reel-bg-image / --reel-bg-fit / --sym-w / --sym-h
+  /** 設定を CSS 変数に反映する: --reel-bg (rgba) / --reel-bg-image / --reel-bg-fit / --sym-w / --sym-h /
+   *  --window-bg / --window-shadow / --frame-pad / --frame-gap / --frame-radius / --reel-shade-top / --reel-shade-bottom / --koma-line / --reel-edge
    *  リール面は background: var(--reel-bg-image) var(--reel-bg-fit), var(--reel-bg); で描く */
   function applySettings(doc, s) {
     const d = doc || (typeof document !== "undefined" ? document : null);
@@ -140,6 +167,16 @@
     st.setProperty("--reel-bg", bgColor(v));
     st.setProperty("--reel-bg-image", v.reelBgImage ? `url("${v.reelBgImage}")` : "none");
     st.setProperty("--reel-bg-fit", BG_FIT[v.reelBgFit] || BG_FIT.cover);
+    st.setProperty("--window-bg", frameBackground(v));
+    st.setProperty("--window-shadow", frameShadow(v));
+    st.setProperty("--frame-pad", (Number(v.framePad) || 0) + "px");
+    st.setProperty("--frame-gap", (Number(v.frameGap) || 0) + "px");
+    st.setProperty("--frame-radius", (Number(v.frameRadius) || 0) + "px");
+    st.setProperty("--reel-shade-top", shade(v, "180deg"));
+    st.setProperty("--reel-shade-bottom", shade(v, "0deg"));
+    const la = clamp01(v.lineAlpha, 1);
+    st.setProperty("--koma-line", `rgba(20, 33, 61, ${0.12 * la})`);
+    st.setProperty("--reel-edge", la > 0 ? `inset 0 0 0 1px rgba(0, 0, 0, ${0.25 * la})` : "none");
     st.setProperty("--sym-w", v.symW + "%");
     st.setProperty("--sym-h", v.symH + "%");
   }
@@ -157,5 +194,5 @@
     applySettings(d);
   }
 
-  root.SlotSymbols = { VIEWBOX, PALETTE: C, INFO, ORDER, DEFAULT_SETTINGS, BG_FIT, bgColor, body, vector: (n) => BODY[n], images, settings, applySettings, svg, sprite, use, install };
+  root.SlotSymbols = { VIEWBOX, PALETTE: C, INFO, ORDER, DEFAULT_SETTINGS, BG_FIT, bgColor, frameBackground, frameShadow, shade, body, vector: (n) => BODY[n], images, settings, applySettings, svg, sprite, use, install };
 })(typeof globalThis !== "undefined" ? globalThis : window);

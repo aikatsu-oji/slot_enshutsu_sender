@@ -350,6 +350,28 @@
   .inj-note{font-size:11.5px;color:#7a7488;margin-top:8px;line-height:1.6;}
   .inj-sep{border-top:1px solid #3a3348;margin:16px 0 14px;}
 
+  /* 図柄設定 (reel/symbol_editor.html を iframe で開く全画面モーダル) */
+  .modal{
+    display:none;
+    position:fixed;inset:0;z-index:50;
+    flex-direction:column;
+    background:rgba(8,7,12,.97);
+  }
+  .modal.show{display:flex;}
+  .modal-head{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 14px;
+    border-bottom:1px solid rgba(212,175,55,.3);
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+  }
+  .modal-head b{font-size:13px;letter-spacing:.1em;color:var(--gold-bright);}
+  .modal-url{
+    font-family:"Consolas",monospace;font-size:11.5px;color:#7a7488;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .modal-head .spacer{margin-left:auto;}
+  .modal iframe{flex:1;width:100%;border:0;background:var(--bg);}
+
   @media (max-width:560px){
     .mb-grid{grid-template-columns:repeat(2,1fr);}
     .sb-grid{grid-template-columns:repeat(2,1fr);}
@@ -428,6 +450,15 @@
       <button class="btn" id="btn-clear-screen" disabled>選択解除</button>
     </div>
     <div class="screen-info" id="screen-info">未選択</div>
+  </div>
+
+  <div class="card">
+    <h2>図柄設定</h2>
+    <div class="row2">
+      <button class="btn" id="btn-symbols">🎴 図柄設定を開く</button>
+      <button class="btn" id="btn-symbols-window">別ウィンドウで開く</button>
+    </div>
+    <div class="screen-info" id="symbols-info">図柄画像の差し替えとリールの見た目 (地色・背景画像・枠・影・図柄の大きさ) を編集します</div>
   </div>
 
   <div class="card">
@@ -526,6 +557,19 @@
   </div>
 </div>
 
+<!-- 図柄設定。中身は reel/symbol_editor.html をそのまま iframe で開く (URL は ws URL のホストから組み立てる) -->
+<div class="modal" id="symbols-modal">
+  <div class="modal-head">
+    <b>図柄設定</b>
+    <span class="modal-url" id="symbols-url"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-sm" id="btn-symbols-reload">再読込</button>
+    <button class="btn btn-sm" id="btn-symbols-popout">別ウィンドウ</button>
+    <button class="btn btn-sm" id="btn-symbols-close">閉じる (Esc)</button>
+  </div>
+  <iframe id="symbols-frame" title="図柄設定"></iframe>
+</div>
+
 <script>
 (function(){
   "use strict";
@@ -612,6 +656,7 @@
       if(!data || typeof data.action !== "string") return;
       if(data.action === "mainBoard"){ handleMainBoard(data); return; }
       if(data.action === "subBoard"){ handleSubBoard(data); return; }
+      if(data.action === "symbolsUpdated"){ handleSymbolsUpdated(data); return; }
       handleSignalMessage(data);
     });
     ws.addEventListener("close", ()=>{
@@ -1161,6 +1206,92 @@
     log("🖥️ ゲーム画面の選択を解除しました");
     sendAction("gameScreenInfo", "ゲーム画面情報(解除)", null);
     sendSignal("webrtcStop", null);
+  });
+
+  // 図柄設定 (reel/symbol_editor.html)
+  // このパネルは相対パス依存を持たないので、エディタの URL は接続先の ws URL のホストから組み立てる。
+  // 保存は中継サーバーの POST /api/symbols がやり、結果は symbolsUpdated として全クライアントに流れてくる。
+  const symbolsModal = document.getElementById("symbols-modal");
+  const symbolsFrame = document.getElementById("symbols-frame");
+  const symbolsUrlEl = document.getElementById("symbols-url");
+  const symbolsInfo = document.getElementById("symbols-info");
+  const openSymbolsBtn = document.getElementById("btn-symbols");
+  const symbolsWindowBtn = document.getElementById("btn-symbols-window");
+  const symbolsReloadBtn = document.getElementById("btn-symbols-reload");
+  const symbolsPopoutBtn = document.getElementById("btn-symbols-popout");
+  const symbolsCloseBtn = document.getElementById("btn-symbols-close");
+
+  function symbolEditorUrl(){
+    const raw = urlInput.value.trim();
+    try{
+      const u = new URL(raw);
+      if(u.protocol === "ws:" || u.protocol === "wss:"){
+        return `${u.protocol === "wss:" ? "https:" : "http:"}//${u.host}/reel/symbol_editor.html`;
+      }
+    }catch(e){ /* 入力が URL として読めないときは下の location.origin へ */ }
+    // ws URL が使えなくても、このページ自体が中継サーバー経由なら同じホストで開ける
+    if(location.protocol === "http:" || location.protocol === "https:"){
+      return `${location.origin}/reel/symbol_editor.html`;
+    }
+    return null;
+  }
+
+  function openSymbols(){
+    const url = symbolEditorUrl();
+    if(!url){
+      log("⚠️ 図柄設定: 中継サーバーの URL が分かりません (ws URL を入れ直すか http://localhost:8787/control/main_control.html で開いてください)");
+      return;
+    }
+    // 開き直しで編集中の内容が消えないよう、同じ URL なら iframe は読み込み直さない
+    if(symbolsFrame.getAttribute("data-url") !== url){
+      symbolsFrame.setAttribute("data-url", url);
+      symbolsFrame.src = url;
+    }
+    symbolsUrlEl.textContent = url;
+    symbolsModal.classList.add("show");
+    log("🎴 図柄設定を開きました");
+  }
+
+  function closeSymbols(){
+    symbolsModal.classList.remove("show");
+  }
+
+  function popoutSymbols(){
+    const url = symbolEditorUrl();
+    if(!url){
+      log("⚠️ 図柄設定: 中継サーバーの URL が分かりません (ws URL を入れ直すか http://localhost:8787/control/main_control.html で開いてください)");
+      return;
+    }
+    window.open(url, "symbolEditor");
+    log("🎴 図柄設定を別ウィンドウで開きました");
+  }
+
+  function handleSymbolsUpdated(data){
+    const written = Array.isArray(data.written) ? data.written : [];
+    const removed = Array.isArray(data.removed) ? data.removed : [];
+    const time = new Date().toLocaleTimeString("ja-JP",{hour12:false});
+    const detail = [
+      written.length ? `更新 ${written.join(", ")}` : "",
+      removed.length ? `削除 ${removed.join(", ")}` : "",
+    ].filter(Boolean).join(" / ") || "リールの見た目のみ";
+    symbolsInfo.textContent = `${time} に保存しました (${detail})`;
+    symbolsInfo.classList.add("selected");
+    log(`🎴 図柄設定を保存しました (${detail})`);
+  }
+
+  openSymbolsBtn.addEventListener("click", openSymbols);
+  symbolsWindowBtn.addEventListener("click", popoutSymbols);
+  symbolsPopoutBtn.addEventListener("click", ()=>{ popoutSymbols(); closeSymbols(); });
+  symbolsCloseBtn.addEventListener("click", closeSymbols);
+  symbolsReloadBtn.addEventListener("click", ()=>{
+    const url = symbolEditorUrl();
+    if(!url) return;
+    symbolsFrame.setAttribute("data-url", url);
+    symbolsUrlEl.textContent = url;
+    symbolsFrame.src = url;
+  });
+  document.addEventListener("keydown", (ev)=>{
+    if(ev.key === "Escape" && symbolsModal.classList.contains("show")) closeSymbols();
   });
 
   // オフライン時ヘルプ: コマンドコピー

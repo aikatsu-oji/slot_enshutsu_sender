@@ -16,11 +16,11 @@ slot_enshutsu_sender/
 │   ├── god_main_board.py        主制御(MainBoard)・副制御(SubBoard) シミュレータ。--serve で ws://127.0.0.1:8765
 │   └── reels.json               図柄配列 (1リール21コマ) の唯一の定義。主制御と筐体ビューの両方が読む
 ├── control/
-│   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)
+│   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)・図柄設定(エディタを内蔵)
 ├── reel/
 │   ├── reel.html                筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
 │   ├── symbols.js               図柄定義 (SVG スプライト、viewBox 240×80)。globalThis.SlotSymbols。画像がある図柄は <image>
-│   ├── symbol_images.js         画像図柄の data URI と設定 (地色と透過・リール背景画像・図柄の大きさ)。symbol_editor.html の保存で生成 (手で編集しない)
+│   ├── symbol_images.js         画像図柄の data URI と設定 (地色/背景画像/枠の色と透過・枠の太さ/間隔/角丸・上下の影・図柄の大きさ)。symbol_editor.html の保存で生成 (手で編集しない)
 │   ├── symbol_editor.html       図柄設定。画像のドロップ/貼り付け → 背景透過・切り抜き → POST /api/symbols で保存
 │   ├── img/<id>.png             図柄の元画像 (切り抜き済み透過 PNG)。god/seven/bell/rep/melon/blank。reel_bg.png はリール背景画像の元
 │   ├── reel_window.js           リール窓の DOM 構築・停止位置描画 (ReelView)、reels.json の読込。globalThis.SlotReels
@@ -73,7 +73,8 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
 - `-Mode fast` (0.5 秒/G・設定 6) は動作確認向け。`normal` は実機ウェイト 4.1 秒/G。
 - コード変更後は必ず `scripts\dev.cmd test` を通してから `restart` する。
-- 図柄の差し替え: 中継サーバー起動中に http://localhost:8787/reel/symbol_editor.html を開き、カードに画像をドロップして保存。
+- 図柄の差し替え: 中継サーバー起動中にコンパネの「図柄設定」→「図柄設定を開く」(または直接
+  http://localhost:8787/reel/symbol_editor.html) を開き、カードに画像をドロップして保存。
   サーバーの POST /api/symbols が reel/img/<id>.png と reel/symbol_images.js を書き、WebSocket に symbolsUpdated を流す
   (主制御連動中の筐体ビューは自動再読込)。
 - 主制御単体の挙動確認: `py -3 main_board\god_main_board.py --games 2000 --seed 1 --no-panel` (通信なし、集計のみ)。
@@ -98,6 +99,9 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   `loadedmetadata` を待ってから再生している)。静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の
   巻き戻し・シークはサーバー側で完結する。
 - `main_control.html` は相対パス依存なし。接続先は画面内の ws URL 入力欄 (既定 ws://localhost:8787)。
+  「図柄設定」カードは `reel/symbol_editor.html` を全画面モーダルの iframe で開くが、その URL も ws URL の
+  ホストから組み立てる (ws URL が読めないときだけ `location.origin` を使う)。相対パスを書かないこと。
+  保存結果は中継サーバーが流す `symbolsUpdated` を受けてカードとログに出す。
 - 図柄と配列: 図柄は `reel/symbols.js` に SVG として定義し、`reel.html` / `symbols.html` はスプライトを `<svg><use>` で
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。

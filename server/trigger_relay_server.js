@@ -204,7 +204,11 @@ function serveFile(req, res, target) {
 const SYMBOL_IDS = ["god", "seven", "bell", "rep", "melon", "blank"];
 const SYMBOL_IMG_DIR = path.join(ROOT, "reel", "img");
 const SYMBOL_IMAGES_JS = path.join(ROOT, "reel", "symbol_images.js");
-const SYMBOL_DEFAULT_SETTINGS = { reelBg: "#fdfbf3", reelBgAlpha: 1, reelBgImage: "", reelBgFit: "cover", symW: 82, symH: 74 };
+const SYMBOL_DEFAULT_SETTINGS = {
+  reelBg: "#fdfbf3", reelBgAlpha: 1, reelBgImage: "", reelBgImageAlpha: 1, reelBgFit: "cover",
+  frameColor: "#c9a24a", frameAlpha: 1, framePad: 6, frameGap: 6, frameRadius: 0, shade: 0.45, lineAlpha: 1,
+  symW: 82, symH: 74,
+};
 const REEL_BG_PNG = path.join(SYMBOL_IMG_DIR, "reel_bg.png");   // リール背景画像の元 (settings.reelBgImage は表示用の縮小版)
 
 function loadSymbolImages() {
@@ -229,7 +233,15 @@ function saveSymbolImages(store) {
     reelBg: /^#[0-9a-fA-F]{6}$/.test(String(s.reelBg)) ? String(s.reelBg).toLowerCase() : SYMBOL_DEFAULT_SETTINGS.reelBg,
     reelBgAlpha: Math.min(1, Math.max(0, num(s.reelBgAlpha, 1))),
     reelBgImage: dataUriToBuffer(s.reelBgImage) ? String(s.reelBgImage) : "",
+    reelBgImageAlpha: Math.min(1, Math.max(0, num(s.reelBgImageAlpha, 1))),
     reelBgFit: ["cover", "contain", "stretch", "tile"].includes(s.reelBgFit) ? s.reelBgFit : "cover",
+    frameColor: /^#[0-9a-fA-F]{6}$/.test(String(s.frameColor)) ? String(s.frameColor).toLowerCase() : SYMBOL_DEFAULT_SETTINGS.frameColor,
+    frameAlpha: Math.min(1, Math.max(0, num(s.frameAlpha, 1))),
+    framePad: Math.min(200, Math.max(0, num(s.framePad, 6))),
+    frameGap: Math.min(200, Math.max(0, num(s.frameGap, 6))),
+    frameRadius: Math.min(200, Math.max(0, num(s.frameRadius, 0))),
+    shade: Math.min(1, Math.max(0, num(s.shade, 0.45))),
+    lineAlpha: Math.min(1, Math.max(0, num(s.lineAlpha, 1))),
     symW: Math.min(100, Math.max(10, num(s.symW, SYMBOL_DEFAULT_SETTINGS.symW))),
     symH: Math.min(100, Math.max(10, num(s.symH, SYMBOL_DEFAULT_SETTINGS.symH))),
   };
@@ -266,17 +278,16 @@ function handleApiSymbols(req, res) {
     }
     const written = [], removed = [];
     fs.mkdirSync(SYMBOL_IMG_DIR, { recursive: true });
-    // リール背景画像: reelImage = null で削除、{ png, src } で差し替え、無ければ現状維持
+    // リール背景画像: reelImage = null で削除、{ png, src } で差し替え、{ src } だけなら表示用の差し替え (不透明度の焼き直し)、無ければ現状維持
     if (body.reelImage === null) {
       store.settings.reelBgImage = "";
       try { fs.unlinkSync(REEL_BG_PNG); } catch (e) { /* 無ければ何もしない */ }
       removed.push("reel_bg");
     } else if (body.reelImage && typeof body.reelImage === "object") {
-      const png = dataUriToBuffer(body.reelImage.png, "image/png");
-      if (!png || !dataUriToBuffer(body.reelImage.src)) { sendJson(res, 400, { error: "reelImage: png と src を data URI で送ってください" }); return; }
-      fs.writeFileSync(REEL_BG_PNG, png);
+      const png = body.reelImage.png != null ? dataUriToBuffer(body.reelImage.png, "image/png") : undefined;
+      if (png === null || !dataUriToBuffer(body.reelImage.src)) { sendJson(res, 400, { error: "reelImage: png (省略可) と src を data URI で送ってください" }); return; }
+      if (png) { fs.writeFileSync(REEL_BG_PNG, png); written.push("reel_bg"); }
       store.settings.reelBgImage = String(body.reelImage.src);
-      written.push("reel_bg");
     }
     for (const [id, m] of Object.entries(body.images || {})) {
       if (!SYMBOL_IDS.includes(id)) { sendJson(res, 400, { error: "unknown symbol id: " + id }); return; }
