@@ -97,6 +97,7 @@
   </div>
 </div>
 
+<script src="symbol_images.js"></script>
 <script src="symbols.js"></script>
 <script src="reel_window.js"></script>
 <script>
@@ -281,8 +282,10 @@
     setNavi(d.navi || null);
     reels.forEach(r => r.start());
     const pos = Array.isArray(d.reelPos) ? d.reelPos : null;
+    // 停止順: ナビ(押し順番号 1〜6)が出ているときはその順、無ければ左→中→右
+    const stopOrder = (d.navi && ORDER[d.navi]) ? ORDER[d.navi] : [0,1,2];
     let done = 0;
-    [0,1,2].forEach((i,k)=> setTimeout(()=>{
+    stopOrder.forEach((i,k)=> setTimeout(()=>{
       const reel = reels[i];
       const target = pos ? pos[i] : stopControl(reel, reel.pushPos(), (d.reel && d.reel[i]) || null);
       if(reel.state !== "spin"){ reel.state = "spin"; reel.vel = SPEED; }
