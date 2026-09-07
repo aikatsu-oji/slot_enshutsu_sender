@@ -7,7 +7,7 @@
 <style>
   :root{
     --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --frame-shadow:#0b1226;
-    --reel-bg:#fdfbf3; --text:#efe6d2;
+    --reel-bg:#fdfbf3; --reel-bg-image:none; --reel-bg-fit:center / cover no-repeat;   /* 図柄設定 (symbol_images.js) で変わる */ --text:#efe6d2;
     --red:#d43a2f; --green:#3fa35b; --yellow:#f2c23b; --blue:#4d8fd6;
     --koma:calc(100vw / 8.4);    /* 1コマの高さ。リール窓は3コマ分。画面幅に追従 */
     --font-sym:"Yu Mincho","Hiragino Mincho ProN",serif;
@@ -38,7 +38,7 @@
   }
   .reel{
     position:relative;height:calc(var(--koma) * 3);overflow:hidden;
-    background:var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
+    background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);
     cursor:pointer;
   }
   .reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;}
@@ -55,7 +55,7 @@
     border-bottom:1px solid rgba(20,33,61,.12);font-weight:800;font-size:calc(100vw / 34);
   }
   /* 図柄。symbols.js のスプライトを <svg><use> で参照する (viewBox 240×80) */
-  .sym{display:block;width:82%;height:74%;}
+  .sym{display:block;width:var(--sym-w,82%);height:var(--sym-h,74%);}   /* 図柄設定 (symbol_images.js の settings) で変わる */
 
   /* ---- 操作パネル(左上) ---- */
   .bar{
@@ -97,6 +97,7 @@
   </div>
 </div>
 
+<script src="symbol_images.js"></script>
 <script src="symbols.js"></script>
 <script src="reel_window.js"></script>
 <script>
@@ -265,6 +266,7 @@
     ws.addEventListener("message", ev => {
       let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
       if(d && d.action === "mainBoard" && d.type === "state"){ queue.push(d); pump(); }
+      if(d && d.action === "symbolsUpdated") location.reload();   // 図柄設定ページで保存されたら新しい図柄で開き直す
     });
     ws.addEventListener("close", ()=>{ ws = null; wsSt.textContent = "未接続"; wsSt.className = "st"; btnConn.textContent = "接続"; });
     ws.addEventListener("error", ()=>{ wsSt.textContent = "接続できません（run_server.bat は起動していますか）"; });
@@ -281,8 +283,10 @@
     setNavi(d.navi || null);
     reels.forEach(r => r.start());
     const pos = Array.isArray(d.reelPos) ? d.reelPos : null;
+    // 停止順: ナビ(押し順番号 1〜6)が出ているときはその順、無ければ左→中→右
+    const stopOrder = (d.navi && ORDER[d.navi]) ? ORDER[d.navi] : [0,1,2];
     let done = 0;
-    [0,1,2].forEach((i,k)=> setTimeout(()=>{
+    stopOrder.forEach((i,k)=> setTimeout(()=>{
       const reel = reels[i];
       const target = pos ? pos[i] : stopControl(reel, reel.pushPos(), (d.reel && d.reel[i]) || null);
       if(reel.state !== "spin"){ reel.state = "spin"; reel.vel = SPEED; }

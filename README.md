@@ -25,6 +25,7 @@ scripts\dev.cmd stop
 | コンパネ | http://localhost:8787/control/main_control.html |
 | オーバーレイ (OBS ブラウザソース) | http://localhost:8787/enshutsu/enshutsu_overlay.html |
 | 筐体ビュー | http://localhost:8787/reel/reel.html?mode=link&hidebar=1 |
+| 図柄設定 (図柄画像の差し替え) | http://localhost:8787/reel/symbol_editor.html |
 
 ## フォルダ
 

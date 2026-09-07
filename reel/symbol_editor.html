@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>図柄設定</title>
+<!--
+  図柄設定ページ。ブラウザで図柄画像の差し替えとリールの見た目を調整し、中継サーバーに保存する。
+    - 画像: ファイル選択 / ドラッグ&ドロップ / クリップボード貼り付け (Ctrl+V) / reel/img/<id>.png の再読込
+    - 加工はすべてブラウザ側 (背景の透過・切り抜き・縮小)。保存で POST /api/symbols に送り、サーバーが
+      reel/img/<id>.png (元画像) と reel/symbol_images.js (表示用 data URI と設定) を書き出す
+    - 保存後は筐体ビュー (reel.html, 主制御連動中) が WebSocket の symbolsUpdated を受けて自動で再読込する
+  http://localhost:8787/reel/symbol_editor.html で開くこと (file:// では保存できない)
+-->
+<style>
+  :root{
+    --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --frame-shadow:#0b1226;
+    --reel-bg:#fdfbf3; --reel-bg-image:none; --reel-bg-fit:center / cover no-repeat;   /* 図柄設定 (symbol_images.js) で変わる */ --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d; --ok:#6cc47f; --ng:#ff7f74;
+    --unit:900px;
+    --koma:calc(var(--unit) / 8.4);
+    --font-sym:"Yu Mincho","Hiragino Mincho ProN",serif;
+    --font-ui:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--frame-shadow);color:var(--text);font-family:var(--font-ui);}
+  main{max-width:1440px;margin:0 auto;padding:40px 48px 120px;display:flex;flex-direction:column;gap:40px;}
+  h1,h2{font-family:var(--font-sym);font-weight:700;letter-spacing:4px;color:var(--frame-bright);margin:0;line-height:1;}
+  h1{font-size:44px;} h2{font-size:28px;}
+  header,section>.head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;border-bottom:2px solid var(--frame-dim);padding-bottom:14px;}
+  .sub{font-size:13px;color:var(--sub);margin-top:8px;line-height:1.6;}
+  section{display:flex;flex-direction:column;gap:22px;}
+  button{background:#1e1a2c;border:1px solid var(--frame-dim);color:var(--text);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:12px;font-family:inherit;}
+  button:hover{border-color:var(--frame);} button:disabled{opacity:.4;cursor:default;}
+  button.primary{background:var(--frame);color:var(--frame-shadow);font-weight:700;border-color:var(--frame-bright);padding:10px 22px;font-size:14px;}
+  input[type=number]{width:70px;background:#08060a;border:1px solid #3a3348;color:var(--text);padding:5px 8px;border-radius:6px;font-size:13px;font-family:inherit;}
+  select{background:#08060a;border:1px solid #3a3348;color:var(--text);padding:5px 8px;border-radius:6px;font-size:13px;font-family:inherit;}
+  .window.checker{background-image:linear-gradient(45deg,#666 25%,transparent 25%,transparent 75%,#666 75%),linear-gradient(45deg,#666 25%,transparent 25%,transparent 75%,#666 75%);background-color:#999;background-size:20px 20px;background-position:0 0,10px 10px;}
+  input[type=color]{width:44px;height:28px;padding:0;border:1px solid #3a3348;border-radius:6px;background:#08060a;cursor:pointer;}
+  input[type=range]{width:120px;accent-color:var(--frame);}
+  a{color:var(--frame-bright);}
+  .row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);}
+  .row label{display:flex;align-items:center;gap:6px;}
+
+  /* ---- 図柄カード ---- */
+  .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;}
+  .card{display:flex;flex-direction:column;gap:10px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;position:relative;}
+  .card.selected{border-color:var(--frame);box-shadow:0 0 0 1px var(--frame);}
+  .card.dirty::after{content:"未保存";position:absolute;top:10px;right:12px;font-size:11px;color:var(--frame-shadow);background:var(--frame-bright);border-radius:4px;padding:2px 6px;}
+  .card .koma{position:static;height:var(--koma);border-bottom:none;display:flex;align-items:center;justify-content:center;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .card .name{display:flex;align-items:baseline;gap:10px;}
+  .card .name b{font-size:20px;} .card .name span{font-size:11px;letter-spacing:2px;color:var(--frame);}
+  .card .src{font-size:12px;color:var(--sub);}
+  .drop{border:1px dashed #3a4666;border-radius:6px;padding:12px;text-align:center;font-size:12px;color:var(--sub);cursor:pointer;transition:all .15s;}
+  .drop:hover,.drop.over{border-color:var(--frame);color:var(--text);background:rgba(201,162,74,.08);}
+  .drop input{display:none;}
+  .ctl{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;font-size:12px;color:var(--sub);}
+  .ctl output{font-variant-numeric:tabular-nums;min-width:44px;text-align:right;color:var(--text);}
+  .ctl input[type=range]{width:100%;}
+  .act{display:flex;gap:8px;flex-wrap:wrap;}
+  .msg{font-size:12px;min-height:1.4em;} .msg.ng{color:var(--ng);} .msg.ok{color:var(--ok);}
+
+  /* ---- リール窓 (symbols.html と同じ) ---- */
+  .unit{width:var(--unit);max-width:100%;}
+  .navi{display:flex;justify-content:space-around;padding:0 2% 6px;}
+  .navi span{width:1.6em;height:1.6em;border-radius:50%;font-size:calc(var(--unit) / 40);display:flex;align-items:center;justify-content:center;border:2px solid var(--frame-dim);background:#08060a;color:#3a3020;font-weight:700;}
+  .window{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;background:linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim));box-shadow:0 6px 0 var(--frame-shadow), inset 0 1px 0 rgba(255,255,255,.4);}
+  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;}
+  .reel::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent);}
+  .reel::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.45),transparent);}
+  .reel .line{position:absolute;left:0;right:0;top:var(--koma);height:var(--koma);z-index:2;pointer-events:none;}
+  .reel.hit .line{box-shadow:inset 0 0 0 3px rgba(241,210,122,.95), 0 0 18px rgba(241,210,122,.8);}
+  .reel.blur .strip{filter:blur(1.5px);}
+  .strip{position:absolute;left:0;right:0;top:0;}
+  .koma{position:absolute;left:0;right:0;height:var(--koma);display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(20,33,61,.12);}
+  .sym{display:block;width:var(--sym-w,82%);height:var(--sym-h,74%);}
+
+  /* ---- 保存バー ---- */
+  .savebar{position:fixed;left:0;right:0;bottom:0;z-index:10;display:flex;align-items:center;justify-content:center;gap:18px;padding:12px 24px;background:rgba(10,12,22,.94);border-top:1px solid rgba(201,162,74,.35);font-size:13px;}
+  .savebar .st{color:var(--sub);} .savebar .st.ok{color:var(--ok);} .savebar .st.ng{color:var(--ng);}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>図柄設定</h1>
+      <div class="sub">図柄画像の差し替えとリールの見た目をブラウザで調整し、「保存」で reel/img/&lt;id&gt;.png と reel/symbol_images.js に書き出す。
+        筐体ビュー・図柄カタログ・オーバーレイは再読込 (主制御連動中の筐体ビューは自動) で反映される。</div></div>
+    <div class="row"><a href="symbols.html">図柄カタログ</a><a href="reel.html" target="_blank">筐体ビュー</a></div>
+  </header>
+
+  <section id="sec-reel">
+    <div class="head"><div><h2>リール</h2><div class="sub">地色 (透過可)・リール面の背景画像・コマに対する図柄の大きさ。窓幅と市松は確認用 (保存しない)</div></div>
+      <div class="row">
+        <label>地色 <input type="color" id="reel-bg"><input type="text" id="reel-bg-hex" size="7" style="width:80px;background:#08060a;border:1px solid #3a3348;color:var(--text);padding:5px 8px;border-radius:6px;font-size:13px;"></label>
+        <label>図柄幅 <input type="number" id="sym-w" min="10" max="100"> %</label>
+        <label>図柄高さ <input type="number" id="sym-h" min="10" max="100"> %</label>
+        <label>窓幅 <input type="number" id="unit" min="300" max="1400" step="50" value="900"> px</label>
+        <label><input type="checkbox" id="blur"> 回転ブラー</label>
+        <label><input type="checkbox" id="checker"> 市松 (透過確認)</label>
+        <button type="button" id="reset-settings">既定に戻す</button>
+      </div></div>
+    <div class="row" id="reel-image-row">
+      <span>地色の不透明度</span><input type="range" id="reel-alpha" min="0" max="100" step="1"><output id="reel-alpha-out"></output>
+      <label class="drop" id="reel-drop" style="padding:8px 14px;">背景画像をドロップ / クリックして選択<input type="file" accept="image/*" id="reel-file"></label>
+      <label>敷き方 <select id="reel-fit">
+        <option value="cover">全面 (切り取り)</option><option value="contain">全体を収める</option><option value="stretch">引き伸ばし</option><option value="tile">タイル</option>
+      </select></label>
+      <button type="button" id="reel-reload">img/reel_bg.png を再読込</button>
+      <button type="button" id="reel-clear">背景画像を外す</button>
+      <span id="reel-msg" class="msg"></span>
+    </div>
+    <div class="row">
+      <label>中段 左 <input type="number" id="pos-0" min="0" value="0"></label>
+      <label>中 <input type="number" id="pos-1" min="0" value="0"></label>
+      <label>右 <input type="number" id="pos-2" min="0" value="0"></label>
+      <span id="meta"></span>
+    </div>
+    <div id="window"></div>
+  </section>
+
+  <section id="sec-symbols">
+    <div class="head"><div><h2>図柄</h2><div class="sub">カードに画像をドロップ、またはカードを選んで Ctrl+V で貼り付け。白などの単色背景は「背景を透過」で外周から抜く。
+      画像が無い図柄は symbols.js のベクター描画になる</div></div></div>
+    <div class="cards" id="cards"></div>
+  </section>
+</main>
+
+<div class="savebar">
+  <span class="st" id="save-st">変更なし</span>
+  <button type="button" id="discard">変更を取り消す</button>
+  <button type="button" class="primary" id="save">保存</button>
+</div>
+
+<script src="symbol_images.js"></script>
+<script src="symbols.js"></script>
+<script src="reel_window.js"></script>
+<script>
+(async function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const S = SlotSymbols;
+  const IDS = S.ORDER.map(n => S.INFO[n].id);
+  const NAME = Object.fromEntries(S.ORDER.map(n => [S.INFO[n].id, n]));
+  const THUMB_W = 600;     // symbol_images.js に入れる表示用画像の幅
+  const MAX_SRC = 2048;    // 加工時の元画像の最大辺 (これより大きい画像は縮小してから処理)
+  const PAD = 6;
+
+  // ---- 状態: SlotSymbolImages を直接編集し、symbols.js には install(doc, true) で反映させる ----
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const saved = { settings: S.settings(), images: clone(S.images()) };
+  const store = window.SlotSymbolImages = { settings: clone(saved.settings), images: clone(saved.images) };
+  const work = {};          // id → { bitmap, hasAlpha, removeBg, tol, png (data URL, 保存時に送る) , dirty, removed }
+  IDS.forEach(id => { work[id] = { bitmap: null, hasAlpha: true, removeBg: false, tol: 40, png: null, dirty: false, removed: false }; });
+  const reelWork = { png: null, removed: false };   // リール背景画像の保存用 (png: 新しい元画像 / removed: 外す)
+  const REEL_BG_W = 1024;                            // 表示用 (data URI) の最大辺
+  let selected = null;
+
+  const dirtyIds = () => IDS.filter(id => work[id].dirty);
+  const settingsDirty = () => JSON.stringify(store.settings) !== JSON.stringify(saved.settings) || !!reelWork.png || reelWork.removed;
+  function refreshSaveBar(){
+    const n = dirtyIds().length, sd = settingsDirty();
+    const st = $("save-st");
+    st.className = "st";
+    st.textContent = (n || sd) ? `未保存: ${[n ? `図柄 ${n}件` : "", sd ? "リール" : ""].filter(Boolean).join(" / ")}` : "変更なし";
+    $("save").disabled = $("discard").disabled = !(n || sd);
+  }
+  function rerender(){ S.install(document, true); refreshSaveBar(); }
+
+  // ---- リール設定 ----
+  function bindSettings(){
+    const s = store.settings;
+    $("reel-bg").value = s.reelBg; $("reel-bg-hex").value = s.reelBg; $("sym-w").value = s.symW; $("sym-h").value = s.symH;
+    const a = Math.round((s.reelBgAlpha == null ? 1 : s.reelBgAlpha) * 100);
+    $("reel-alpha").value = a; $("reel-alpha-out").textContent = a + "%";
+    $("reel-fit").value = s.reelBgFit || "cover";
+    $("reel-fit").disabled = $("reel-clear").disabled = !s.reelBgImage;
+    $("reel-drop").firstChild.textContent = s.reelBgImage ? "背景画像: 設定済み (ドロップで差し替え)" : "背景画像をドロップ / クリックして選択";
+  }
+  const setReelMsg = (t, cls) => { const m = $("reel-msg"); m.textContent = t; m.className = "msg " + (cls || ""); };
+  /** リール背景画像を読み込み、表示用 (縮小 WebP) と保存用 (PNG) を作る。透過 PNG はそのまま透過で保持する */
+  async function loadReelImage(blob, label){
+    let bm; try{ bm = await createImageBitmap(blob); }catch(e){ setReelMsg("画像として読めません: " + (blob.name || label || ""), "ng"); return; }
+    const k = Math.min(1, MAX_SRC / Math.max(bm.width, bm.height));
+    const full = canvasOf(Math.round(bm.width * k), Math.round(bm.height * k));
+    full.getContext("2d").drawImage(bm, 0, 0, full.width, full.height);
+    const k2 = Math.min(1, REEL_BG_W / Math.max(full.width, full.height));
+    const small = canvasOf(Math.round(full.width * k2), Math.round(full.height * k2));
+    small.getContext("2d").drawImage(full, 0, 0, small.width, small.height);
+    store.settings.reelBgImage = await toDataURL(small, "image/webp", 0.85);
+    reelWork.png = await toDataURL(full, "image/png"); reelWork.removed = false;
+    setReelMsg(`${label || blob.name || "画像"} (${bm.width}×${bm.height}) → 表示用 ${small.width}×${small.height} (${Math.round(store.settings.reelBgImage.length * 0.75 / 1024)}KB)`, "ok");
+    bindSettings(); applySettings();
+  }
+  $("reel-alpha").addEventListener("input", ()=>{ store.settings.reelBgAlpha = Number($("reel-alpha").value) / 100; $("reel-alpha-out").textContent = $("reel-alpha").value + "%"; applySettings(); });
+  $("reel-fit").addEventListener("change", ()=>{ store.settings.reelBgFit = $("reel-fit").value; applySettings(); });
+  $("reel-file").addEventListener("change", e => { if(e.target.files[0]) loadReelImage(e.target.files[0]); e.target.value = ""; });
+  $("reel-drop").addEventListener("dragover", e => { e.preventDefault(); $("reel-drop").classList.add("over"); });
+  $("reel-drop").addEventListener("dragleave", ()=> $("reel-drop").classList.remove("over"));
+  $("reel-drop").addEventListener("drop", e => { e.preventDefault(); $("reel-drop").classList.remove("over"); const f = [...e.dataTransfer.files].find(f => f.type.startsWith("image/")); if(f) loadReelImage(f); });
+  $("reel-reload").addEventListener("click", async ()=>{
+    const r = await fetch(`img/reel_bg.png?t=${Date.now()}`, { cache: "no-store" });
+    if(!r.ok){ setReelMsg(`img/reel_bg.png がありません (${r.status})`, "ng"); return; }
+    await loadReelImage(await r.blob(), "img/reel_bg.png");
+  });
+  $("reel-clear").addEventListener("click", ()=>{ store.settings.reelBgImage = ""; reelWork.png = null; reelWork.removed = true; setReelMsg("背景画像を外します (保存で img/reel_bg.png も削除)", ""); bindSettings(); applySettings(); });
+  $("checker").addEventListener("change", ()=> document.querySelectorAll("#window .window").forEach(el => el.classList.toggle("checker", $("checker").checked)));
+  function applySettings(){
+    S.applySettings(document, store.settings);
+    refreshSaveBar();
+  }
+  $("reel-bg").addEventListener("input", ()=>{ store.settings.reelBg = $("reel-bg").value; $("reel-bg-hex").value = store.settings.reelBg; applySettings(); });
+  $("reel-bg-hex").addEventListener("change", ()=>{ const v = $("reel-bg-hex").value.trim(); if(/^#[0-9a-fA-F]{6}$/.test(v)){ store.settings.reelBg = v.toLowerCase(); $("reel-bg").value = v; applySettings(); } else $("reel-bg-hex").value = store.settings.reelBg; });
+  $("sym-w").addEventListener("input", ()=>{ store.settings.symW = Math.min(100, Math.max(10, Number($("sym-w").value) || 82)); applySettings(); });
+  $("sym-h").addEventListener("input", ()=>{ store.settings.symH = Math.min(100, Math.max(10, Number($("sym-h").value) || 74)); applySettings(); });
+  $("reset-settings").addEventListener("click", ()=>{ store.settings = clone(S.DEFAULT_SETTINGS); reelWork.png = null; reelWork.removed = !!saved.settings.reelBgImage; setReelMsg("", ""); bindSettings(); applySettings(); });
+  $("unit").addEventListener("input", ()=>{ document.documentElement.style.setProperty("--unit", $("unit").value + "px"); requestAnimationFrame(refreshWindow); });
+  $("blur").addEventListener("change", ()=> document.querySelectorAll(".reel").forEach(el => el.classList.toggle("blur", $("blur").checked)));
+  bindSettings(); applySettings();
+
+  // ---- リール窓 ----
+  let data = null, views = [];
+  try{ data = await SlotReels.load("../main_board/reels.json"); }
+  catch(e){ $("meta").textContent = "配列を読めません: " + e.message + "（8787 経由で開いていますか）"; }
+  if(data){
+    views = SlotReels.buildWindow($("window"), data);
+    $("meta").textContent = `1リール${data.koma}コマ`;
+    ["pos-0","pos-1","pos-2"].forEach(id => { $(id).max = data.koma - 1; $(id).addEventListener("input", refreshWindow); });
+  }
+  function refreshWindow(){
+    views.forEach((v,i) => v.setPos(Number($(`pos-${i}`).value) || 0));
+    SlotReels.highlight(views);
+  }
+  refreshWindow();
+
+  // ---- 画像の加工 ----
+  function removeBackground(img, tol){
+    const { width: w, height: h, data } = img;
+    const c = [[0,0],[w-1,0],[0,h-1],[w-1,h-1]].map(([x,y]) => (y*w+x)*4);
+    const bg = [0,1,2].map(k => Math.round(c.reduce((a,i)=> a + data[i+k], 0) / 4));
+    const lim = tol * 3;
+    const seen = new Uint8Array(w*h);
+    const stack = new Int32Array(w*h); let sp = 0;
+    for(let x=0;x<w;x++){ stack[sp++] = x; stack[sp++] = (h-1)*w + x; }
+    for(let y=0;y<h;y++){ stack[sp++] = y*w; stack[sp++] = y*w + w-1; }
+    while(sp){
+      const i = stack[--sp];
+      if(seen[i]) continue; seen[i] = 1;
+      const p = i*4;
+      if(Math.abs(data[p]-bg[0]) + Math.abs(data[p+1]-bg[1]) + Math.abs(data[p+2]-bg[2]) > lim) continue;
+      data[p+3] = 0;
+      const x = i % w, y = (i - x) / w;
+      if(x > 0 && !seen[i-1]) stack[sp++] = i-1;
+      if(x < w-1 && !seen[i+1]) stack[sp++] = i+1;
+      if(y > 0 && !seen[i-w]) stack[sp++] = i-w;
+      if(y < h-1 && !seen[i+w]) stack[sp++] = i+w;
+    }
+  }
+  function alphaBox(img){
+    const { width: w, height: h, data } = img;
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++) if(data[(y*w+x)*4+3] > 8){ if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }
+    return x1 < 0 ? null : [x0, y0, x1+1, y1+1];
+  }
+  const canvasOf = (w,h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+  const toDataURL = (canvas, type, q) => new Promise(res => canvas.toBlob(b => { const r = new FileReader(); r.onload = ()=> res(r.result); r.readAsDataURL(b); }, type, q));
+
+  /** work[id].bitmap を加工し、store.images[id] (表示用) と work[id].png (保存用元画像) を更新する */
+  async function process(id){
+    const wk = work[id];
+    if(!wk.bitmap) return;
+    const bm = wk.bitmap;
+    const k = Math.min(1, MAX_SRC / Math.max(bm.width, bm.height));
+    const w = Math.round(bm.width * k), h = Math.round(bm.height * k);
+    const c = canvasOf(w, h), ctx = c.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(bm, 0, 0, w, h);
+    const img = ctx.getImageData(0, 0, w, h);
+    if(wk.removeBg) removeBackground(img, wk.tol);
+    const box = alphaBox(img);
+    if(!box){ setMsg(id, "画像が全て透明です", "ng"); return; }
+    const [x0,y0,x1,y1] = [Math.max(0,box[0]-PAD), Math.max(0,box[1]-PAD), Math.min(w,box[2]+PAD), Math.min(h,box[3]+PAD)];
+    const cw = x1-x0, ch = y1-y0;
+    const crop = canvasOf(cw, ch);
+    ctx.putImageData(img, 0, 0);
+    crop.getContext("2d").drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+    const tw = Math.min(THUMB_W, cw), th = Math.round(ch * tw / cw);
+    const thumb = canvasOf(tw, th);
+    thumb.getContext("2d").drawImage(crop, 0, 0, tw, th);
+    const prev = store.images[id] || {};
+    const src = await toDataURL(thumb, "image/webp", 0.9);
+    store.images[id] = { w: tw, h: th, scale: prev.scale || 1, dx: prev.dx || 0, dy: prev.dy || 0, src };
+    wk.png = await toDataURL(crop, "image/png");
+    wk.dirty = true; wk.removed = false;
+    setMsg(id, `${cw}×${ch}px を切り抜き → 表示用 ${tw}×${th} (${Math.round(src.length * 0.75 / 1024)}KB)`, "ok");
+    rerender(); updateCard(id);
+  }
+
+  async function loadBitmap(id, blob, label){
+    let bm;
+    try{ bm = await createImageBitmap(blob); }
+    catch(e){ setMsg(id, "画像として読めません: " + (blob.name || label || ""), "ng"); return; }
+    const wk = work[id];
+    wk.bitmap = bm;
+    // 透過が無い画像 (JPEG や白背景 PNG) は背景の透過を既定でオン
+    const c = canvasOf(Math.min(bm.width, 256), Math.min(bm.height, 256));
+    c.getContext("2d").drawImage(bm, 0, 0, c.width, c.height);
+    const a = c.getContext("2d").getImageData(0, 0, c.width, c.height).data;
+    let hasAlpha = false; for(let i=3;i<a.length;i+=4) if(a[i] < 250){ hasAlpha = true; break; }
+    wk.hasAlpha = hasAlpha; wk.removeBg = !hasAlpha;
+    setMsg(id, `${label || blob.name || "画像"} (${bm.width}×${bm.height}) を読み込みました`, "");
+    updateCard(id);
+    await process(id);
+  }
+
+  async function reloadOriginal(id){
+    setMsg(id, "img/" + id + ".png を読み込み中...", "");
+    const r = await fetch(`img/${id}.png?t=${Date.now()}`, { cache: "no-store" });
+    if(!r.ok){ setMsg(id, `img/${id}.png がありません (${r.status})`, "ng"); return; }
+    await loadBitmap(id, await r.blob(), `img/${id}.png`);
+  }
+
+  // ---- カード ----
+  function card(id){
+    const n = NAME[id], i = S.INFO[n];
+    return `<div class="card" data-id="${id}" tabindex="0">
+      <div class="koma">${S.use(n)}</div>
+      <div class="name"><b>${n}</b><span>${i.en}</span></div>
+      <div class="src" data-src></div>
+      <label class="drop" data-drop>画像をドロップ / クリックして選択 / 選択して Ctrl+V<input type="file" accept="image/*" data-file></label>
+      <div class="ctl">
+        <label><input type="checkbox" data-removebg> 背景を透過</label><input type="range" data-tol min="0" max="120" step="4"><output data-tol-out></output>
+        <span>拡大率</span><input type="range" data-scale min="0.3" max="1.6" step="0.01"><output data-scale-out></output>
+        <span>横位置</span><input type="range" data-dx min="-80" max="80" step="1"><output data-dx-out></output>
+        <span>縦位置</span><input type="range" data-dy min="-30" max="30" step="1"><output data-dy-out></output>
+      </div>
+      <div class="act">
+        <button type="button" data-reload>img/${id}.png を再読込</button>
+        <button type="button" data-vector>ベクターに戻す</button>
+        <button type="button" data-revert>取り消し</button>
+      </div>
+      <div class="msg" data-msg></div>
+    </div>`;
+  }
+  $("cards").innerHTML = IDS.map(card).join("");
+  const cardEl = id => document.querySelector(`.card[data-id="${id}"]`);
+  const q = (id, sel) => cardEl(id).querySelector(sel);
+  function setMsg(id, text, cls){ const m = q(id, "[data-msg]"); m.textContent = text; m.className = "msg " + (cls || ""); }
+
+  function updateCard(id){
+    const wk = work[id], m = store.images[id], el = cardEl(id);
+    el.classList.toggle("dirty", wk.dirty);
+    const srcEl = q(id, "[data-src]");
+    srcEl.textContent = m ? `画像 ${m.w}×${m.h}${wk.png ? " (新しい画像)" : ""}` : "ベクター描画 (symbols.js)";
+    q(id, "[data-removebg]").checked = wk.removeBg;
+    q(id, "[data-removebg]").disabled = q(id, "[data-tol]").disabled = !wk.bitmap;
+    q(id, "[data-tol]").value = wk.tol; q(id, "[data-tol-out]").textContent = wk.tol;
+    const sc = m ? (m.scale || 1) : 1, dx = m ? (m.dx || 0) : 0, dy = m ? (m.dy || 0) : 0;
+    q(id, "[data-scale]").value = sc; q(id, "[data-scale-out]").textContent = Math.round(sc * 100) + "%";
+    q(id, "[data-dx]").value = dx; q(id, "[data-dx-out]").textContent = dx;
+    q(id, "[data-dy]").value = dy; q(id, "[data-dy-out]").textContent = dy;
+    [...el.querySelectorAll("[data-scale],[data-dx],[data-dy]")].forEach(r => r.disabled = !m);
+    q(id, "[data-vector]").disabled = !m;
+    q(id, "[data-revert]").disabled = !wk.dirty;
+  }
+  IDS.forEach(updateCard);
+
+  function select(id){
+    selected = id;
+    document.querySelectorAll(".card").forEach(el => el.classList.toggle("selected", el.dataset.id === id));
+  }
+  let tolTimer = null;
+  $("cards").addEventListener("input", e => {
+    const el = e.target.closest(".card"); if(!el) return;
+    const id = el.dataset.id, wk = work[id], t = e.target;
+    if(t.matches("[data-removebg]")){ wk.removeBg = t.checked; process(id); }
+    else if(t.matches("[data-tol]")){ wk.tol = Number(t.value); q(id, "[data-tol-out]").textContent = wk.tol; clearTimeout(tolTimer); tolTimer = setTimeout(()=> process(id), 150); }
+    else if(t.matches("[data-scale],[data-dx],[data-dy]")){
+      const m = store.images[id]; if(!m) return;
+      if(t.matches("[data-scale]")) m.scale = Number(t.value); else if(t.matches("[data-dx]")) m.dx = Number(t.value); else m.dy = Number(t.value);
+      wk.dirty = true; rerender(); updateCard(id);
+    }
+  });
+  $("cards").addEventListener("change", e => {
+    const el = e.target.closest(".card"); if(!el) return;
+    if(e.target.matches("[data-file]") && e.target.files[0]){ loadBitmap(el.dataset.id, e.target.files[0]); e.target.value = ""; }
+  });
+  $("cards").addEventListener("click", e => {
+    const el = e.target.closest(".card"); if(!el) return;
+    const id = el.dataset.id; select(id);
+    const b = e.target.closest("button"); if(!b) return;
+    if(b.matches("[data-reload]")) reloadOriginal(id);
+    else if(b.matches("[data-vector]")){ delete store.images[id]; const wk = work[id]; wk.png = null; wk.bitmap = null; wk.dirty = true; wk.removed = true; setMsg(id, "ベクター描画に戻します (保存で img/" + id + ".png も削除)", ""); rerender(); updateCard(id); }
+    else if(b.matches("[data-revert]")){
+      const wk = work[id];
+      if(saved.images[id]) store.images[id] = clone(saved.images[id]); else delete store.images[id];
+      wk.png = null; wk.bitmap = null; wk.dirty = false; wk.removed = false;
+      setMsg(id, "", ""); rerender(); updateCard(id);
+    }
+  });
+  $("cards").addEventListener("focusin", e => { const el = e.target.closest(".card"); if(el) select(el.dataset.id); });
+  // ドラッグ&ドロップ
+  $("cards").addEventListener("dragover", e => { const d = e.target.closest("[data-drop]"); if(d){ e.preventDefault(); d.classList.add("over"); } });
+  $("cards").addEventListener("dragleave", e => { const d = e.target.closest("[data-drop]"); if(d) d.classList.remove("over"); });
+  $("cards").addEventListener("drop", e => {
+    const d = e.target.closest("[data-drop]"); if(!d) return;
+    e.preventDefault(); d.classList.remove("over");
+    const f = [...e.dataTransfer.files].find(f => f.type.startsWith("image/"));
+    if(f) loadBitmap(d.closest(".card").dataset.id, f);
+  });
+  // クリップボード貼り付け (選択中のカードへ)
+  document.addEventListener("paste", e => {
+    if(!selected) return;
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith("image/"));
+    if(!item) return;
+    e.preventDefault();
+    loadBitmap(selected, item.getAsFile(), "クリップボード");
+  });
+
+  // ---- 保存 / 取り消し ----
+  $("save").addEventListener("click", async ()=>{
+    const images = {};
+    for(const id of dirtyIds()){
+      const wk = work[id], m = store.images[id];
+      images[id] = wk.removed || !m ? null : { src: m.src, w: m.w, h: m.h, scale: m.scale, dx: m.dx, dy: m.dy, ...(wk.png ? { png: wk.png } : {}) };
+    }
+    const st = $("save-st"); st.className = "st"; st.textContent = "保存中..."; $("save").disabled = true;
+    try{
+      const reelImage = reelWork.removed ? null : (reelWork.png ? { png: reelWork.png, src: store.settings.reelBgImage } : undefined);
+      const r = await fetch("/api/symbols", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ settings: store.settings, images, reelImage }) });
+      const j = await r.json().catch(()=> ({}));
+      if(!r.ok || !j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+      saved.settings = clone(store.settings); saved.images = clone(store.images);
+      reelWork.png = null; reelWork.removed = false; setReelMsg("", ""); bindSettings();
+      IDS.forEach(id => { const wk = work[id]; wk.dirty = false; wk.removed = false; wk.png = null; updateCard(id); });
+      refreshSaveBar();
+      st.className = "st ok"; st.textContent = `保存しました (画像: ${j.written.length}件更新 / ${j.removed.length}件削除)。筐体ビュー・カタログは再読込で反映`;
+    }catch(e){
+      st.className = "st ng"; st.textContent = "保存できません: " + e.message + "（8787 経由で開いていますか / サーバーは起動していますか）"; $("save").disabled = false;
+    }
+  });
+  $("discard").addEventListener("click", ()=>{
+    store.settings = clone(saved.settings); store.images = clone(saved.images);
+    reelWork.png = null; reelWork.removed = false; setReelMsg("", "");
+    IDS.forEach(id => { const wk = work[id]; wk.png = null; wk.bitmap = null; wk.dirty = false; wk.removed = false; setMsg(id, "", ""); });
+    bindSettings(); applySettings(); rerender(); IDS.forEach(updateCard);
+  });
+  window.addEventListener("beforeunload", e => { if(dirtyIds().length || settingsDirty()){ e.preventDefault(); e.returnValue = ""; } });
+
+  // テスト・スクリプト用
+  window.SymbolEditor = { store, work, reelWork, loadBitmap, reloadOriginal, process, loadReelImage };
+  refreshSaveBar();
+})();
+</script>
+</body>
+</html>
