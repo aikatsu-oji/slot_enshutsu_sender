@@ -30,7 +30,7 @@
   /* ---- 図柄一覧 ---- */
   .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
   .card{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;}
-  .card .koma{position:static;height:var(--koma);border-bottom:none;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .card .koma{position:static;height:var(--koma);border-bottom:none;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:var(--reel-edge,inset 0 0 0 1px rgba(0,0,0,.25));}
   .card .name{display:flex;align-items:baseline;gap:10px;}
   .card .name b{font-size:20px;} .card .name span{font-size:11px;letter-spacing:2px;color:var(--frame);}
   .card .role{font-size:13px;font-weight:700;} .card .pay{font-size:12px;color:var(--frame-bright);}
@@ -46,18 +46,17 @@
   }
   .navi span.on{background:var(--frame-bright);color:var(--frame-shadow);border-color:#fff3c8;box-shadow:0 0 14px var(--frame-bright);}
   .window{
-    display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:6px;
-    background:linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim));
-    box-shadow:0 6px 0 var(--frame-shadow), inset 0 1px 0 rgba(255,255,255,.4);
+    display:grid;grid-template-columns:repeat(3,1fr);gap:var(--frame-gap,6px);padding:var(--frame-pad,6px);
+    background:var(--window-bg,linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim)));box-shadow:var(--window-shadow,0 6px 0 var(--frame-shadow));border-radius:var(--frame-radius,0);   /* 図柄設定で変わる */
   }
-  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:var(--reel-edge,inset 0 0 0 1px rgba(0,0,0,.25));}
   .reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;}
-  .reel::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent);}
-  .reel::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.45),transparent);}
+  .reel::before{top:0;background:var(--reel-shade-top,linear-gradient(180deg,rgba(0,0,0,.45),transparent));}
+  .reel::after{bottom:0;background:var(--reel-shade-bottom,linear-gradient(0deg,rgba(0,0,0,.45),transparent));}
   .reel .line{position:absolute;left:0;right:0;top:var(--koma);height:var(--koma);z-index:2;pointer-events:none;}
   .reel.hit .line{box-shadow:inset 0 0 0 3px rgba(241,210,122,.95), 0 0 18px rgba(241,210,122,.8);}
   .strip{position:absolute;left:0;right:0;top:0;}
-  .koma{position:absolute;left:0;right:0;height:var(--koma);display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(20,33,61,.12);}
+  .koma{position:absolute;left:0;right:0;height:var(--koma);display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--koma-line,rgba(20,33,61,.12));}
   .sym{display:block;width:var(--sym-w,82%);height:var(--sym-h,74%);}   /* 図柄設定 (symbol_images.js の settings) で変わる */
 
   /* ---- リール配列表 ---- */
