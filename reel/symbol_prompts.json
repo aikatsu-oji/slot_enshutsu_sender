@@ -1,0 +1,38 @@
+{
+  "_comment": "gen_symbol_images.py が読む図柄生成プロンプト。id は symbols.js の INFO と同じ。{style} には style が、{subject} には各図柄の subject が入る",
+  "style": "Japanese pachislot reel symbol, single object centered, front view, glossy enamel plate with beveled dark metal rim, ornate gold filigree flourishes in the corners, crackled metallic foil texture, dramatic highlights, high detail, clean edges, no text except the symbol itself, no watermark",
+  "background": "isolated on a plain pure white background, nothing else in the frame",
+  "size": "1024x1024",
+  "symbols": [
+    {
+      "id": "god",
+      "name": "神",
+      "subject": "a wide horizontal rectangular red lacquer plaque framed in thick gold, with the single large kanji 神 painted in bold gold calligraphy in the center"
+    },
+    {
+      "id": "seven",
+      "name": "赤7",
+      "subject": "a large stylized number 7 in deep ruby red crackled foil, with a smiling anime girl in ornate gold armor with a white headband and hair flower shown from the shoulders up inside the lower half of the 7"
+    },
+    {
+      "id": "bell",
+      "name": "ベル",
+      "subject": "a large stylized number 7 in bright gold crackled foil, with a smiling anime girl in ornate gold armor with a white headband and hair flower shown from the shoulders up inside the lower half of the 7"
+    },
+    {
+      "id": "rep",
+      "name": "リプ",
+      "subject": "a large stylized number 7 in deep sapphire blue crackled foil, with a smiling anime girl in ornate blue armor with a white headband and hair flower shown from the shoulders up inside the lower half of the 7"
+    },
+    {
+      "id": "melon",
+      "name": "スイカ",
+      "subject": "a large stylized number 7 in emerald green crackled foil, with a smiling anime girl in ornate gold armor with a white headband and hair flower shown from the shoulders up inside the lower half of the 7"
+    },
+    {
+      "id": "blank",
+      "name": "ブランク",
+      "subject": "a plain wide horizontal rectangular plate in matte cream and beige diagonal stripes with a thin dark rim, deliberately understated, no character, no number"
+    }
+  ]
+}

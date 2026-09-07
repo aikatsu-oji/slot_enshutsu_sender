@@ -20,3 +20,6 @@ desktop.ini
 # エディタ / Claude Code の設定 (元ファイルは scripts/config/ にあり、scripts\migrate_layout.bat が配置する)
 .vscode/
 .claude/
+
+# 画像生成 AI の生成元画像 (reel/gen_symbol_images.py)。差し替え済みの reel/img/<id>.png だけ管理する
+reel/img/raw/
