@@ -12,7 +12,7 @@
   restart [-Mode ...]                      stop → start
   status                                   ポート/ヘルスチェック/PIDの状態を表示
   test                                     主制御・副制御の単体テスト(通信なし)。setup.bat と同じ内容
-  open                                     コンパネ / オーバーレイ / 筐体ビューをアプリウィンドウで開く
+  open                                     コンパネ / オーバーレイをアプリウィンドウで開く(リールは液晶内)
   send    <action|json>                    中継サーバーへ1件送る  例: send triggerEnshutsu / send '{"action":"playUpToLock2"}'
   logs    [-Tail 40]                       .run\ 配下のログ末尾を表示
   help
@@ -179,7 +179,7 @@ function Do-Status {
   Write-Host ""
   Write-Host "コンパネ     $BaseUrl/control/main_control.html"
   Write-Host "オーバーレイ $BaseUrl/enshutsu/enshutsu_overlay.html   (OBS ブラウザソース用)"
-  Write-Host "筐体ビュー   $BaseUrl/reel/reel.html?mode=link&hidebar=1"
+  Write-Host "筐体ビュー   $BaseUrl/reel/reel.html?mode=link&hidebar=1   (単体表示用。通常はオーバーレイの液晶内に埋め込み)"
   exit $(if ($s) { 0 } else { 1 })
 }
 
@@ -217,10 +217,11 @@ function Do-Open {
     "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
     "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
   ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+  # 筐体ビュー(reel.html)はオーバーレイが iframe で液晶内に読み込むので、単独では開かない。
+  # 単体で見たいときは $BaseUrl/reel/reel.html?mode=link&hidebar=1 を直接開く。
   $pages = @(
     @("$BaseUrl/control/main_control.html", "480,900", "0,0"),
-    @("$BaseUrl/enshutsu/enshutsu_overlay.html", "960,576", "520,0"),
-    @("$BaseUrl/reel/reel.html?mode=link&hidebar=1", "420,980", "1490,0")
+    @("$BaseUrl/enshutsu/enshutsu_overlay.html", "1280,720", "520,0")
   )
   foreach ($pg in $pages) {
     if ($browser) { Start-Process $browser -ArgumentList @("--new-window", "--app=$($pg[0])", "--window-size=$($pg[1])", "--window-position=$($pg[2])") }
