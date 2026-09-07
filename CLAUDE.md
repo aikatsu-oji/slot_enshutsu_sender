@@ -19,7 +19,12 @@ slot_enshutsu_sender/
 │   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)
 ├── reel/
 │   ├── reel.html                筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
-│   ├── symbols.js               図柄定義 (SVG スプライト、viewBox 240×80)。globalThis.SlotSymbols
+│   ├── symbols.js               図柄定義 (SVG スプライト、viewBox 240×80)。globalThis.SlotSymbols。画像がある図柄は <image>
+│   ├── symbol_images.js         画像図柄の data URI (build_symbol_images.py が生成。手で編集しない)。symbols.js より先に読む
+│   ├── img/<id>.png             図柄の元画像 (透過 PNG)。god/seven/bell/rep/melon/blank。raw/ は生成 AI の出力 (git 管理外)
+│   ├── build_symbol_images.py   img/<id>.png → symbol_images.js (切り抜き・縮小・256色)
+│   ├── gen_symbol_images.py     画像生成 AI (OPENAI_API_KEY / GEMINI_API_KEY) で図柄を1枚ずつ生成 → 背景除去 → build まで自動
+│   ├── symbol_prompts.json      gen_symbol_images.py のプロンプト (図柄ごとの subject と共通 style)
 │   ├── reel_window.js           リール窓の DOM 構築・停止位置描画 (ReelView)、reels.json の読込。globalThis.SlotReels
 │   └── symbols.html             図柄カタログ。全図柄・リール窓の停止形・配列表の確認と SVG/PNG 書き出し
 ├── enshutsu/
@@ -69,6 +74,8 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
 - `-Mode fast` (0.5 秒/G・設定 6) は動作確認向け。`normal` は実機ウェイト 4.1 秒/G。
 - コード変更後は必ず `scripts\dev.cmd test` を通してから `restart` する。
+- 図柄の差し替え: `py -3 reel\gen_symbol_images.py [--only bell,seven] [--ref reel\imgell.png] [--design C:\slot_design]`。
+  手持ちの画像を使うなら `reel\img\<id>.png` に置いて `py -3 reeluild_symbol_images.py`。ブラウザ再読込で反映。
 - 主制御単体の挙動確認: `py -3 main_board\god_main_board.py --games 2000 --seed 1 --no-panel` (通信なし、集計のみ)。
   `--trace N` で 1G ごとのログ、`--events N` で副制御イベントを JSON 出力。
 

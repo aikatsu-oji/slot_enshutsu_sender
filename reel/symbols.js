@@ -5,8 +5,18 @@
 //   - ページには sprite() を1回だけ挿入し、各コマは use() で <use href="#sym-xxx"> 参照する
 //     (1リール21コマ + 継ぎ目複製で 26要素 × 3リール = 78個。丸ごと埋め込むと gradient の id が衝突する)
 //   - 通常スクリプトとして読み込む。globalThis.SlotSymbols に公開 (node からも import './symbols.js' で使える)
+//   - symbol_images.js (data URI) を先に読み込むと、画像がある図柄は <image> で描く。無い図柄は従来のベクター描画
+//     画像は reel/img/<id>.png → build_symbol_images.py。画像生成 AI で作るなら gen_symbol_images.py
 (function (root) {
   "use strict";
+
+  const IMG = root.SlotSymbolImages || {};
+  /** 画像を viewBox いっぱいに収める <image> (縦横比維持・中央寄せ) */
+  function image(key) {
+    const m = IMG[key];
+    if (!m) return null;
+    return `<image href="${m.src}" x="0" y="0" width="240" height="80" preserveAspectRatio="xMidYMid meet"></image>`;
+  }
 
   const C = {
     frame: "#c9a24a", frameBright: "#f1d27a", frameDim: "#7d6328", frameShadow: "#0b1226",
@@ -33,7 +43,7 @@
 
   // 図柄の中身 (viewBox 240×80 座標系)。gradient の id は図柄ごとに一意
   const BODY = {
-    "神": `
+    "神": image("god") || `
 <defs><linearGradient id="g-god" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff3c8"></stop><stop offset="0.45" stop-color="${C.frameBright}"></stop><stop offset="1" stop-color="${C.frame}"></stop></linearGradient></defs>
 <rect x="14" y="4" width="212" height="70" rx="8" fill="${C.frameDim}"></rect>
 <rect x="14" y="2" width="212" height="68" rx="8" fill="url(#g-god)" stroke="${C.frameDim}" stroke-width="2"></rect>
@@ -41,18 +51,18 @@
 <rect x="28" y="15" width="184" height="42" rx="3" fill="none" stroke="${C.frameBright}" stroke-width="1.5" opacity="0.7"></rect>
 <text x="120" y="54" text-anchor="middle" font-family="${FONT_SYM}" font-weight="700" font-size="40" fill="${C.redDk}">神</text>
 <text x="120" y="52" text-anchor="middle" font-family="${FONT_SYM}" font-weight="700" font-size="40" fill="${C.frameBright}">神</text>`,
-    "赤7": `
+    "赤7": image("seven") || `
 <defs><linearGradient id="g-seven" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.redHi}"></stop><stop offset="0.5" stop-color="${C.red}"></stop><stop offset="1" stop-color="${C.redDk}"></stop></linearGradient></defs>
 <path d="M66,13 H190 L194,27 L130,79 H94 L152,29 H70 Z" fill="${C.redDk}"></path>
 <path d="M66,10 H190 L194,24 L130,76 H94 L152,26 H70 Z" fill="url(#g-seven)" stroke="${C.white}" stroke-width="2.5" stroke-linejoin="round"></path>
 <path d="M76,15 H182 L179,20 H80 Z" fill="${C.white}" opacity="0.55"></path>`,
-    "ベル": `
+    "ベル": image("bell") || `
 <defs><radialGradient id="g-bell" cx="0.5" cy="0.35" r="0.65"><stop offset="0" stop-color="${C.yellowHi}"></stop><stop offset="0.6" stop-color="${C.yellow}"></stop><stop offset="1" stop-color="${C.yellowDk}"></stop></radialGradient></defs>
 <circle cx="120" cy="11" r="6" fill="${C.yellow}" stroke="${C.yellowInk}" stroke-width="2"></circle>
 <path d="M90,58 Q88,26 120,20 Q152,26 150,58 L162,68 H78 Z" fill="url(#g-bell)" stroke="${C.yellowInk}" stroke-width="2" stroke-linejoin="round"></path>
 <circle cx="120" cy="72" r="6.5" fill="${C.yellowDk}" stroke="${C.yellowInk}" stroke-width="2"></circle>
 <path d="M102,38 Q108,27 118,26" fill="none" stroke="${C.white}" stroke-width="4" stroke-linecap="round" opacity="0.7"></path>`,
-    "リプ": `
+    "リプ": image("rep") || `
 <defs><linearGradient id="g-rep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.blueHi}"></stop><stop offset="1" stop-color="${C.blue}"></stop></linearGradient></defs>
 <rect x="46" y="18" width="148" height="44" rx="22" fill="url(#g-rep)" stroke="${C.white}" stroke-width="2"></rect>
 <path d="M66,46 A16,16 0 0 1 92,30" fill="none" stroke="${C.blueInk}" stroke-width="5" stroke-linecap="round"></path>
@@ -60,7 +70,7 @@
 <path d="M92,22 L102,31 L88,36 Z" fill="${C.blueInk}"></path>
 <path d="M70,58 L60,49 L74,44 Z" fill="${C.blueInk}"></path>
 <text x="148" y="50" text-anchor="middle" font-family="${FONT_BOLD}" font-size="28" letter-spacing="3" fill="${C.blueInk}">RP</text>`,
-    "スイカ": `
+    "スイカ": image("melon") || `
 <path d="M58,70 A62,62 0 0 1 182,70 Z" fill="${C.greenDk}"></path>
 <path d="M68,70 A52,52 0 0 1 172,70 Z" fill="${C.greenHi}"></path>
 <path d="M76,70 A44,44 0 0 1 164,70 Z" fill="${C.red}"></path>
@@ -69,7 +79,7 @@
 <ellipse cx="136" cy="52" rx="3.5" ry="6" fill="${C.frameShadow}" transform="rotate(20 136 52)"></ellipse>
 <ellipse cx="120" cy="60" rx="3.5" ry="6" fill="${C.frameShadow}"></ellipse>
 <line x1="56" y1="70" x2="184" y2="70" stroke="${C.greenDk}" stroke-width="3" stroke-linecap="round"></line>`,
-    "ブランク": `
+    "ブランク": image("blank") || `
 <defs><pattern id="p-blank" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(135)"><rect width="4" height="8" fill="${C.blankA}"></rect><rect x="4" width="4" height="8" fill="${C.blankB}"></rect></pattern></defs>
 <rect x="36" y="24" width="168" height="32" fill="url(#p-blank)" stroke="${C.blankA}" stroke-width="1"></rect>`,
   };
