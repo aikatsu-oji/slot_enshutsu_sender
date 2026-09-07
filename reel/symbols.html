@@ -7,7 +7,7 @@
 <style>
   :root{
     --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --frame-shadow:#0b1226;
-    --reel-bg:#fdfbf3; --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d;
+    --reel-bg:#fdfbf3; --reel-bg-image:none; --reel-bg-fit:center / cover no-repeat;   /* 図柄設定 (symbol_images.js) で変わる */ --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d;
     --unit:900px;                       /* リール窓の幅。reel.html は 100vw */
     --koma:calc(var(--unit) / 8.4);     /* 1コマの高さ。reel.html と同じ比率 */
     --font-sym:"Yu Mincho","Hiragino Mincho ProN",serif;
@@ -30,7 +30,7 @@
   /* ---- 図柄一覧 ---- */
   .cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;}
   .card{display:flex;flex-direction:column;gap:12px;padding:16px;background:var(--panel);border:1px solid var(--line);border-radius:6px;}
-  .card .koma{position:static;height:var(--koma);border-bottom:none;background:var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .card .koma{position:static;height:var(--koma);border-bottom:none;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
   .card .name{display:flex;align-items:baseline;gap:10px;}
   .card .name b{font-size:20px;} .card .name span{font-size:11px;letter-spacing:2px;color:var(--frame);}
   .card .role{font-size:13px;font-weight:700;} .card .pay{font-size:12px;color:var(--frame-bright);}
@@ -50,7 +50,7 @@
     background:linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim));
     box-shadow:0 6px 0 var(--frame-shadow), inset 0 1px 0 rgba(255,255,255,.4);
   }
-  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
+  .reel{position:relative;height:calc(var(--koma) * 3);overflow:hidden;background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border-radius:4px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25);}
   .reel::before,.reel::after{content:"";position:absolute;left:0;right:0;height:22%;z-index:3;pointer-events:none;}
   .reel::before{top:0;background:linear-gradient(180deg,rgba(0,0,0,.45),transparent);}
   .reel::after{bottom:0;background:linear-gradient(0deg,rgba(0,0,0,.45),transparent);}
@@ -58,7 +58,7 @@
   .reel.hit .line{box-shadow:inset 0 0 0 3px rgba(241,210,122,.95), 0 0 18px rgba(241,210,122,.8);}
   .strip{position:absolute;left:0;right:0;top:0;}
   .koma{position:absolute;left:0;right:0;height:var(--koma);display:flex;align-items:center;justify-content:center;border-bottom:1px solid rgba(20,33,61,.12);}
-  .sym{display:block;width:82%;height:74%;}
+  .sym{display:block;width:var(--sym-w,82%);height:var(--sym-h,74%);}   /* 図柄設定 (symbol_images.js の settings) で変わる */
 
   /* ---- リール配列表 ---- */
   .strips{display:flex;gap:28px;align-items:flex-start;}
@@ -67,7 +67,7 @@
   .nums b{width:40px;height:40px;border-radius:50%;background:var(--frame-bright);color:var(--frame-shadow);border:2px solid var(--frame-dim);display:flex;align-items:center;justify-content:center;font-size:18px;}
   .tape{display:flex;flex-direction:column;gap:10px;align-items:center;}
   .tape h3{margin:0;font-family:var(--font-sym);font-size:28px;color:var(--frame-bright);font-weight:700;}
-  .tape .body{display:flex;flex-direction:column;width:calc((var(--unit) - 24px) / 3);background:var(--reel-bg);border:4px solid var(--frame);border-radius:4px;overflow:hidden;box-shadow:0 4px 0 var(--frame-dim);}
+  .tape .body{display:flex;flex-direction:column;width:calc((var(--unit) - 24px) / 3);background:var(--reel-bg-image,none) var(--reel-bg-fit,center / cover no-repeat),var(--reel-bg);border:4px solid var(--frame);border-radius:4px;overflow:hidden;box-shadow:0 4px 0 var(--frame-dim);}
   .tape .body .koma{position:static;}
   table{border-collapse:collapse;font-size:13px;color:var(--sub);}
   th,td{padding:6px 14px;text-align:center;} th{color:var(--text);}
@@ -83,7 +83,7 @@
 
   <section id="sec-symbols">
     <div class="head"><div><h2>図柄</h2><div class="sub">viewBox 240×80。クリーム地 (#fdfbf3) のコマに幅82%・高さ74%で置く</div></div>
-      <div class="row"><button id="dl-sprite">スプライトSVGを保存</button></div></div>
+      <div class="row"><a href="symbol_editor.html"><button type="button">図柄設定 (画像の差し替え)</button></a><button id="dl-sprite">スプライトSVGを保存</button></div></div>
     <div class="cards" id="cards"></div>
   </section>
 

@@ -193,11 +193,128 @@ function serveFile(req, res, target) {
   });
 }
 
+// ===================== 図柄設定の保存 API =====================
+// POST /api/symbols  (reel/symbol_editor.html から)
+//   body: { settings: {reelBg, symW, symH},
+//           images: { <id>: { png: "data:image/png;base64,...",   ← reel/img/<id>.png に保存 (元画像・切り抜き済み)
+//                             src: "data:image/webp;base64,...",  ← symbol_images.js に入れる表示用 (縮小版)
+//                             w, h, scale, dx, dy } | null } }   ← null は画像を消してベクター描画に戻す
+//   images に無い id は現状維持。保存後 { action: "symbolsUpdated" } を全 WebSocket クライアントへ流す
+//   (筐体ビューはこれを受けて再読込する)。
+const SYMBOL_IDS = ["god", "seven", "bell", "rep", "melon", "blank"];
+const SYMBOL_IMG_DIR = path.join(ROOT, "reel", "img");
+const SYMBOL_IMAGES_JS = path.join(ROOT, "reel", "symbol_images.js");
+const SYMBOL_DEFAULT_SETTINGS = { reelBg: "#fdfbf3", reelBgAlpha: 1, reelBgImage: "", reelBgFit: "cover", symW: 82, symH: 74 };
+const REEL_BG_PNG = path.join(SYMBOL_IMG_DIR, "reel_bg.png");   // リール背景画像の元 (settings.reelBgImage は表示用の縮小版)
+
+function loadSymbolImages() {
+  try {
+    const sandbox = {};
+    require("vm").runInNewContext(fs.readFileSync(SYMBOL_IMAGES_JS, "utf-8"), { globalThis: sandbox });
+    const d = sandbox.SlotSymbolImages || {};
+    return { settings: { ...SYMBOL_DEFAULT_SETTINGS, ...(d.settings || {}) }, images: { ...(d.images || {}) } };
+  } catch (e) {
+    return { settings: { ...SYMBOL_DEFAULT_SETTINGS }, images: {} };
+  }
+}
+
+function saveSymbolImages(store) {
+  const num = (v, d) => (Number.isFinite(Number(v)) ? Number(v) : d);
+  const lines = SYMBOL_IDS.filter((k) => store.images[k] && store.images[k].src).map((k) => {
+    const m = store.images[k];
+    return `      ${k}: { w: ${num(m.w, 0)}, h: ${num(m.h, 0)}, scale: ${num(m.scale, 1)}, dx: ${num(m.dx, 0)}, dy: ${num(m.dy, 0)}, src: ${JSON.stringify(String(m.src))} },`;
+  });
+  const s = store.settings;
+  const settings = {
+    reelBg: /^#[0-9a-fA-F]{6}$/.test(String(s.reelBg)) ? String(s.reelBg).toLowerCase() : SYMBOL_DEFAULT_SETTINGS.reelBg,
+    reelBgAlpha: Math.min(1, Math.max(0, num(s.reelBgAlpha, 1))),
+    reelBgImage: dataUriToBuffer(s.reelBgImage) ? String(s.reelBgImage) : "",
+    reelBgFit: ["cover", "contain", "stretch", "tile"].includes(s.reelBgFit) ? s.reelBgFit : "cover",
+    symW: Math.min(100, Math.max(10, num(s.symW, SYMBOL_DEFAULT_SETTINGS.symW))),
+    symH: Math.min(100, Math.max(10, num(s.symH, SYMBOL_DEFAULT_SETTINGS.symH))),
+  };
+  const out =
+    "// 画像図柄と設定 (data URI)。symbols.js より先に読み込む。図柄設定 symbol_editor.html から保存される (手で編集しない)\n" +
+    "//   元画像は reel/img/<id>.png。images の w/h は data URI の画素数、scale/dx/dy は表示時の拡大率と位置 (viewBox 240×80 基準)\n" +
+    "(function (root) {\n  root.SlotSymbolImages = {\n" +
+    `    settings: ${JSON.stringify(settings)},\n` +
+    "    images: {\n" + lines.join("\n") + (lines.length ? "\n" : "") + "    },\n  };\n" +
+    '})(typeof globalThis !== "undefined" ? globalThis : window);\n';
+  fs.writeFileSync(SYMBOL_IMAGES_JS, out);
+  return settings;
+}
+
+function dataUriToBuffer(s, type) {
+  const m = /^data:([^;,]+);base64,(.+)$/s.exec(String(s || ""));
+  if (!m || (type && m[1] !== type)) return null;
+  return Buffer.from(m[2], "base64");
+}
+
+function handleApiSymbols(req, res) {
+  if (req.method !== "POST") { sendJson(res, 405, { error: "POST only" }); return; }
+  const chunks = [];
+  let size = 0;
+  req.on("data", (c) => { size += c.length; if (size > 64 * 1024 * 1024) { req.destroy(); } else chunks.push(c); });
+  req.on("end", () => {
+    let body;
+    try { body = JSON.parse(Buffer.concat(chunks).toString("utf-8")); }
+    catch (e) { sendJson(res, 400, { error: "invalid json" }); return; }
+    const store = loadSymbolImages();
+    if (body.settings && typeof body.settings === "object") {
+      const { reelBgImage, ...rest } = body.settings;   // 背景画像は reelImage で受ける (settings 側の値は無視)
+      Object.assign(store.settings, rest);
+    }
+    const written = [], removed = [];
+    fs.mkdirSync(SYMBOL_IMG_DIR, { recursive: true });
+    // リール背景画像: reelImage = null で削除、{ png, src } で差し替え、無ければ現状維持
+    if (body.reelImage === null) {
+      store.settings.reelBgImage = "";
+      try { fs.unlinkSync(REEL_BG_PNG); } catch (e) { /* 無ければ何もしない */ }
+      removed.push("reel_bg");
+    } else if (body.reelImage && typeof body.reelImage === "object") {
+      const png = dataUriToBuffer(body.reelImage.png, "image/png");
+      if (!png || !dataUriToBuffer(body.reelImage.src)) { sendJson(res, 400, { error: "reelImage: png と src を data URI で送ってください" }); return; }
+      fs.writeFileSync(REEL_BG_PNG, png);
+      store.settings.reelBgImage = String(body.reelImage.src);
+      written.push("reel_bg");
+    }
+    for (const [id, m] of Object.entries(body.images || {})) {
+      if (!SYMBOL_IDS.includes(id)) { sendJson(res, 400, { error: "unknown symbol id: " + id }); return; }
+      const pngPath = path.join(SYMBOL_IMG_DIR, id + ".png");
+      if (m === null) {
+        delete store.images[id];
+        try { fs.unlinkSync(pngPath); } catch (e) { /* 無ければ何もしない */ }
+        removed.push(id);
+        continue;
+      }
+      if (m.png) {
+        const png = dataUriToBuffer(m.png, "image/png");
+        if (!png) { sendJson(res, 400, { error: id + ": png は data:image/png;base64 で送ってください" }); return; }
+        fs.writeFileSync(pngPath, png);
+      }
+      const src = m.src || (store.images[id] && store.images[id].src);
+      if (!src || !dataUriToBuffer(src)) { sendJson(res, 400, { error: id + ": src (表示用 data URI) がありません" }); return; }
+      store.images[id] = { w: m.w, h: m.h, scale: m.scale, dx: m.dx, dy: m.dy, src };
+      written.push(id);
+    }
+    const settings = saveSymbolImages(store);
+    const msg = JSON.stringify({ action: "symbolsUpdated", written, removed });
+    for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(msg);
+    console.log("[図柄設定] 保存", { written, removed, settings });
+    sendJson(res, 200, { ok: true, written, removed, settings, images: Object.keys(store.images) });
+  });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
   if (url.pathname === "/api/list") {
     handleApiList(res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/symbols") {
+    handleApiSymbols(req, res);
     return;
   }
 
@@ -247,6 +364,7 @@ server.listen(PORT, () => {
   console.log(`[オーバーレイURL] http://localhost:${PORT}/enshutsu/enshutsu_overlay.html`);
   console.log(`[コンパネURL]     http://localhost:${PORT}/control/main_control.html`);
   console.log(`[筐体ビューURL]   http://localhost:${PORT}/reel/reel.html?mode=link&hidebar=1`);
+  console.log(`[図柄設定URL]     http://localhost:${PORT}/reel/symbol_editor.html`);
   console.log("このウィンドウは起動したまま(閉じない)にしておいてください。");
 });
 
