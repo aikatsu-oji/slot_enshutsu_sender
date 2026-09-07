@@ -545,8 +545,7 @@
       <img id="illustration-img" alt="">
       <video id="illustration-video" playsinline preload="auto"></video>
       <img id="illustration-effect-gif" alt="">
-      <video id="illustration-effect-video" playsinline muted preload="auto"></video>
-      <audio id="illustration-effect-audio" preload="auto"></audio>
+      <video id="illustration-effect-video" playsinline preload="auto"></video>
       <audio id="illustration-voice-audio" preload="auto"></audio>
     </div>
     <div id="blackout-layer"></div>
@@ -680,7 +679,7 @@
         <div class="note">
           萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下の動画(mp4 / webm / mov)またはGIFが対象です。音声は動画に入れておきます(別ファイルの音声フォルダはありません)。<br><br>
           ロック2の番号などの状況に関わらず、素材が1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。動画は音声込みでそのまま鳴り、再生終了で演出が終わります。GIFは無音で、上の「GIFの表示時間」だけ表示して終わります。素材が1つもない場合はこの演出はスキップされます。<br><br>
-          ロック3のつなぎ(frz.gif)と萌えカットインの重ね演出(moe.gif)も、同じ場所に frz.webm / frz.mp4、moe.webm / moe.mp4 を置くとGIFより優先して動画を使います(音は従来どおり blackout.mp3 / moecut.mp3)。<br><br>
+          萌えカットインの重ね演出は enshutsu/yokoku/freeze/moe.mp4(または moe.webm)を音声込みで1回再生します(moe.gif があれば無音のGIFで代用)。ロック3のつなぎ(frz.gif)も同じ場所に frz.webm / frz.mp4 を置くとGIFより優先して動画を使います(音は blackout.mp3)。<br><br>
           再生が終わり次第、通常のゲーム画面に自動で復帰します。
         </div>
       </div>
@@ -826,8 +825,7 @@
   // 以前はBase64でHTMLに埋め込んでいたが、フォルダから読み込む方式に変更した。
   const LOCK3_GIF_FILE = "frz.gif";          // ロック3の白→暗転つなぎ
   const LOCK3_AUDIO_FILE = "blackout.mp3";
-  const ILLUST_EFFECT_GIF_FILE = "moe.gif"; // 萌えカットインに重ねる演出
-  const ILLUST_EFFECT_AUDIO_FILE = "moecut.mp3";
+  const ILLUST_EFFECT_GIF_FILE = "moe.gif"; // 萌えカットインに重ねる演出。通常は音声込みの moe.mp4 を使い、GIF は無音の代替
 
   // このHTMLからの相対URLを組み立てる。相対パスなので http:// でも file:// でもそのまま解決される。
   // ファイル名に日本語や記号が含まれても壊れないようエンコードする。
@@ -920,7 +918,6 @@
   const illustWhiteBg = el("illustration-white-bg");
   const illustImg = el("illustration-img");
   const illustEffectGif = el("illustration-effect-gif");
-  const illustEffectAudio = el("illustration-effect-audio");
   const illustVoiceAudio = el("illustration-voice-audio");
   const illustPlaceholder = el("illustration-placeholder");
   const blackoutLayer = el("blackout-layer");
@@ -1011,7 +1008,7 @@
     })();
   }
   let LOCK3_VIDEO_SRC = null;          // frz.webm / frz.mp4 があれば frz.gif より優先
-  let ILLUST_EFFECT_VIDEO_SRC = null;  // moe.webm / moe.mp4 があれば moe.gif より優先
+  let ILLUST_EFFECT_VIDEO_SRC = null;  // moe.webm / moe.mp4 (音声込み)。無ければ moe.gif を無音で使う
   // 見つかった動画は起動時に読み込んでおく(初回再生の遅れと、読込と再生の競合を避ける)
   function preloadVideo(v, url){
     try{ v.setAttribute("src", url); v.load(); }catch(e){}
@@ -1034,13 +1031,11 @@
     if(lock3Gif.getAttribute("src")) console.log(`${FREEZE_ROOT}/${LOCK3_GIF_FILE} の読み込みに失敗しました`);
   });
   lock3Audio.addEventListener("error", ()=>{ console.log(`${FREEZE_ROOT}/${LOCK3_AUDIO_FILE} の読み込みに失敗しました`); });
-  /* 萌えカットインに重ねる演出GIF/サウンドも同様にフリーズ演出ルート直下から読み込む。 */
+  /* 萌えカットインに重ねる演出の代替GIFも同様にフリーズ演出ルート直下から読み込む(動画が無いときだけ使う)。 */
   const ILLUST_EFFECT_GIF_SRC = assetPath(FREEZE_ROOT, ILLUST_EFFECT_GIF_FILE);
-  illustEffectAudio.src = assetPath(FREEZE_ROOT, ILLUST_EFFECT_AUDIO_FILE);
   illustEffectGif.addEventListener("error", ()=>{
     if(illustEffectGif.getAttribute("src")) console.log(`${FREEZE_ROOT}/${ILLUST_EFFECT_GIF_FILE} の読み込みに失敗しました`);
   });
-  illustEffectAudio.addEventListener("error", ()=>{ console.log(`${FREEZE_ROOT}/${ILLUST_EFFECT_AUDIO_FILE} の読み込みに失敗しました`); });
   const stateIndicator = el("state-indicator");
 
   /* ===================== 設定UIの初期化 ===================== */
@@ -1671,12 +1666,16 @@
   }
 
   function playIllustEffect(){
-    // 萌えカットインのタイミングで演出GIF(moe.gif)またはその動画版とサウンド(moecut.mp3)を再生する
+    // 萌えカットインのタイミングで重ね演出を再生する。
+    //   moe.mp4 / moe.webm … 映像と音声を1本にまとめた動画を1回再生(再生終了で自動的に消える)
+    //   moe.gif           … 動画が無いときの無音の代替
     if(ILLUST_EFFECT_VIDEO_SRC){
       illustEffectGif.style.opacity = "0";
       illustEffectVideo.style.transition = "none";
       illustEffectVideo.style.opacity = "1";
-      startVideo(illustEffectVideo, ILLUST_EFFECT_VIDEO_SRC, { loop:true, muted:true }); // 音は moecut.mp3 が担当
+      startVideo(illustEffectVideo, ILLUST_EFFECT_VIDEO_SRC, { loop:false, muted:false }).then(()=>{
+        illustEffectVideo.style.opacity = "0";
+      });
     }else{
       illustEffectGif.style.transition = "none";
       illustEffectGif.src = "";
@@ -1684,13 +1683,6 @@
       illustEffectGif.src = ILLUST_EFFECT_GIF_SRC;
       illustEffectGif.style.opacity = "1";
     }
-
-    try{
-      illustEffectAudio.currentTime = 0;
-      illustEffectAudio.playbackRate = Math.min(4, Math.max(0.25, speedFactor));
-      const playPromise = illustEffectAudio.play();
-      if(playPromise && playPromise.catch){ playPromise.catch(()=>{}); }
-    }catch(e){}
   }
 
   function stopIllustEffect(){
@@ -1698,7 +1690,6 @@
     illustEffectGif.style.opacity = "0";
     illustEffectGif.src = "";
     stopVideo(illustEffectVideo);
-    try{ illustEffectAudio.pause(); }catch(e){}
   }
 
   function playCharacterVoice(picked){
