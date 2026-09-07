@@ -100,19 +100,21 @@ echo V‚µ‚¢ƒT[ƒo[‚Í‹N“®‚¹‚¸A‘€ìƒpƒlƒ‹‚Ì‚İŠJ‚«‚Ü‚·B
 
 :OPEN_WINDOWS
 echo.
-echo [5/6] main_control ‚Æ enshutsu_overlay(‚Æâ‘Ìƒrƒ…[ reel)‚ğƒ{[ƒ_ƒŒƒXƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·...
+echo [5/6] main_control ‚Æ enshutsu_overlay ‚ğƒ{[ƒ_ƒŒƒXƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·...
+echo         ƒŠ[ƒ‹ƒ†ƒjƒbƒg‚ÍƒI[ƒo[ƒŒƒC‚Ì‰t»“à‚É–„‚ß‚İÏ‚İ‚Å‚·(’P“ÆƒEƒBƒ“ƒhƒE‚ÍŠJ‚«‚Ü‚¹‚ñ)B
 
 rem ƒRƒ“ƒpƒl(main_control.html)‚ÌêŠBcontrol\ ‚ª³‹K‚Ì”z’uB‹Œ”z’u(ƒ‹[ƒg)‚É‚à‘Î‰B
 set "CONTROL_URL="
 if exist "control\main_control.html" set "CONTROL_URL=control/main_control.html"
 if not defined CONTROL_URL if exist "main_control.html" set "CONTROL_URL=main_control.html"
 
-rem â‘Ìƒrƒ…[(reel.html)‚ÌêŠ‚ğ’T‚·Breel\ / enshutsu\ / ƒ‹[ƒg ‚Ì‚Ç‚±‚É’u‚¢‚Ä‚à‚æ‚¢B
-rem Œ©‚Â‚©‚Á‚½êŠ‚ğ‚»‚Ì‚Ü‚ÜURL‚Ég‚¤‚Ì‚ÅAˆÚ“®‚µ‚Ä‚àˆÈ~‚Ì‘‚«Š·‚¦‚Í•s—vB
-set "KYOTAI_URL="
-if exist "reel\reel.html" set "KYOTAI_URL=reel/reel.html"
-if not defined KYOTAI_URL if exist "enshutsu\reel.html" set "KYOTAI_URL=enshutsu/reel.html"
-if not defined KYOTAI_URL if exist "reel.html" set "KYOTAI_URL=reel.html"
+rem â‘Ìƒrƒ…[(reel.html)‚ÍƒI[ƒo[ƒŒƒC‚ª iframe ‚Å‰t»“à‚É“Ç‚İ‚Ş‚Ì‚ÅA’P“ÆƒEƒBƒ“ƒhƒE‚Å‚ÍŠJ‚©‚È‚¢B
+rem ’P‘Ì‚ÅŠm”F‚µ‚½‚¢‚Æ‚«—p‚ÉAŒ©‚Â‚©‚Á‚½êŠ‚ÌURL‚¾‚¯ÅŒã‚É•\¦‚·‚éB
+rem (•Ï”‚É & ‚ğ“ü‚ê‚é‚Æ echo ‚ÉƒRƒ}ƒ“ƒh‹æØ‚è‚Æ‰ğß‚³‚ê‚é‚½‚ßAƒNƒGƒŠ‚Í•t‚¯‚È‚¢)
+set "REEL_URL="
+if exist "reel\reel.html" set "REEL_URL=reel/reel.html"
+if not defined REEL_URL if exist "enshutsu\reel.html" set "REEL_URL=enshutsu/reel.html"
+if not defined REEL_URL if exist "reel.html" set "REEL_URL=reel.html"
 
 set "BROWSER_PATH="
 if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "BROWSER_PATH=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
@@ -132,29 +134,18 @@ echo [Œx] control\main_control.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñB
 
 :CHECK_ENSHUTSU
 if not exist "enshutsu\enshutsu_overlay.html" goto SKIP_ENSHUTSU
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/enshutsu/enshutsu_overlay.html" --window-size=960,576 --window-position=520,0
-goto CHECK_KYOTAI
+rem â‘Ìƒrƒ…[‚ğ•ÊƒEƒBƒ“ƒhƒE‚ÅŠJ‚©‚È‚­‚È‚Á‚½•ªAƒI[ƒo[ƒŒƒC‚ğ‘å‚«‚ß‚ÉŠJ‚­B
+start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/enshutsu/enshutsu_overlay.html" --window-size=1280,720 --window-position=520,0
+goto MAIN_BOARD
 
 :SKIP_ENSHUTSU
 echo [Œx] enshutsu\enshutsu_overlay.html ‚ªŒ©‚Â‚©‚è‚Ü‚¹‚ñBenshutsuƒtƒHƒ‹ƒ_“à‚É”z’u‚µ‚Ä‚­‚¾‚³‚¢B
-
-:CHECK_KYOTAI
-rem â‘Ìƒrƒ…[(reel.html)Bå§Œä‚Æ˜A“®ƒ‚[ƒhE‘€ìƒpƒlƒ‹”ñ•\¦‚ÅŠJ‚­B”CˆÓƒtƒ@ƒCƒ‹‚È‚Ì‚Å–³‚­‚Ä‚à‘±sB
-if defined KYOTAI_URL goto OPEN_KYOTAI
-echo [î•ñ] reel.html ‚ªŒ©‚Â‚©‚ç‚È‚¢‚½‚ßAâ‘Ìƒrƒ…[‚ÍƒXƒLƒbƒv‚µ‚Ü‚·B
-echo         reel\ / enshutsu\ / ƒ‹[ƒg ‚Ì‚¢‚¸‚ê‚©‚É’u‚­‚Æ©“®‚ÅŠJ‚«‚Ü‚·B
-goto MAIN_BOARD
-
-:OPEN_KYOTAI
-echo [î•ñ] â‘Ìƒrƒ…[: %KYOTAI_URL%
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1" --window-size=420,980 --window-position=1490,0
 goto MAIN_BOARD
 
 :NO_BROWSER
 echo [Œx] Chrome/Edge‚ªŒ©‚Â‚©‚ç‚È‚©‚Á‚½‚½‚ßA’Êí‚Ìƒuƒ‰ƒEƒUƒEƒBƒ“ƒhƒE‚ÅŠJ‚«‚Ü‚·B
 if defined CONTROL_URL start "" "%BASEURL%/%CONTROL_URL%"
 if exist "enshutsu\enshutsu_overlay.html" start "" "%BASEURL%/enshutsu/enshutsu_overlay.html"
-if defined KYOTAI_URL start "" "%BASEURL%/%KYOTAI_URL%?mode=link&hidebar=1"
 
 :MAIN_BOARD
 echo.
@@ -261,9 +252,10 @@ echo  main_control ‚É‚Íå§Œäƒ‚ƒjƒ^‚Æ•›§Œäƒ‚ƒjƒ^‚ª•À‚Ñ‚Ü‚·B•›§Œä‚Ì„‘ªŠm—¦ó‘
 echo  ^‰º‚Éå§Œä‚ÌÀ’l‚ªo‚é‚Ì‚ÅAH‚¢ˆá‚Á‚½‚Æ‚«‚ÍÀ’l‘¤‚ªÔ‚­‚È‚è‚Ü‚·B
 echo  “¯‚¶‰æ–Ê‚ÌuM†’“üv‚©‚ç2ƒoƒCƒgƒRƒ}ƒ“ƒh‚â‰‰oƒCƒxƒ“ƒg‚ğ—¬‚µ‚ß‚Ü‚·B
 echo.
-echo  â‘Ìƒrƒ…[(reel.html)‚Íå§Œä‚Ì1GŒ‹‰Ê‚ğó‚¯‚ÄƒŠ[ƒ‹‚ª~‚Ü‚è‚Ü‚·B¶ã‚Ì•Ôƒ{ƒ^ƒ“‚Åƒ[ƒJƒ‹‘Å‚ÉØ‘Ö‰ÂB
+echo  ƒŠ[ƒ‹ƒ†ƒjƒbƒg‚ÍƒI[ƒo[ƒŒƒC‚Ì‰t»“à‚É–„‚ß‚Ü‚ê‚Ä‚¢‚Ü‚·Bo‚µ“ü‚ê‚ÍƒI[ƒo[ƒŒƒC‚Ì•Ô ¨
+echo  uƒŠ[ƒ‹vƒ^ƒuA‚Ü‚½‚Í scripts\dev.cmd send reelIn / reelOut / reelToggleB•\¦ó‘Ô‚Í•Û‘¶‚³‚ê‚Ü‚·B
 if defined CONTROL_URL echo  ƒRƒ“ƒpƒl‚ÌURL: %BASEURL%/%CONTROL_URL%
-if defined KYOTAI_URL echo  â‘Ìƒrƒ…[‚ÌURL: %BASEURL%/%KYOTAI_URL%
+if defined REEL_URL echo  â‘Ìƒrƒ…[‚ğ’P‘Ì‚ÅŠJ‚­ê‡: %BASEURL%/%REEL_URL%?mode=link^&hidebar=1
 echo  ƒRƒ}ƒ“ƒhƒ‰ƒCƒ“‚©‚ç‘€ì‚·‚éê‡‚Í scripts\dev.cmd help ‚ğQÆ(Claude Code Œü‚¯)B
 echo  ƒEƒBƒ“ƒhƒE‚ÌƒTƒCƒYEˆÊ’u‚Í’[‚ğƒhƒ‰ƒbƒO‚µ‚Ä©—R‚É’²®‚µ‚Ä‚­‚¾‚³‚¢B
 echo ============================================
