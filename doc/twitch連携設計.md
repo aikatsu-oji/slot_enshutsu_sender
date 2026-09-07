@@ -1,0 +1,481 @@
+# Twitch イベント連動システム 設計
+
+配信の視聴者アクション (ビッツ・サブスク・チャンネルポイント・レイド・チャット) を検知して、
+本リポジトリのスロット (主制御シミュレータ + 演出オーバーレイ) を動かすための設計。
+
+対象バージョン: `main` (中継サーバー 8787 / 副制御ポート 8765 / コンパネ / オーバーレイ / 筐体ビュー)
+
+---
+
+## 0. 一行でいうと
+
+**視聴者がメダルを入れる。スロットは今までどおり自分で抽選して回る。**
+
+Twitch は「遊技者」の役をやるだけで、当たり外れには手を出さない。
+これだけで「メダルが尽きたら配信が止まる → 視聴者が入れる → 回る」という配信ループが成立する。
+
+---
+
+## 1. 設計の前提 (壊してはいけない境界)
+
+既存コードが守っている 3 つの境界は、Twitch を足しても維持する。
+
+| 境界 | 現状 | Twitch 連携後 |
+| --- | --- | --- |
+| 主制御 → 副制御 は 2 バイト単方向 | `MainBoard.send()` のみ | **変えない**。副制御は Twitch の存在を知らない |
+| 中継サーバー (8787) はロジックを持たない | 受信 → 全員へ転送するだけ | **変えない**。Twitch 判定はブリッジ側に置く |
+| 副制御が落ちても遊技は続く | `EnshutsuServer` は片方向 | **ブリッジが落ちても遊技は続く**。同じ扱いにする |
+
+追加する境界は 1 つだけ:
+
+> **主制御は「Twitch」を知らない。知っているのは「メダルが入った」「レバーが叩かれた」だけ。**
+
+視聴者名などの付帯情報は、主制御の *試験用モニタ端子* (8787 側) にだけ乗せる。
+2 バイトコマンド (8765 側) には一切乗せない。これで副制御の独立性は保たれる。
+
+---
+
+## 2. 全体像
+
+```
+  Twitch
+    |  EventSub WebSocket (wss://eventsub.wss.twitch.tv/ws)
+    |  チャット (channel.chat.message)
+    v
+  twitch/twitch_bridge.js  ←  twitch/rules.json (イベント → 操作の対応表)
+    |   正規化 → 重複排除 → ルール判定 → 流量制御
+    |  ws://127.0.0.1:8787 に 1 クライアントとして接続
+    v
+ +--------------- server/trigger_relay_server.js (8787) ---------------+
+ |        受け取ったら送信元以外の全員へ転送するだけ (現状のまま)         |
+ +---+-------------------+--------------------+----------------------+
+     | playerInput       | twitchEvent        | twitchEvent / twitchState
+     v                   v                    v
+  主制御 (god_main_board.py)   コンパネ        オーバーレイ (視聴者HUD)
+     |
+     |  2 バイトコマンド (単方向・Twitch のことは何も入っていない)
+     v
+  副制御 --- ws://127.0.0.1:8765 ---> オーバーレイ (演出)
+```
+
+ポイントは **ブリッジが中継サーバーに 1 クライアントとして繋ぐだけ** なこと。
+中継サーバーは 1 通のメッセージを主制御・コンパネ・オーバーレイの 3 者へ配るので、
+「主制御を動かす」「ログに出す」「HUD に出す」が 1 送信で同時に満たされる。サーバー側の改造は不要。
+
+---
+
+## 3. 介入レベル (どこまで視聴者に触らせるか)
+
+| 段 | 触るもの | 例 | 出玉への影響 | 既定 |
+| --- | --- | --- | --- | --- |
+| **Tier 1 演出のみ** | オーバーレイ | フォロー通知でバナー、サブスクでカットイン | なし | 全イベントで ON |
+| **Tier 2 遊技者操作** | 主制御の入力口 (投入・押し順・電源) | ビッツでメダル投入、チャットで押し順投票 | **確率は不変**。回転数と消化速度だけ変わる | 推奨 ON |
+| **Tier 3 強制** | 主制御の抽選結果 | ハイプトレイン Lv5 で次ゲーム神揃い固定 | あり (やらせ) | **既定 OFF** |
+
+Tier 3 を使う場合は、**必ず HUD に「演出」と明示する**。
+実装上も通常の抽選経路とは別のコマンド (`forceFlag`) を通し、集計 (`total_in/out`) に
+「強制回数」を別カウントで残す。混ぜると設定判別配信としての意味が消える。
+
+やらせ無しで盛り上げたいなら、Tier 3 の代わりに **「見た目だけの神揃い」** を Tier 1 で撃つのが安全。
+`{"action":"panelInject","layer":"enshutsu","event":{"type":"freeze","seq":["lock1","lock2","lock3"],"rank":"金","fake":true}}`
+既存の `handleSubEvent` にそのまま流れる (主制御は無関係)。
+
+---
+
+## 4. 中核: クレジット制ドライブ
+
+現状の `run_live()` は `for _ in range(games)` で無条件に回り続ける。
+ここを **クレジット (メダル) が 3 枚以上あるときだけ回る** に変える。これが Twitch 連携の心臓部。
+
+```
+視聴者のアクション → メダル投入 → クレジット --(3枚)--> 1 ゲーム --> 払出 --> クレジット
+                                      |
+                                   0 枚 → 待機 (「メダル募集中」を HUD に表示)
+```
+
+実機に合わせて 2 段構成にする。
+
+| レジスタ | 意味 | 上限 |
+| --- | --- | --- |
+| `credit` | クレジット | 50 枚 (実機準拠) |
+| `reserve` | 下皿。`credit` が減ったら自動補充 | `reserveMax` (既定 10,000 枚) |
+| `bank` | 上限超過分。`.run/twitch_bank.json` へ退避し次回配信へ持ち越し | 無制限 |
+
+この設計が効くところ:
+
+- **AT に入ると自走する。** 払い出しが `credit` に戻るので、当たっている間は視聴者の投入なしで回り続ける。
+  当たりが遠いほど視聴者の投入が必要になる = 盛り上がりと投入が自然に連動する。
+- **詰まらない。** メダルは「溜まるだけ」なので、レイドで 500 人来ても取りこぼしがない (演出だけ間引けばよい)。
+- **配信の終わりが自然に決まる。** 下皿が尽きたら待機画面。
+
+### 誰のメダルで当たったか
+
+`credit` に入れたメダルを `deque[(src, 枚数)]` で FIFO 管理し、`bet()` が先頭から 3 枚ずつ消費する。
+現在消化中の `src` を毎ゲームのモニタ出力に `by` として乗せると、
+**「@user のメダルで神揃い」** が言える。払出由来のメダルは `src="自力"`。
+
+これは表示用の付帯情報なので、**8787 のモニタ端子にだけ** 出す (2 バイトコマンドには乗せない)。
+
+---
+
+## 5. Twitch 側の受信
+
+### 5.1 EventSub WebSocket を使う (Webhook ではなく)
+
+ローカル PC で動かすので、外部から到達できる HTTPS エンドポイントが要らない
+**EventSub の WebSocket トランスポート** を使う。
+
+1. `wss://eventsub.wss.twitch.tv/ws` に接続
+2. `session_welcome` で `session.id` を受け取る
+3. Helix `POST /helix/eventsub/subscriptions` に `transport: {method:"websocket", session_id}` で購読を登録
+4. 以後 `notification` が流れてくる
+
+実装で必ず面倒を見るところ:
+
+- **keepalive**: 既定 10 秒間隔。途絶えたら死んだとみなして張り直す (3 回分 = 30 秒でタイムアウト判定)。
+- **`session_reconnect`**: 新しい `reconnect_url` に **先に繋いでから** 旧セッションを閉じる。取りこぼし防止。
+  新セッションでは購読の再登録が必要かどうかを実測で確認する (再接続時は引き継がれる仕様だが、
+  張り直しになった場合に備えて「購読が 0 件なら登録し直す」を必ず入れる)。
+- **`revocation`**: トークン失効・権限剥奪。コンパネに赤で出す。
+- **重複排除**: `metadata.message_id` を直近 1000 件のリングバッファで照合。
+  チャンネルポイントは `redemption.id`、ビッツは `message_id` で二重投入を防ぐ。
+- **古いメッセージの破棄**: `metadata.message_timestamp` が 10 分以上前なら捨てる (再送の取り違え防止)。
+
+### 5.2 購読するイベントとスコープ
+
+| 用途 | subscription type | 必要スコープ |
+| --- | --- | --- |
+| チャンネルポイント | `channel.channel_points_custom_reward_redemption.add` | `channel:read:redemptions` (返金もするなら `channel:manage:redemptions`) |
+| ビッツ | `channel.cheer` | `bits:read` |
+| サブスク / ギフト / 継続 | `channel.subscribe` / `channel.subscription.gift` / `channel.subscription.message` | `channel:read:subscriptions` |
+| フォロー | `channel.follow` (v2) | `moderator:read:followers` |
+| レイド | `channel.raid` | 不要 |
+| ハイプトレイン | `channel.hype_train.begin` / `.progress` / `.end` | `channel:read:hype_train` |
+| チャットコマンド | `channel.chat.message` | `user:read:chat` (+ `user:bot`) |
+| 配信開始/終了 | `stream.online` / `stream.offline` | 不要 |
+
+> 型名・バージョン・スコープは Twitch 側の改訂があるので、実装時に公式リファレンスで最終確認する。
+> 1 セッションあたりの購読数には上限があるため、**使うものだけ購読する** (ルール表に無い種別は購読しない)。
+
+チャットは IRC (`irc.chat.twitch.tv`) でも取れるが、EventSub に寄せた方が
+接続・再接続・認証の面倒が 1 箇所で済むので、`channel.chat.message` を推奨。
+
+---
+
+## 6. 正規化イベントとルール表
+
+### 6.1 正規化 (ここから先は Twitch 固有の形を持ち込まない)
+
+```json
+{
+  "id": "3f1b...",            // 重複排除キー
+  "kind": "cheer",            // cheer|sub|subgift|resub|follow|raid|redeem|chat|hype|stream
+  "at": "2026-09-07T12:34:56Z",
+  "user": { "login": "someone", "name": "表示名", "isMod": false, "isSub": true },
+  "amount": 1000,             // bits / raid人数 / ギフト個数
+  "tier": 1,                  // サブスクのティア
+  "reward": "メダル100枚",     // チャンネルポイント報酬名
+  "text": "がんばれ"           // チャット本文 (HUD に出す場合はサニタイズ後のみ)
+}
+```
+
+### 6.2 `twitch/rules.json` (人が編集する唯一の設定ファイル)
+
+```json
+{
+  "enabled": true,
+  "guard": {
+    "userCooldownSec": 5,
+    "maxMedalsPerEvent": 3000,
+    "maxMedalsPerMinute": 6000,
+    "enshutsuMinIntervalMs": 1500,
+    "modOnlyInputs": ["powerCycle", "stopOrder", "forceFlag"]
+  },
+  "rules": [
+    { "name": "ビッツ",   "when": { "kind": "cheer" },
+      "medals": { "of": "amount", "per": 10 },
+      "enshutsu": { "type": "banner", "rankBy": [[100,"白"],[500,"青"],[1000,"緑"],[5000,"赤"],[10000,"金"]] } },
+
+    { "name": "サブスク", "when": { "kind": "sub" },
+      "medals": { "byTier": { "1": 150, "2": 300, "3": 600 } },
+      "enshutsu": { "type": "banner", "rank": "赤" } },
+
+    { "name": "ギフト",   "when": { "kind": "subgift" },
+      "medals": { "of": "amount", "per": 1, "unit": 150, "max": 3000 } },
+
+    { "name": "レイド",   "when": { "kind": "raid" },
+      "medals": { "of": "amount", "per": 1, "unit": 10, "max": 1000 },
+      "enshutsu": { "type": "banner", "rank": "金" } },
+
+    { "name": "メダル投入", "when": { "kind": "redeem", "reward": "メダル100枚" },
+      "medals": { "fixed": 100 } },
+
+    { "name": "フォロー", "when": { "kind": "follow" },
+      "enshutsu": { "type": "banner", "rank": "白" } },
+
+    { "name": "押し順投票", "when": { "kind": "chat", "match": "^!(左|中|右)$" },
+      "vote": { "input": "stopOrder", "windowSec": 3 } },
+
+    { "name": "設定変更", "when": { "kind": "redeem", "reward": "設定変更" },
+      "input": "powerCycle", "requires": "mod" }
+  ]
+}
+```
+
+ルールに一致しないイベントは **何もしない** (ログには残す)。
+`rules.example.json` を配って `rules.json` は `.gitignore` に入れる…かどうかは、
+報酬名が個人設定なので **`rules.json` は追跡し、トークンだけ追跡しない** のが扱いやすい。
+
+---
+
+## 7. メッセージ仕様 (中継サーバーは無ロジックのまま)
+
+### ブリッジ → 中継 (= 主制御 / コンパネ / オーバーレイ)
+
+```jsonc
+// 正規化イベントそのもの。HUD とログ用。主制御は無視する
+{"action":"twitchEvent","ev":{ /* 6.1 の形 */ }}
+
+// 遊技者の操作。主制御が拾う
+{"action":"playerInput","input":"insertMedal","medals":100,"src":"@someone","reqId":"3f1b"}
+{"action":"playerInput","input":"stopOrder","order":2}          // 0-5 (押し順)
+{"action":"playerInput","input":"powerCycle","setting":6}       // 電源OFF→設定変更→ON (RAMクリア)
+{"action":"playerInput","input":"pause"}  / {"action":"playerInput","input":"resume"}
+
+// 演出だけ流す。既存の口をそのまま使う (新設不要)
+{"action":"panelInject","layer":"enshutsu","event":{"type":"banner","rank":"金","by":"@someone"}}
+
+// ブリッジの生存と状態。1 秒周期
+{"action":"twitchState","connected":true,"enabled":true,"pending":0,"lastAt":"...","subs":8}
+```
+
+### コンパネ → ブリッジ
+
+```jsonc
+{"action":"twitchControl","enabled":false}                       // キルスイッチ
+{"action":"twitchControl","reload":true}                         // rules.json 再読込
+{"action":"twitchMock","ev":{"kind":"cheer","amount":1000,...}}  // 疑似イベント (テストボタン)
+```
+
+`playerInput` は **主制御の外部入力そのもの** なので、`panelInject` とは別 action にして
+コンパネのログでも区別できるようにする (`panelInject` は「試験用の注入」、`playerInput` は「遊技者の操作」)。
+
+---
+
+## 8. 主制御への追加
+
+`main_board/god_main_board.py` への変更は小さく、既定の挙動は変えない。
+
+### 8.1 レジスタ追加 (`MainBoard`)
+
+```python
+credit: int = 0                 # クレジット (上限 CREDIT_MAX=50)
+reserve: int = 0                # 下皿
+credit_src: deque = ...         # [(src, 枚数)] 表示用。抽選には一切関与しない
+credit_mode: bool = False       # False = 従来どおり無条件に回る
+```
+
+### 8.2 `bet()` の変更
+
+```python
+def bet(self) -> bool:
+    if self.credit_mode:
+        if self.credit < BET:
+            take = min(BET - self.credit, self.reserve)
+            self.credit += take; self.reserve -= take
+        if self.credit < BET:
+            return False           # 待機。ゲームを始めない
+        self.credit -= BET
+        self._consume_src(BET)
+    ...既存処理...
+    return True
+```
+
+`payout()` は払い出し分を `credit` (上限 50) → 溢れたら `reserve` へ。
+
+### 8.3 外部入力の受け口
+
+`PanelLink._on_message` は現在 `panelInject` だけを拾っている。ここに `playerInput` を追加し、
+`drain_inject()` で **遊技スレッド側から** 適用する (受信スレッドでレジスタを触らない現状の作りを踏襲)。
+
+```python
+elif msg.get("action") == "playerInput":
+    self.inject_q.put(msg)
+```
+
+```python
+# drain_inject 内
+if inp == "insertMedal":  board.insert_medal(int(msg["medals"]), msg.get("src"))
+elif inp == "stopOrder":  board.next_order = int(msg["order"])       # 次ゲームの押し順
+elif inp == "powerCycle": board.power_cycle(int(msg.get("setting", board.setting)))
+elif inp == "pause":      board.paused = True
+```
+
+### 8.4 メインループ
+
+```python
+while games == 0 or played < games:
+    drain_inject(board, srv)
+    if board.paused or not board.can_bet():
+        board.panel.send_idle(board)      # 1 秒ごとに待機状態を送る (HUD の「メダル募集中」)
+        time.sleep(0.2); continue
+    board.play(); played += 1
+    ...既存のウェイト...
+```
+
+### 8.5 CLI
+
+```
+py -3 main_board/god_main_board.py --serve --credit --games 0
+    --credit          クレジット制で動く (既定 OFF = 従来どおり)
+    --games 0         無制限 (配信中は止めない)
+    --credit-init 300 起動時のクレジット (デモ用)
+```
+
+`--credit` を付けない限り既存の動作・既存のテストは一切変わらない。
+
+---
+
+## 9. コンパネ / オーバーレイへの追加
+
+### コンパネ (`control/main_control.html`) に「Twitch」カード
+
+- 接続状態 (Twitch / ブリッジ / 中継) の 3 ランプ
+- **キルスイッチ**「Twitch 連携 ON/OFF」— 荒れたら即止める。これは必須
+- 直近イベントログ (誰が・何を・何枚)
+- クレジット / 下皿 / 貯金の現在値
+- 疑似イベントボタン (`cheer 100` / `sub` / `raid 50` / `redeem メダル100枚`) — Twitch なしで通し確認できる
+- `rules.json` 再読込ボタン
+
+### オーバーレイ (`enshutsu/enshutsu_overlay.html`) に視聴者 HUD
+
+- `クレジット 37 / 下皿 1,204`
+- `いま回してるのは @someone のメダル`
+- 投入ランキング TOP3
+- メダル 0 のときの「メダル募集中」表示
+- 投入通知のトースト (演出の邪魔をしないよう画面端・1.5 秒間隔で合流表示)
+
+HUD の文字サイズは既存ルールどおり **`--sh` 比で指定** し、px 固定にしない。
+新規 action は既存の `ACTIONS` テーブルに `twitchEvent` / `twitchState` を足すだけで拾える。
+
+**視聴者名は必ずサニタイズしてから表示する**: `textContent` で入れる (innerHTML 禁止)、
+20 文字で切る、制御文字・RTL 上書き文字 (U+202E など) と結合文字の連打を除去する。
+チャット本文は既定で HUD に出さない (出すならさらに NG ワードと長さの制限を入れる)。
+
+---
+
+## 10. 流量制御
+
+| 対象 | 方針 |
+| --- | --- |
+| メダル | **即時反映**。溜まるだけなので詰まらない。1 イベント上限・1 分上限だけ掛ける |
+| 演出 (バナー/カットイン) | ブリッジ側で最短間隔 1.5 秒に間引き。同種は合流 (「@a @b ほか 12 人がサブスク」) |
+| フリーズ / GG / AT 終了 | オーバーレイ側が既に直列キューで捌く。ブリッジからは撃たない |
+| 下皿超過 | `reserveMax` を超えた分は `bank` へ退避 → `.run/twitch_bank.json` に保存し次回配信へ持ち越し |
+
+レイド 500 人が一度に来ても、増えるのは「メダル 5,000 枚」と「合流した 1 回の演出」だけになる。
+
+---
+
+## 11. 認証と秘密情報
+
+- **フロー**: 配信 PC ローカルで完結するので **Device Code Grant** が最適
+  (ブラウザにコードを出して承認 → リフレッシュトークン取得)。ローカル HTTP サーバーを立てる
+  Authorization Code + `http://localhost` リダイレクトでも可。
+- **保存先**: `.run/twitch_token.json` (`.run/` は既に `.gitignore` 済み)。
+- **client_id / client_secret**: 環境変数 or `.run/twitch_secret.json`。**リポジトリに入れない**。
+  `twitch/config.example.json` にキー名だけ置く。
+- **トークン更新**: ユーザーアクセストークンは数時間で切れる。期限の 5 分前にリフレッシュ、
+  401 を受けたら 1 回だけ即リフレッシュして再試行、失敗はコンパネに赤で出す。
+- **ネットワーク**: `server.listen(PORT)` は現状 全インターフェースで待ち受けている。
+  Twitch 連携で `playerInput` を受けるようになると、同一 LAN の誰でも投入・設定変更を送れてしまう。
+  **`server.listen(PORT, "127.0.0.1")` にする** (別 PC の OBS から見る運用なら、代わりに共有トークンを付ける)。
+  この 1 行は Tier 2 を入れる前にやっておく。
+
+---
+
+## 12. 落ちたときの振る舞い
+
+| 落ちたもの | 起きること | 対策 |
+| --- | --- | --- |
+| ブリッジ | クレジットが尽きるまで回り、以後待機 | 主制御は無傷。HUD に「連携停止中」 |
+| 中継サーバー (8787) | ブリッジの送信先が消える | 受信済みイベントを `.run/twitch_pending.jsonl` に追記し、再接続後に順に流す (**ビッツを失わないこと。ここが一番大事**) |
+| 主制御 | 演出だけの配信に縮退 | ブリッジは投入を `pending` に貯め続ける。再起動時に `bank` から復元 |
+| Twitch 接続 | keepalive 途絶 → 指数バックオフで再接続 | `session_reconnect` は新 URL に繋いでから旧を閉じる |
+| トークン失効 | `revocation` / 401 | リフレッシュ → 失敗ならコンパネに赤表示 + 再認証手順を出す |
+
+チャンネルポイントは、**ブリッジが処理できなかったら自動で返金する** のが親切
+(`PATCH /helix/channel_points/custom_rewards/redemptions` で `CANCELED`)。
+ただし返金できるのは **同じ client_id が作った報酬だけ** なので、報酬はブリッジ側から作成する。
+
+---
+
+## 13. 悪用対策
+
+- ユーザーごとのクールダウン (既定 5 秒)、無視リスト (`guard.blocklist`)
+- `powerCycle` / `stopOrder` / `forceFlag` はモデレータ限定 (`modOnlyInputs`)
+- チャットは **コマンド語の完全一致のみ** 受理。任意テキストを主制御に流さない
+- 表示名・本文のサニタイズ (9 章)
+- ブリッジ ↔ 中継は `127.0.0.1` 限定 (11 章)
+- コンパネのキルスイッチで即時停止
+
+---
+
+## 14. テスト (Twitch に繋がずに開発する)
+
+1. **疑似イベント JSONL**
+   `node twitch/twitch_bridge.js --mock twitch/mock_events.jsonl --speed 5`
+   正規化以降の全経路 (ルール判定 → 送信 → 主制御 → 演出) を Twitch 無しで通す。
+2. **Twitch CLI のモック EventSub サーバー**
+   `twitch event websocket start-server` を立て、ブリッジを `--ws-url ws://127.0.0.1:8080/ws` で接続。
+   `twitch event trigger channel.cheer --transport=websocket` で本物と同じ形の通知を流す。
+   接続・再接続・重複排除まで含めて検証できる。
+3. **コンパネの疑似イベントボタン** — 配信直前の通し確認用。
+4. **主制御のオフライン検証**
+   `py -3 main_board/god_main_board.py --credit --credit-init 30 --games 200 --no-panel --seed 1`
+   投入 → 消化 → 待機 → 再投入 の遷移と、`total_in` の整合を確認。
+5. **既存テストへの追加**
+   `scripts\dev.cmd test` と `npm run check` に `node --check twitch/*.js` を足す。
+   ルール表は起動時にスキーマ検証し、壊れていたら「連携 OFF で起動」する (配信を止めない)。
+
+---
+
+## 15. ファイル構成と実装順
+
+```
+twitch/
+├── twitch_bridge.js      本体。受信 → 正規化 → ルール判定 → 中継へ送出
+├── eventsub.js           接続・再接続・keepalive・重複排除だけの薄い層
+├── auth.js               Device Code フローとトークン更新
+├── rules.json            イベント → 操作の対応表 (人が編集する)
+├── rules.example.json
+├── config.example.json   client_id などのキー名だけ (値は入れない)
+└── mock_events.jsonl     テスト用の擬似イベント列
+```
+
+段階的に入れる。**各段階で単体で配信に使える** ように切ってある。
+
+| 段階 | 内容 | 触るファイル | リスク |
+| --- | --- | --- | --- |
+| **1** | Tier 1 のみ。フォロー/サブスク/ビッツ → 既存の `panelInject(enshutsu)` でバナー | `twitch/` 新規のみ | ゼロ (主制御に触らない) |
+| **2** | 中継を `127.0.0.1` に固定 + コンパネの Twitch カード (状態表示・キルスイッチ・疑似イベント) | `server/` 1 行, `control/` | 小 |
+| **3** | Tier 2 クレジット制。`--credit` と `playerInput` | `main_board/` | 中 (既定 OFF なので退避可能) |
+| **4** | 視聴者 HUD・投入者の紐付け・ランキング・貯金箱 | `enshutsu/`, `main_board/` | 小 |
+| **5** | 押し順投票 / 設定変更 / (使うなら) Tier 3 | `main_board/`, `twitch/` | 要相談 |
+
+段階 1 だけなら半日で動く。ここで「視聴者のアクションが画面に出る」体験を先に確認してから、
+段階 3 の主制御改造に進むのがよい。
+
+---
+
+## 16. 決めてほしいこと
+
+1. **メダルの換算レート** — 1 bit = 何枚 / サブスク = 何枚 / レイド 1 人 = 何枚。
+   配信の長さと「視聴者がどれだけ回さないと止まるか」が決まる、いちばん重要な数値。
+   叩き台: `1 bit = 0.1 枚` `sub tier1 = 150 枚 (=50G)` `レイド 1 人 = 10 枚`。
+2. **止まる配信にするか** — クレジット制 (メダルが尽きたら待機) にするか、
+   従来どおり常時回して Twitch は演出だけにするか。**本設計はクレジット制を推奨** (段階 3)。
+3. **Tier 3 (やらせ) を使うか** — 使うなら HUD への「演出」表示と集計の分離は必須。
+4. **チャンネルポイント報酬をブリッジから作るか** — 作れば取りこぼし時の自動返金ができる。
+5. **筐体ビューの停止操作を視聴者に渡すか** — 押し順投票は AT 中のナビ無視で損をするので、
+   「遊べる」が「出玉が減る」。エンタメとしては面白いが、段階 5 で別途決める。
