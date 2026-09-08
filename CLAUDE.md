@@ -9,6 +9,7 @@ WebSocket 中継サーバー経由でオーバーレイ(OBS)・コンパネ・�
 slot_enshutsu_sender/
 ├── setup.bat                  人手用ワンクリック起動 (依存確認 → サーバー → ブラウザ → 主制御)。Shift-JIS/CRLF
 ├── run_server.bat             setup.bat から呼ばれる中継サーバー起動用。Shift-JIS/CRLF
+├── manual.bat                 人手用: 主制御を手動モードで起動し、メニューでレバーON/クレジット投入/自動切替。Shift-JIS/CRLF
 ├── package.json               npm scripts (start / dev:* / test / check)
 ├── server/
 │   └── trigger_relay_server.js  WebSocket 中継 + 静的配信 + /api/list + /api/health (port 8787)
@@ -114,7 +115,7 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 ## 編集時の注意
 
-- `setup.bat` / `run_server.bat` / `scripts\dev.cmd` は **Shift-JIS (cp932) + CRLF**。UTF-8 で保存すると
+- `setup.bat` / `run_server.bat` / `manual.bat` / `scripts\dev.cmd` は **Shift-JIS (cp932) + CRLF**。UTF-8 で保存すると
   日本語が文字化けし、`choice` や `echo` が壊れる。編集後は文字コードを必ず確認する。
 - `enshutsu_overlay.html` は自身の URL から素材フォルダ (`enshutsu/yokoku/freeze/...`, `enshutsu/at/sound/` など) を
   `/api/list` で解決する。オーバーレイと素材フォルダの相対位置を変えないこと。
@@ -164,6 +165,8 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 ## 起動の前提 (人手)
 
+- manual.bat をダブルクリックすると主制御を手動モード (`-Mode manual`) で起動し、キー1つでレバーON・クレジット投入・
+  自動/手動の切替・状態表示・停止ができる (中身は `scripts\dev.cmd start/send/status/stop` の呼び出しだけ)。
 - setup.bat をダブルクリックすれば依存インストールから全起動まで行う。dev.ps1 と同時に使うとポート競合の警告が出るが問題ない
   (dev.ps1 の stop はポートからも探して止める)。起動モードの選択肢は `[1] 通常 [2] 高速 [3] 天井 [4] 手動 [5] 起動しない`
   で、`-Mode` と対応している (`[4] 手動` = `--manual --credit 50`)。
