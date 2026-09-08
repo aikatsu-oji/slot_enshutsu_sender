@@ -597,8 +597,8 @@
         <div class="mb-val" id="tw-enabled">—</div>
       </div>
       <div class="mb-tile">
-        <div class="lbl">購読</div>
-        <div class="mb-val" id="tw-subs">—</div>
+        <div class="lbl">チャンネル</div>
+        <div class="mb-val" id="tw-channel">—</div>
       </div>
       <div class="mb-tile">
         <div class="lbl">演出キュー</div>
@@ -1332,7 +1332,7 @@
   };
   const twEnabledEl = document.getElementById("tw-enabled");
   const twTileEnabled = document.getElementById("tw-tile-enabled");
-  const twSubsEl = document.getElementById("tw-subs");
+  const twChannelEl = document.getElementById("tw-channel");
   const twQueueEl = document.getElementById("tw-queue");
   const twPendingEl = document.getElementById("tw-pending");
   const twToggleBtn = document.getElementById("tw-toggle");
@@ -1373,7 +1373,8 @@
     twLamp(twLamps.bridge, true);
     twEnabledEl.textContent = d.enabled ? "ON" : "OFF";
     twTileEnabled.classList.toggle("tw-off", !d.enabled);
-    twSubsEl.textContent = d.subs != null ? d.subs : "—";
+    // 視聴者名と同じ扱いで、必ず textContent で入れる (innerHTML を使わない)
+    twChannelEl.textContent = d.channel ? `#${d.channel}` : "—";
     twQueueEl.textContent = d.queue != null ? d.queue : "—";
     twPendingEl.textContent = d.pending != null ? d.pending : "—";
     twToggleBtn.textContent = d.enabled ? "連携を OFF にする" : "連携を ON にする";

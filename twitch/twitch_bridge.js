@@ -1,17 +1,19 @@
 // Twitch → 中継サーバー ブリッジ
 //
-// Twitch の EventSub から届くイベントを正規化し、rules.json に従って
+// Twitch のチャットを匿名で読み、rules.json に従って
 // 中継サーバー (ws://127.0.0.1:8787) へ流す。中継サーバーは一切改造しない。
 //
-//   node twitch/twitch_bridge.js                     本番 (Twitch に繋ぐ)
+//   node twitch/twitch_bridge.js --chat <channel>    本番 (認証もアプリ登録も不要)
 //   node twitch/twitch_bridge.js --mock twitch/mock_events.jsonl --speed 5
 //                                                    Twitch に繋がずに擬似イベントを流す
-//   node twitch/twitch_bridge.js --ws-url ws://127.0.0.1:8080/ws --no-subscribe
-//                                                    Twitch CLI のモック EventSub サーバーに繋ぐ
+//
+// **入口はチャットだけ。EventSub 経路は無効にしてある。**
+//   ビッツ・サブスク・レイド・フォロー・チャンネルポイントは EventSub でしか取れないので、
+//   いまは届かない。開発が進んだら改めて実装する (eventsub.js / auth.js は git 履歴に残っている)。
 //
 // やること:
-//   演出 (予告バナー) をオーバーレイへ直接流し、無料アクションぶんのメダルを主制御へ投入する。
-//   押し順の投票と、モデレータ限定の操作 (設定変更) も中継する。
+//   コメントを数えて、貯まったぶんのメダルを主制御へ投入する。
+//   演出 (予告バナー) をオーバーレイへ直接流し、モデレータ限定の操作 (設定変更) も中継する。
 //   **抽選には触らない。** 触る口は --allow-force を両方に付けたときだけ開く (既定は閉じている)。
 //   --no-medals を付けると演出だけになる。
 //
@@ -24,7 +26,6 @@ const fs = require("fs");
 const path = require("path");
 const WebSocket = require("ws");
 
-const { createEventSub, DEFAULT_URL } = require("./eventsub");
 const { createChatIrc, DEFAULT_CHAT_URL } = require("./chat_irc");
 const { loadConfig } = require("./config");
 
@@ -38,15 +39,12 @@ function parseArgs(argv) {
   const a = {
     relay: "ws://127.0.0.1:8787",
     rules: path.join(__dirname, "rules.json"),
-    wsUrl: DEFAULT_URL,
-    apiUrl: null,
     mock: null,
     speed: 1,
     medals: true,
-    subscribe: true,
     dryRun: false,
     allowForce: false,
-    chat: null,          // チャンネル名。指定すると匿名IRCでチャットだけ読む (認証不要)
+    chat: null,          // 読むチャンネル名。省略時は設定/環境変数から取る
     chatUrl: DEFAULT_CHAT_URL,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -54,8 +52,6 @@ function parseArgs(argv) {
     const next = () => argv[++i];
     if (v === "--relay") a.relay = next();
     else if (v === "--rules") a.rules = next();
-    else if (v === "--ws-url") a.wsUrl = next();
-    else if (v === "--api-url") a.apiUrl = next();
     else if (v === "--mock") a.mock = next();
     else if (v === "--speed") a.speed = Math.max(0.1, Number(next()) || 1);
     else if (v === "--medals") a.medals = true;
@@ -63,7 +59,6 @@ function parseArgs(argv) {
     else if (v === "--allow-force") a.allowForce = true;
     else if (v === "--chat") a.chat = String(next() || "").replace(/^#/, "");
     else if (v === "--chat-url") a.chatUrl = next();
-    else if (v === "--no-subscribe") a.subscribe = false;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--help" || v === "-h") { printHelp(); process.exit(0); }
     else { console.error(`不明な引数: ${v}`); printHelp(); process.exit(2); }
@@ -74,22 +69,20 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`使い方: node twitch/twitch_bridge.js [options]
 
+  --chat <channel>  読むチャンネル。匿名なので認証もアプリ登録も要らない。
+                    省略時は TWITCH_CHANNEL か .run/twitch_config.json の channel を使う。
   --relay <url>     中継サーバー          (既定 ws://127.0.0.1:8787)
   --rules <file>    ルール表              (既定 twitch/rules.json)
-  --ws-url <url>    EventSub の接続先     (既定 ${DEFAULT_URL})
-  --api-url <url>   Helix の接続先        (Twitch CLI のモックを使うときだけ)
-  --chat <channel>  読むチャンネル。匿名なので認証もアプリ登録も要らない。
-                    既定のルール表はチャットだけなので、指定するのは実質これだけ。
-                    省略時は TWITCH_CHANNEL か .run/twitch_config.json の channel を使う。
-                    ビッツ/サブスク/レイドは取れない (EventSub = 要認証が要る)
   --chat-url <url>  チャットの接続先 (既定 ${DEFAULT_CHAT_URL})
   --mock <file>     擬似イベント JSONL を流す (Twitch に繋がない)
   --speed <n>       --mock の再生倍率     (既定 1 = 1.5 秒に 1 件)
   --no-medals       メダルの投入をしない (段階1 の演出だけの挙動に戻す)
   --allow-force     強制フラグ (イベント用のやらせ) を送れるようにする。既定は無効。
                     主制御側にも --allow-force が要る (両方に付けないと効かない)
-  --no-subscribe    購読登録をしない      (モックサーバー向け)
-  --dry-run         中継へ送らずログだけ出す`);
+  --dry-run         中継へ送らずログだけ出す
+
+  入口はチャットだけです。ビッツ/サブスク/レイド/チャンネルポイントは EventSub が
+  要りますが、その経路はいま無効にしてあります (開発が進んだら改めて実装する)。`);
 }
 
 const args = parseArgs(process.argv);
@@ -131,8 +124,8 @@ const DEFAULT_GUARD = {
   chatMedalsPerMinute: 10,
   enshutsuMinIntervalMs: 1500,
   modOnlyInputs: [],
-  mods: [],            // モデレータの login 名。チャット以外 (チャンネルポイントなど) は
-                       // バッジが付いてこないので、ここに書いた名前で判定する
+  mods: [],            // モデレータの login 名。チャットはバッジで判定できるので普通は空でよい。
+                       // バッジが付かない入口を後々足したときのための予備
   ignoreUsers: [],
   chatHype: { windowSec: 60, threshold: 30, boost: 1 },
 };
@@ -235,45 +228,24 @@ function createRelay(url, onMessage) {
 }
 
 // ---------------------------------------------------------------------------
-// 購読するイベント (kind → EventSub の購読定義)
-//   ルール表に出てこない kind は購読しない (1 セッションの購読数に上限があるため)。
-//   ※ type / version / スコープ名は Twitch 側の改訂があるので、動かないときは
-//      https://dev.twitch.tv/docs/eventsub/eventsub-subscription-types/ で確認する。
+// イベントの入口
+//   **いまはチャット (匿名 IRC) だけ。** EventSub 経路は無効にしてある。
+//   ビッツ・サブスク・レイド・フォロー・チャンネルポイントは EventSub でしか取れないので、
+//   それらのルールを書いても届かない。開発が進んだら改めて実装する
+//   (削除した eventsub.js / auth.js は git 履歴に残っている)。
+//
+//   ルール表に chat 以外の kind が有効なまま入っていたら、黙って無視せず起動時に言う。
+//   「書いたのに反応しない」で悩む時間が一番もったいない。
 // ---------------------------------------------------------------------------
-const bc = (id) => ({ broadcaster_user_id: id });
-const SUBSCRIPTIONS = {
-  follow:  [{ type: "channel.follow", version: "2", scope: "moderator:read:followers",
-              cond: (id) => ({ broadcaster_user_id: id, moderator_user_id: id }) }],
-  cheer:   [{ type: "channel.cheer", version: "1", scope: "bits:read", cond: bc }],
-  sub:     [{ type: "channel.subscribe", version: "1", scope: "channel:read:subscriptions", cond: bc }],
-  resub:   [{ type: "channel.subscription.message", version: "1",
-              scope: "channel:read:subscriptions", cond: bc }],
-  subgift: [{ type: "channel.subscription.gift", version: "1",
-              scope: "channel:read:subscriptions", cond: bc }],
-  raid:    [{ type: "channel.raid", version: "1", scope: null,
-              cond: (id) => ({ to_broadcaster_user_id: id }) }],
-  redeem:  [{ type: "channel.channel_points_custom_reward_redemption.add", version: "1",
-              scope: "channel:read:redemptions", cond: bc }],
-  chat:    [{ type: "channel.chat.message", version: "1", scope: "user:read:chat",
-              cond: (id) => ({ broadcaster_user_id: id, user_id: id }) }],
-  stream:  [{ type: "stream.online", version: "1", scope: null, cond: bc },
-            { type: "stream.offline", version: "1", scope: null, cond: bc }],
-};
+const CHAT_KIND = "chat";
 
-// stream は購読しないと連帯カウンタと初コメ判定のリセット契機が無いので常に取る
-function neededKinds() {
-  const kinds = new Set(["stream"]);
-  // enabled:false のルールは購読もしない。使わないイベントのスコープまで
-  // 承認画面に出すと、配信者に余計な権限を求めることになる。
-  for (const r of rules.rules) if (r.enabled !== false) kinds.add(r.when.kind);
-  return [...kinds].filter((k) => SUBSCRIPTIONS[k]);
-}
-
-// 有効なルールがチャットだけなら、匿名 IRC で読めるので
-// **認証もクライアント ID も要らない**。既定の rules.json はこちらに倒れる。
-// レイドやサブスクのルールを 1 つでも有効にすると EventSub 側 (要認証) に切り替わる。
-function chatOnlyRules() {
-  return rules.rules.every((r) => r.enabled === false || r.when.kind === "chat");
+function unreachableKinds() {
+  const kinds = new Set();
+  for (const r of rules.rules) {
+    if (r.enabled === false) continue;
+    if (r.when.kind !== CHAT_KIND) kinds.add(r.when.kind);
+  }
+  return [...kinds];
 }
 
 // ---------------------------------------------------------------------------
@@ -586,8 +558,8 @@ function countChat(rule, ev, ctx) {
 // ---------------------------------------------------------------------------
 // 押し順投票 / 遊技者の操作
 // ---------------------------------------------------------------------------
-// チャット以外 (チャンネルポイントなど) にはバッジが付いてこないので、
-// guard.mods に書いた login 名でモデレータ判定する。
+// チャットにはバッジが付いてくるので、ふつうはそれで判定できる。
+// guard.mods (login 名の名簿) は、バッジが付かない入口を後々足したときのための予備。
 function isMod(ev) {
   if (ev.user && ev.user.isMod) return true;
   const login = ev.user && ev.user.login;
@@ -663,52 +635,6 @@ function applyForce(rule, ev, ctx) {
   }
   ctx.relay.send({ action: "playerInput", input: "forceFlag", flag: rule.force.flag });
   log(`[強制] 次ゲームを ${rule.force.flag} に指定しました (演出)`);
-}
-
-// ---------------------------------------------------------------------------
-// チャンネルポイント報酬の名前を起動時に照合する (読み取りだけ)
-//   名前が 1 文字違うだけで無反応になり、しかも何も起きないので原因が分からない。
-//   起動時に突き合わせて、違っていればその場で言う。
-// ---------------------------------------------------------------------------
-// 全角/半角・大文字小文字・前後の空白を無視した比較用のキー
-const rewardKey = (s) => String(s || "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();
-
-async function checkRewards(helix, broadcasterId) {
-  const wanted = [...new Set(rules.rules
-    .filter((r) => r.enabled !== false && r.when.kind === "redeem" && r.when.reward)
-    .map((r) => r.when.reward))];
-  if (!wanted.length) return;
-
-  const res = await helix.get(`/channel_points/custom_rewards?broadcaster_id=${broadcasterId}`);
-  if (res.status === 403) {
-    // チャンネルポイントは アフィリエイト / パートナー だけの機能。
-    // 到達していないチャンネルでは報酬そのものが存在せず、この API は 403 を返す。
-    // 購読登録は通ってしまう (通知が永久に来ないだけ) ので、ここで気づけるようにする。
-    log("[報酬] チャンネルポイントを使えません (403)");
-    log("       チャンネルポイントは アフィリエイト / パートナー だけの機能です。");
-    log("       未到達の場合、メダルの入口は「チャット連帯カウンタ」と「レイド」だけになります。");
-    log("       rules.json の counter.goal を下げると、コメントだけでも回しやすくなります。");
-    return;
-  }
-  if (res.status !== 200 || !res.body || !Array.isArray(res.body.data)) {
-    log(`[報酬] 一覧を取得できませんでした (${res.status})。名前の照合は省略します`);
-    return;
-  }
-  const have = res.body.data.map((x) => x.title);
-  const haveKeys = new Map(have.map((t) => [rewardKey(t), t]));
-  const missing = wanted.filter((t) => !have.includes(t));
-
-  if (!missing.length) {
-    log(`[報酬] ルール表の ${wanted.length} 件はすべてチャンネルにあります`);
-    return;
-  }
-  log("[報酬] 次の報酬がチャンネルに見つかりません。反応しません:");
-  for (const t of missing) {
-    const near = haveKeys.get(rewardKey(t));
-    if (near) log(`         「${t}」→ 似た名前の「${near}」があります (空白や全角半角の違い?)`);
-    else log(`         「${t}」→ この名前で報酬を作るか、rules.json の "reward" を直してください`);
-  }
-  if (have.length) log(`         いまチャンネルにある報酬: ${have.join(" / ")}`);
 }
 
 function handleEvent(ev, ctx) {
@@ -795,11 +721,10 @@ function handleEvent(ev, ctx) {
 async function main() {
   reloadRules();
 
-  // 有効なルールがチャットだけなら匿名 IRC で読む (認証もクライアント ID も要らない)。
+  // チャットは匿名で読む (認証もクライアント ID も要らない)。要るのはチャンネル名だけ。
   // 中継サーバーに繋ぐ前に確かめる。足りないまま繋いでも何も起きないだけで分かりにくい。
-  const chatOnly = !args.mock && (args.chat || chatOnlyRules());
-  const chatChannel = chatOnly ? (args.chat || loadConfig().channel) : "";
-  if (chatOnly && !chatChannel) {
+  const chatChannel = args.mock ? "" : (args.chat || loadConfig().channel);
+  if (!args.mock && !chatChannel) {
     console.error(
       "チャンネル名がありません。次のどれかで指定してください。\n" +
         "  1. node twitch/twitch_bridge.js --chat <あなたのチャンネル名>\n" +
@@ -838,12 +763,12 @@ async function main() {
 
   // 生存と状態を 1 秒周期で流す。コンパネのランプとオーバーレイ HUD がこれを見る。
   let esConnected = false;
-  let subCount = 0;
   let lastAt = null;
   const heartbeat = setInterval(() => {
     relay.send({
       action: "twitchState",
-      connected: esConnected, enabled: rules.enabled, subs: subCount,
+      connected: esConnected, enabled: rules.enabled,
+      channel: chatChannel || (args.mock ? "(擬似イベント)" : ""),
       queue: queue.size, pending: relay.pending, lastAt,
       stage: args.medals ? "medals" : "tier1",
       chatCount: chatCounter.count, chatGoal: chatCounter.goal,
@@ -868,27 +793,6 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-
-  // --- チャットだけ匿名で読むモード (認証不要) ---
-  // 有効なルールがチャットだけなら自動でこちら。--chat でも明示できる。
-  if (chatOnly) {
-    const channel = chatChannel;
-    log(`[起動] チャット連動モード: #${channel} (匿名・認証不要)`);
-    log("       ビッツ/サブスク/レイド/チャンネルポイントは取れません (EventSub が要ります)");
-    log("       配信開始 (stream.online) も取れないので、連帯カウンタとランキングは");
-    log("       このプロセスの起動時がリセット点になります (配信ごとに起動し直す)");
-    ctx.es = createChatIrc({
-      channel,
-      url: args.chatUrl,
-      log,
-      onStatus: (ok, text) => { esConnected = ok; log(`[チャット] ${text}`); },
-      onMessage: (ev) => onEvent("channel.chat.message", ev, {
-        message_id: ev.message_id, message_timestamp: new Date().toISOString(),
-      }),
-    });
-    ctx.es.start();
-    return;
-  }
 
   // --- 擬似イベントモード (Twitch に繋がない) ---
   if (args.mock) {
@@ -916,60 +820,24 @@ async function main() {
     return;
   }
 
-  // --- EventSub (要認証) / Twitch CLI のモックサーバー ---
-  // ここへ来るのは、チャット以外のルールを有効にしたときだけ。
-  // clientId は各自で登録したアプリのものが要る (配布元の ID は同梱していない)。
-  const { ensureToken, createHelix } = require("./auth");
-  const config = loadConfig();
-  const kinds = neededKinds();
-  const wanted = kinds.flatMap((k) => SUBSCRIPTIONS[k]);
-  const scopes = [...new Set(wanted.map((s) => s.scope).filter(Boolean))];
-  log(`[Twitch] 購読する種別: ${kinds.join(", ")}`);
-
-  let helix = null;
-  let broadcasterId = null;
-  if (args.subscribe) {
-    const session = await ensureToken(config, scopes, log);
-    helix = createHelix(config, session, log, args.apiUrl ? `${args.apiUrl}/helix` : undefined);
-    if (config.channel) {
-      broadcasterId = await helix.userId(config.channel);
-    } else {
-      // 設定にチャンネル名が無ければ、承認した本人のチャンネルを使う。
-      // これで設定ファイルそのものが不要になる (承認するだけで自分の配信に繋がる)。
-      broadcasterId = session.userId;
-      config.channel = session.login;
-    }
-    log(`[Twitch] チャンネル ${config.channel} (id ${broadcasterId}) として動きます`);
-    try {
-      await checkRewards(helix, broadcasterId);
-    } catch (e) {
-      log(`[報酬] 名前の照合に失敗しました: ${e.message}`);   // 照合は補助なので止めない
-    }
+  // --- チャット (匿名 IRC。認証もクライアント ID も要らない) ---
+  log(`[起動] チャット連動: #${chatChannel} (匿名・認証不要)`);
+  log("       配信開始 (stream.online) は取れないので、連帯カウンタとランキングは");
+  log("       このプロセスの起動時がリセット点になります (配信ごとに起動し直す)");
+  const dead = unreachableKinds();
+  if (dead.length) {
+    log(`[警告] チャット以外のルールが有効です: ${dead.join(", ")}`);
+    log("       EventSub 経路はいま無効なので、これらは一度も発火しません。");
+    log("       使うつもりが無ければ \"enabled\": false にしてください。");
   }
-
-  ctx.es = createEventSub({
-    url: args.wsUrl,
+  ctx.es = createChatIrc({
+    channel: chatChannel,
+    url: args.chatUrl,
     log,
-    onStatus: (ok, text) => { esConnected = ok; log(`[Twitch] ${text}`); },
-    onRevocation: (sub) =>
-      log(`[Twitch] 購読が取り消されました: ${sub.type} (${sub.status})。再認証が必要かもしれません`),
-    onNotification: onEvent,
-    async onWelcome(sessionId) {
-      if (!args.subscribe) { log("[Twitch] 購読登録は行いません (--no-subscribe)"); return; }
-      subCount = 0;
-      for (const s of wanted) {
-        const body = {
-          type: s.type,
-          version: s.version,
-          condition: s.cond(broadcasterId),
-          transport: { method: "websocket", session_id: sessionId },
-        };
-        const r = await helix.post("/eventsub/subscriptions", body);
-        if (r.status === 202 || r.status === 200 || r.status === 409) subCount++;
-        else log(`[Twitch] 購読に失敗: ${s.type} (${r.status}) ${r.body && r.body.message ? r.body.message : ""}`);
-      }
-      log(`[Twitch] 購読を登録しました: ${subCount}/${wanted.length} 件`);
-    },
+    onStatus: (ok, text) => { esConnected = ok; log(`[チャット] ${text}`); },
+    onMessage: (ev) => onEvent("channel.chat.message", ev, {
+      message_id: ev.message_id, message_timestamp: new Date().toISOString(),
+    }),
   });
   ctx.es.start();
 }

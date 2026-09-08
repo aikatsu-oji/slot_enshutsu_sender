@@ -34,16 +34,15 @@ slot_enshutsu_sender/
 │       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
 ├── twitch/                    Twitch 連携 (いまはチャット連帯カウンタだけ。ほかの要素は後々設計する)
-│   ├── twitch_bridge.js         チャット/EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
-│   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。既定の経路。認証不要
-│   ├── config.js                設定 (channel / clientId) の読み取りだけ。認証を通らずに使える
-│   ├── eventsub.js              EventSub WebSocket の薄い層。チャット以外のルールを足したときだけ通る
-│   ├── auth.js                  Device Code Grant とトークン更新。同上。トークンは .run/ 配下 (git 管理外)
+│   ├── twitch_bridge.js         チャット → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
+│   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。唯一の入口。認証不要
+│   ├── config.js                設定 (channel) の読み取りだけ
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
-│   ├── config.example.json      .run/twitch_config.json のひな形 (channel / clientId)
-│   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ (30コメントで連帯カウンタが埋まる)
+│   ├── config.example.json      .run/twitch_config.json のひな形 (channel だけ)
+│   └── mock_events.jsonl        Twitch に繋がずに通すテストデータ (30コメントで連帯カウンタが埋まる)
+│                                ※ EventSub 経路は無効。eventsub.js / auth.js は削除済み (git 履歴にある)
 ├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf, twitch連携設計.md,
-│                              twitch認証の取り方.md, はじめて使う人へ.md)
+│                              twitch認証の取り方.md ← EventSub を戻すときの手順, はじめて使う人へ.md)
 ├── scripts/
 │   ├── dev.ps1 / dev.cmd        CLI 用: start / stop / restart / status / test / open / send / logs
 │   ├── ws_send.js               中継サーバーへ JSON を1件送る
@@ -114,7 +113,8 @@ npm run twitch                                         # 同上 (チャンネル
   中継サーバー(8787)の `mainBoard`(state/idle/player) と `twitchState` を見て表示するだけで、
   遊技へ戻る経路は無い。主制御が `--credit` でないとき (credit が来ない) は HUD ごと自動的に隠れる。
   名前は必ず `textContent` で入れる (`innerHTML` を使わない)。
-- コンパネの「Twitch 連携」カードは `twitchState` (1秒周期) を見てランプと数値を出し、
+- コンパネの「Twitch 連携」カードは `twitchState` (1秒周期) を見てランプと数値
+  (連携 / チャンネル / 演出キュー / 送信保留) を出し、
   キルスイッチ (`twitchControl`)・ルール表の再読込・疑似イベント (`twitchMock`) を送る。
   ブリッジが居なくても静かに待つだけで、他の機能には影響しない。
   視聴者名はブリッジ側でサニタイズ済みだが、コンパネでも必ずエスケープしてから DOM に入れる。
@@ -147,25 +147,23 @@ npm run twitch                                         # 同上 (チャンネル
   ルールに `"enabled": false` を書くとそのルールだけ無効にできる。
   1分あたりの上限に当たったぶんは捨てずに待たせる (視聴者が押したぶんを失わない)。
   `--no-medals` で演出だけの挙動 (段階1) に戻せる。
-- **いまのルール表はチャット連帯カウンタ (30コメント → 120枚) だけ。ほかの要素は後々設計する。**
+- **入口はチャットだけ。EventSub 経路は無効にしてある。開発が進んだら改めて実装する。**
+  `eventsub.js` / `auth.js` / 購読定義 (`SUBSCRIPTIONS`) / `checkRewards` は削除済み
+  (必要になったら git 履歴から戻す)。ビッツ・サブスク・レイド・フォロー・
+  チャンネルポイントは EventSub でしか取れないので、いまは届かない。
+  ルール表に `kind` が `chat` 以外の有効なルールがあれば、起動時に
+  `unreachableKinds()` が警告を出す (**黙って無視しない**。「書いたのに反応しない」が一番困る)。
+- **いまのルール表はチャット連帯カウンタ (30コメント → 120枚) だけ。**
   初コメ歓迎・設定変更・押し順投票は `"enabled": false` で置いてある (チャットなので有効に
-  してもよい)。レイド・ビッツ・サブスク・フォロー・チャンネルポイントのルールは削除した。
-  各イベントの設計 (投入枚数・バナーのランク表) は `doc/twitch連携設計.md` に残っている。
-- **クライアント ID は同梱しない。既定の構成では認証もアプリ登録も要らない。**
-  有効なルールがチャットだけなら (`chatOnlyRules()`)、ブリッジは匿名 IRC (`chat_irc.js` /
-  justinfan) を選ぶ。必要なのはチャンネル名だけで、`--chat <channel>` → 環境変数
-  `TWITCH_CHANNEL` → `.run/twitch_config.json` の `channel` の順に見る。
-  設定の読み取りは `config.js` に分けてある (チャット連動で `auth.js` を通らないようにするため)。
-- チャット以外のルールを 1 つでも有効にすると EventSub 側 (要認証) に切り替わり、
-  **各自で登録したアプリの clientId** が要る (`ensureToken` の `requireClientId` で弾く)。
-  clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
-  手順は `doc/twitch認証の取り方.md`。要求スコープはルール表から自動で決まる。
+  してよい)。各イベントの設計 (投入枚数・バナーのランク表) は `doc/twitch連携設計.md` に残っている。
+- **認証もアプリ登録もクライアント ID も要らない。要るのはチャンネル名だけ。**
+  `--chat <channel>` → 環境変数 `TWITCH_CHANNEL` → `.run/twitch_config.json` の `channel`
+  の順に見て、無ければ中継サーバーに繋ぐ前に指定方法を出して終了する (exit 2)。
 - **チャンネルポイントは使わない** (アフィリエイト/パートナー限定の機能で、未到達だと存在しない。
-  実接続で `Get Custom Reward` が 403 になって判明した)。
-  `checkRewards` は `kind:"redeem"` のルールがあるときだけ走る (読み取りのみ)。
-  403 は「アフィリエイト未到達」を疑わせるメッセージを出す。
-  200 のときは NFKC + 空白除去で似た名前を突き止めて出す (名前が1文字違うと無反応になるため)。
-- チャット連動では `stream.online` が取れないので、連帯カウンタ・初コメ判定・ランキングの
+  実接続で `Get Custom Reward` が 403 になって判明した)。後々 EventSub を戻すときも、
+  報酬名の照合 (NFKC + 空白除去で似た名前を出す) は復活させること。
+  名前が 1 文字違うと無反応になり、原因が分からないため。
+- チャットでは `stream.online` が取れないので、連帯カウンタ・初コメ判定・ランキングの
   リセット点は**ブリッジの起動時**になる (配信ごとに起動し直す)。起動ログにそう出す。
 - 普通のコメントは中継へ流さない (本文を出さない)。**連帯カウンタの達成だけは
   `twitchEvent`(`kind:"counter"`) で流す。**これが無いとコンパネのイベント欄が

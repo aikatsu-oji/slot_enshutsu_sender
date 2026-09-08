@@ -1,16 +1,12 @@
-// 設定の読み取りだけ。認証 (auth.js) を通らずに使えるようにここに分けてある。
+// 設定の読み取りだけ。
 //
-// チャット連動モードは **認証もアプリ登録も要らない** ので、
-// チャンネル名を知るためだけに auth.js (と fetch や Device Code Grant) を
-// 読み込まなくて済むようにしている。
+// いま要るのは **チャンネル名ひとつ** です。チャットは匿名で読めるので、
+// 認証もアプリ登録もクライアント ID も要りません。
 //
 // 置き場所 (.gitignore 済みの .run/ 配下。無ければ無いで動く):
-//   .run/twitch_config.json  { "channel": "...", "clientId": "..." }
-// 環境変数 TWITCH_CHANNEL / TWITCH_CLIENT_ID があればそれが最優先。
-//
-// clientId は **チャット連動では使わない**。
-// レイド・ビッツ・サブスクなど EventSub が要るイベントを後々足すときだけ、
-// 自分で登録したアプリの ID をここに入れる (doc/twitch認証の取り方.md)。
+//   .run/twitch_config.json  { "channel": "..." }
+// 環境変数 TWITCH_CHANNEL があればそれが最優先。
+// コマンドラインの --chat <channel> はさらに優先されます (ブリッジ側で解決)。
 
 const fs = require("fs");
 const path = require("path");
@@ -27,12 +23,10 @@ function readJson(file) {
   }
 }
 
-// 足りなくてもここでは投げない。何が要るかはモードによって違うので、
-// 使う側 (チャット連動ならチャンネル名、EventSub なら clientId) が判断する。
+// 足りなくてもここでは投げない。無いときに何を言うかは使う側 (ブリッジ) が決める。
 function loadConfig() {
   const file = readJson(CONFIG_PATH) || {};
   return {
-    clientId: process.env.TWITCH_CLIENT_ID || file.clientId || "",
     channel: String(process.env.TWITCH_CHANNEL || file.channel || "").toLowerCase().replace(/^#/, ""),
   };
 }
