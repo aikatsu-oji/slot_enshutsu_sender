@@ -24,12 +24,9 @@
 //   main_control.html のボタン操作、または他の演出制御HTML/スクリプトから
 //   以下のようなJSONを送信すると、enshutsu_overlay.html側の演出が呼び出されます。
 //
-//      ws.send(JSON.stringify({ action: "playUpToLock2" }));
+//      ws.send(JSON.stringify({ action: "playAuthoring", id: "akatsu" }));
 //
 //   action に指定できる値:
-//     "playLock1" / "playLock2" / "playLock3"       … その段階だけを単体で再生
-//     "playUpToLock1" / "playUpToLock2" / "playUpToLock3" … ロック1から順に再生し、指定の段階で終了
-//     "triggerEnshutsu"                              … フル演出(ロック1→2→3)を1回再生
 //     "toggleSlow"                                   … スロー再生の切り替え
 //     "toggleSettings"                               … 設定パネルの開閉
 //     "reelIn" / "reelOut" / "reelToggle"            … リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切替

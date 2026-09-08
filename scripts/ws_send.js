@@ -1,6 +1,6 @@
 // 中継サーバーへ JSON を1件だけ送って終了する小さなクライアント。
-// 使い方: node scripts/ws_send.js ws://127.0.0.1:8787 '{"action":"triggerEnshutsu"}'
-//   (scripts/dev.cmd send '{"action":"triggerEnshutsu"}' から呼ばれる)
+// 使い方: node scripts/ws_send.js ws://127.0.0.1:8787 '{"action":"playAuthoring","id":"akatsu"}'
+//   (scripts/dev.cmd send '{"action":"playAuthoring","id":"akatsu"}' から呼ばれる)
 // 主制御を起動せずに、コンパネのボタンと同じメッセージをコマンドラインから投げられる。
 const WebSocket = require("ws");
 

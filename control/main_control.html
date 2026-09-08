@@ -542,16 +542,6 @@
     </div>
 
     <div class="card">
-      <h2>フリーズ演出</h2>
-      <div class="grp">単体ステージ再生</div>
-      <div class="grid">
-        <button class="btn" id="btn-lock1" disabled>ロック1単体</button>
-        <button class="btn" id="btn-lock2" disabled>ロック2単体</button>
-        <button class="btn" id="btn-lock3" disabled>ロック3単体</button>
-      </div>
-    </div>
-
-    <div class="card">
       <h2>オーバーレイ操作</h2>
       <div class="row2">
         <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
@@ -714,9 +704,6 @@
   const retryNowBtn = document.getElementById("btn-retry-now");
 
   const buttons = {
-    lock1: document.getElementById("btn-lock1"),
-    lock2: document.getElementById("btn-lock2"),
-    lock3: document.getElementById("btn-lock3"),
     slow: document.getElementById("btn-slow"),
     settings: document.getElementById("btn-settings"),
     reelIn: document.getElementById("btn-reel-in"),
@@ -850,10 +837,6 @@
       log(`⚠️ ${label} の送信中にエラー: ${e.message}`);
     }
   }
-
-  buttons.lock1.addEventListener("click", ()=> sendAction("playLock1","ロック1単体"));
-  buttons.lock2.addEventListener("click", ()=> sendAction("playLock2","ロック2単体"));
-  buttons.lock3.addEventListener("click", ()=> sendAction("playLock3","ロック3単体"));
 
   let slowOn = false;
   buttons.slow.addEventListener("click", ()=>{

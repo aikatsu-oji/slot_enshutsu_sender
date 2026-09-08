@@ -3,6 +3,10 @@
 Twitch 配信用のパチスロ演出オーバーレイ。GOD タイプ機の主制御/副制御を Python で再現し、
 WebSocket 中継サーバー経由でオーバーレイ(OBS)・コンパネ・筐体ビューを連携させる。
 
+**演出はすべて「予告オーサリング」で作ったオーサリングデータ (シーン) を再生する。**
+オーバーレイに直接書いた演出 (フリーズ・萌えカットイン・予告バナー・押し順ナビ・ポップアップ・
+GG突入・AT終了) は廃止済みで、オーバーレイは「シーンの再生器 + リール + ゲーム画面」だけを持つ。
+
 ## フォルダ構成
 
 ```
@@ -18,7 +22,7 @@ slot_enshutsu_sender/
 │   │                            --manual で「起動しても回さずレバーON待ち」。ベットはMAXベット(3枚)のみ
 │   └── reels.json               図柄配列 (1リール21コマ) の唯一の定義。主制御と筐体ビューの両方が読む
 ├── control/
-│   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)・図柄設定(エディタを内蔵)
+│   └── main_control.html        コンパネ。シーンの再生・主制御/副制御モニタ・映像配信(WebRTC)・図柄設定(エディタを内蔵)
 │                                「主制御 詳細」に遊技操作 (🕹️レバーON / 🪙クレジット投入 / 自動・手動の切替) がある
 ├── reel/
 │   ├── reel.html                筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
@@ -36,13 +40,13 @@ slot_enshutsu_sender/
 │   │                            プレビュー+タイムライン+キーフレーム。POST /api/authoring で保存
 │   ├── real/                    リールの効果音。start (回転開始) / stop (停止。stop1〜stop3 で停止順別も可)
 │   │                            筐体ビュー reel.html が /api/list で読む (任意。無ければ無音)
-│   ├── at/sound/                AT系演出の効果音 (任意: gg_start / stock_up / add_games / at_end / navi)
+│   ├── at/sound/                旧・内蔵演出の効果音置き場。オーバーレイはもう読まない (オーサリングの素材に使う)
 │   └── yokoku/
-│       ├── authoring/           オーサリングデータ <id>.json と素材 assets/ (エディタが読み書きする)
+│       ├── authoring/           オーサリングデータ <id>.json と素材 assets/ (エディタが読み書きする)。**演出の実体はここ**
 │       │                        sample_akatsu.json / sample_chance.json を同梱 (割り当て無しの手動再生用)
-│       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, frz.mp4, moe.mp4)。GIF/画像に加え動画 (mp4/webm/mov) 可
-│       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
-│       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
+│       ├── freeze/              旧・フリーズ演出の素材 (cutin/, afterblackout/, frz.mp4, moe.mp4)。オーバーレイはもう読まない。
+│       │                        オーサリングのエディタへドロップして assets/ へ取り込んで使う
+│       └── banner/sound/        旧・予告バナーの効果音置き場 (同上)
 ├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf)
 ├── scripts/
 │   ├── dev.ps1 / dev.cmd        CLI 用: start / stop / restart / status / test / open / send / logs
@@ -59,11 +63,12 @@ slot_enshutsu_sender/
   副制御の演出トリガーは遊技者の操作に対応する4点: **レバーON** (0x30) / **第1停止** / **第2停止** / **第3停止**
   (0x31〜0x33 の到着順)。レバーONで内部当選 (0x20) から予告プラン `[レバーON, 第1, 第2, 第3]` の各ランクを決め、
   `lever{rank,plan}` を出し、各停止で `stop{n,rank}` を出す (rank=null は演出なし)。神揃いの `freeze` もレバーONで出す。
-  主制御は1ゲームぶんのコマンドを一括送出するので lever/stop はほぼ同時に届く。オーバーレイは lever 受信時刻を起点に
-  `stopTiming1..3` (既定 1.15/1.6/2.05 秒 = 筐体ビューの停止タイミング) だけ遅らせて停止演出を出す。
-  そのほか `navi`(押し順ナビ) / `gg_start` / `stock_up` / `add_games` / `at_end` は状態通知として従来どおり。
+  そのほか `navi`(押し順ナビ) / `gg_start` / `stock_up` / `add_games` / `at_end` は状態通知。
+  **オーバーレイはこれらのイベントに「割り当て (bind)」があるシーンを再生するだけ**で、割り当てが無ければ何も出さない。
+  主制御は1ゲームぶんのコマンドを一括送出するので lever/stop はほぼ同時に届く。stop に割り当てたシーンは
+  lever 受信時刻を起点に `stopTiming1..3` (既定 1.15/1.6/2.05 秒 = 筐体ビューの停止タイミング) だけ遅らせて出す。
   `freeze`・`gg_start`・`at_end` は直列キューで順番に再生する (神揃い時は同一ゲーム内で連続して届くため)。
-- URL (すべて 8787 経由で開くこと。file:// で開くと素材フォルダ選択が必要になる)
+- URL (すべて 8787 経由で開くこと。file:// ではオーサリングデータを読めない)
   - コンパネ     http://localhost:8787/control/main_control.html
   - オーバーレイ http://localhost:8787/enshutsu/enshutsu_overlay.html  (OBS ブラウザソース)
   - 筐体ビュー   http://localhost:8787/reel/reel.html?mode=link&hidebar=1  (`&wait=0` でレバーON無効時間なし)
@@ -78,7 +83,6 @@ slot_enshutsu_sender/
 scripts\dev.cmd start [-Mode normal|fast|tenjo|manual|none]   # 中継サーバー + 主制御をバックグラウンド起動
 scripts\dev.cmd status                                 # ポート・health・PID を表示 (exit 0 = サーバー稼働中)
 scripts\dev.cmd test                                   # 主制御 2000G / 副制御 300 イベント / JS 構文チェック
-scripts\dev.cmd send triggerEnshutsu                  # コンパネのボタンと同じメッセージを送る (JSON 直指定も可)
 scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","rank":"赤"}}'   # 副制御イベントをオーバーレイへ直送
 scripts\dev.cmd send reelIn                          # リールユニットを液晶(オーバーレイ)内に入れる (reelOut / reelToggle も可)
 scripts\dev.cmd send ramclear                        # ラムクリア (主制御のRAMを初期化。コンパネの🧹ボタンと同じ)
@@ -130,11 +134,12 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   読めなくなり、以降の `echo` が全部文字化けする (manual.bat が実例。メニューは毎回 chcp してから描く)。
 - `setup.bat` / `run_server.bat` / `manual.bat` / `scripts\dev.cmd` は **Shift-JIS (cp932) + CRLF**。UTF-8 で保存すると
   日本語が文字化けし、`choice` や `echo` が壊れる。編集後は文字コードを必ず確認する。
-- `enshutsu_overlay.html` は自身の URL から素材フォルダ (`enshutsu/yokoku/freeze/...`, `enshutsu/at/sound/` など) を
-  `/api/list` で解決する。オーバーレイと素材フォルダの相対位置を変えないこと。
-- オーバーレイの HUD (バナー・ナビ・ポップアップ) の文字サイズは CSS 変数 `--sh` (16:9 ステージの高さ) 比で指定する。
-  px 固定にしない (OBS の解像度に依存させない)。スロー再生は `--spd` でトランジション時間にも効く。
-- 設定パネル (歯車) の「予告」「AT」タブに各演出のテストボタンがある。本物のイベントと同じ `handleSubEvent` を通る。
+- `enshutsu_overlay.html` は「オーサリングデータの再生器 + リール + ゲーム画面」だけを持つ。演出そのものは書かない。
+  中身は `#authoring-layer` (シーンの再生) / `#reel-layer` (筐体ビューの iframe) / `#screen-wrapper` (WebRTC 映像) の3枚だけで、
+  シーンは `yokoku/authoring/` から自分の URL 基準の相対パスで読む (相対位置を変えないこと)。
+  設定パネルは「操作 / オーサリング / 設定 / リール」の4タブ。演出のテストは「オーサリング」タブのシーン一覧から。
+- 大きさは CSS 変数 `--sh` (16:9 ステージの高さ) 比か % で指定し、px 固定にしない (OBS の解像度に依存させない)。
+  スロー再生は `--spd` (CSS) と `speedFactor` (JS。オーサリングの再生速度) の両方に効く。
 - 筐体ビューのウェイトは `reel.html` の「ウェイト」ブロック (`armWait` / `acceptsLever` / `renderWait`)。
   ローカル試打は自前に計ってレバーONを弾き、主制御連動では `type:"input"` を監視して表示するだけ。
   `renderWait` は**即時実行**のアニメーションループから毎フレーム呼ばれるので、このブロックを
@@ -148,14 +153,9 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   `#reel-layer.in` で下からスライドして出し入れする。位置・幅は % 指定 (`reelX/reelY/reelW`)、状態は `reelIn` として保存。
   筐体ビューは自分で 8787 に接続して主制御の state でリールを回すので、オーバーレイ側は表示位置と出し入れだけを持つ。
   オーバーレイと reel/ の相対位置 (`../reel/`) を変えないこと。
-- 動画素材: `afterblackout/` と `cutin/` は GIF/画像と同じ扱いで mp4/webm/mov を置ける (`assetRecord` の `kind` で分岐)。
-  `afterblackout/` の音声は動画に埋め込む (別ファイルの `sound/` は廃止済み)。GIF は無音で `freezeGifDuration` 秒表示する。
-  固定素材は `freeze/frz.webm|mp4`・`freeze/moe.webm|mp4` があれば GIF より優先 (`probeVideoVariant`)。
-  萌えカットインの重ね演出 `moe.mp4` とロック3の暗転つなぎ `frz.mp4` は映像と音声を1本にした動画で、音声込みで
-  1回再生する (moecut.mp3 / blackout.mp3 は廃止済み。moe.gif / frz.gif は動画が無いときの無音の代替)。
-  `<video>` の再生は必ず `startVideo` / `stopVideo` を通す (src 変更直後の play() は Chrome で失敗することがあるため
-  `loadedmetadata` を待ってから再生している)。静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の
-  巻き戻し・シークはサーバー側で完結する。
+- 旧・内蔵演出の素材 (`yokoku/freeze/` の cutin・afterblackout・frz.mp4・moe.mp4、`at/sound/`、`yokoku/banner/sound/`) は
+  **オーバーレイからは読まれない**。オーサリングのエディタへドロップして `yokoku/authoring/assets/` へ取り込んで使う。
+  静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の巻き戻し・シークはサーバー側で完結する。
 - コンパネの骨格: `body` を縦フレックスにし、ヘッダ(接続) → 未接続ヘルプ → 主制御ダイジェスト(`.strip`) →
   タブ(`.tabs`) → 面(`.panes`) → ログ(`.logbar`) を積む。スクロールするのは `.panes` だけで、ダイジェストと
   ログはどのタブでも見えたまま。面は「操作 / モニタ / 設定 / 注入」の4枚 (`.pane` を `.on` で切り替え)。
@@ -177,10 +177,10 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   モーダルの iframe を持たない)、コンパネ「設定」タブのボタン・オーバーレイの設定パネル・
   `scripts\dev.cmd open authoring`・URL 直打ちのいずれからも同じページが別ウィンドウで開く。
   編集はそのページで完結し、コンパネ側はシーンの再生 (操作タブ) だけを持つ。
-  データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの
-  `assets/`。形は `authoring_player.js` の先頭コメントが唯一の定義 (シーン = クリップの配列、クリップ =
+  データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの `assets/`。
+  形は `authoring_player.js` の先頭コメントが唯一の定義 (シーン = クリップの配列、クリップ =
   種類/素材/開始・長さ/位置・大きさ/キーフレーム)。**座標・大きさ・文字サイズはすべてステージ比の %** で持つ
-  (px 固定にしない。HUD の `--sh` と同じ理由)。
+  (px 固定にしない。OBS の解像度に依存させないため)。
   - 再生は `ScenePlayer` (`load` → `play` / `seek`)。`renderAt(t)` が「時刻 t の姿」を作る純粋な描画で、
     エディタのスクラブと本番再生は同じ経路を通る。**進行は rAF + 100ms のタイマーの二本立て**。
     見えていないタブ (OBS の裏・別タブ) では rAF が止まり、片方だけだと再生が固まったまま終わらない。
@@ -189,11 +189,12 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   - 音: 動画・音声クリップは **再生中だけ鳴らし、スクラブ中 (`seek` / `renderAt`) は止めて位置だけ合わせる**。
     エディタに渡している `silent` はスクラブ中の消音のことで、再生ボタンでは鳴る (ここを取り違えると
     エディタで音が出なくなる)。音付きの自動再生が拒否されたときは無音にして再生だけ続ける
-    (`playMedia`。オーバーレイの `startVideo` と同じ。ブラウザ単体で開いた窓は一度クリックするまで
-    音が出ないことがある)。音量はクリップの `volume` × 親玉 (オーバーレイは効果音の音量、エディタは音量スライダ)。
-  - 割り当て (`bind`) が一致するシーンは既定の演出の代わりに出る。バナー系 (lever / stop / banner) は
-    `playBanner` の入口で、それ以外は `handleSubEvent` の switch の手前で差し替える。
-    設定パネル「予告」→「オーサリング」のチェックを外すと既定の演出に戻る。
+    (`playMedia`)。ブラウザ単体で開いた窓は一度クリックするまで音が出ないことがあるため、
+    setup.bat と dev.ps1 は `--autoplay-policy=no-user-gesture-required` を付けて開く。
+    音量はクリップの `volume` × 親玉 (オーバーレイは設定の音量、エディタは音量スライダ)。
+  - `handleSubEvent` は「届いたイベントに割り当て (`bind`) があればそのシーンを流す」だけ。割り当てが無ければ何も出ない。
+    `stop` は `stopTiming1..3` まで待たせ、`freeze`/`gg_start`/`at_end` は直列キューへ積む (重ならないように)。
+    設定パネル「オーサリング」タブのチェックを外すと割り当てを無視する (何も出なくなる)。
   - 保存は中継サーバーの `POST /api/authoring` (シーン) と `POST /api/authoring/asset` (素材)。
     保存・削除のたびに `authoringUpdated` を全クライアントへ流し、オーバーレイとコンパネが読み直す。
     シーンID は `\ / : * ? " < > | .` を禁止して 48 文字まで (ドット禁止なので `..` も通らない)。

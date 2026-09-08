@@ -48,69 +48,6 @@
     display:none;
   }
 
-  /* ---------- 萌えカットインレイヤー(白フェードで接続・白背景を維持) ---------- */
-  #illustration-layer{
-    position:absolute; inset:0;
-    opacity:0;
-    transition: opacity .6s ease;
-    overflow:hidden;
-    background: transparent;
-  }
-  #illustration-layer.active{ opacity:1; }
-  #illustration-white-bg{
-    position:absolute; inset:0;
-    background:
-      radial-gradient(ellipse at 50% 42%, #ffffff 0%, #fdfdfa 45%, #f4f3ee 78%, #e9e7df 100%);
-    opacity:0;
-  }
-  #illustration-img{
-    position:absolute;
-    left:0; top:50%;
-    width:100%;
-    height:auto;
-    transform: translateY(-50%) scale(1.0);
-    transform-origin:center center;
-    filter: brightness(1);
-    opacity:0;
-    transition: opacity .5s ease;
-  }
-  #illustration-effect-gif{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;
-    opacity:0;
-    pointer-events:none;
-    mix-blend-mode: screen;
-  }
-  /* 動画版(同名の .webm/.mp4 があればGIFの代わりに使う)。見た目はGIF側と同じ */
-  #illustration-video{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:contain;
-    background:transparent;
-    opacity:0;
-    display:none;
-    transition: opacity .5s ease;
-  }
-  #illustration-effect-video{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;
-    opacity:0;
-    pointer-events:none;
-    mix-blend-mode: screen;
-  }
-  #illustration-placeholder{
-    position:absolute; inset:0;
-    display:none; align-items:center; justify-content:center;
-    background: linear-gradient(135deg,#fdf6ea,#f3e6d0 40%,#eaddc4);
-    color: var(--red);
-    font-size: 28px;
-    letter-spacing: 0.1em;
-    text-align:center;
-    padding: 0 10%;
-  }
-
   /* ---------- 予告オーサリング(authoring_editor.html で作ったシーン)の再生レイヤー ----------
      HUD とリールの上、萌えカットイン/暗転より下。再生1回ごとに子の箱を作って重ねる。 */
   #authoring-layer{
@@ -120,67 +57,10 @@
     pointer-events:none;
   }
 
-  /* ---------- 暗転レイヤー(白背景の上から黒がフェードインする) ---------- */
-  #blackout-layer{
-    position:absolute; inset:0;
-    background:#000;
-    opacity:0;
-    z-index:2;
-  }
-  #lock3-transition-gif{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;
-    opacity:0;
-    z-index:3;
-    pointer-events:none;
-    background:#000;
-  }
-  #freeze-reveal-gif{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:contain;
-    opacity:0;
-    z-index:4;
-    pointer-events:none;
-    background:#000;
-  }
-  #lock3-transition-video{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:cover;
-    opacity:0;
-    z-index:3;
-    pointer-events:none;
-    background:#000;
-  }
-  #freeze-reveal-video{
-    position:absolute; inset:0;
-    width:100%; height:100%;
-    object-fit:contain;
-    opacity:0;
-    z-index:4;
-    pointer-events:none;
-    background:#000;
-  }
-
-  /* ---------- 副制御演出HUD(予告バナー・押し順ナビ・ポップアップ・GG突入・AT終了) ----------
-     副制御(ws://127.0.0.1:8765)から届く演出イベントを表示するレイヤー。
-     --sh はステージ(16:9領域)の高さ。文字サイズはすべてこれに比例させ、OBSの解像度に依存しない。
+  /* ---------- ステージ基準の単位 ----------
+     --sh はステージ(16:9領域)の高さ。大きさはすべてこれに比例させ、OBSの解像度に依存させない。
      --spd はスロー再生の倍率(1=通常)。トランジション/アニメーションの時間に掛ける。 */
   :root{ --sh: min(100vh, calc(100vw * 9 / 16)); --spd: 1; }
-  #illustration-layer{ z-index:1; }   /* HUDより上(同じz-indexでDOM順が後のため勝つ) */
-  #hud-layer{
-    position:absolute; inset:0;
-    z-index:1;
-    pointer-events:none;
-    overflow:hidden;
-  }
-  .hud-font{
-    font-family: "Impact", "Arial Black", "Yu Gothic UI", "Yu Gothic", sans-serif;
-    font-weight:900;
-  }
-
   /* ---------- リールユニット(reel/reel.html)を液晶内に出し入れする ----------
      iframe で筐体ビューを埋め込み、.in で下からスライドして表示、外すと下へ抜ける。
      位置(中心)・幅は設定パネルの「リール」タブから %(ステージ比)で指定する。
@@ -206,181 +86,6 @@
     width:100%; height:100%;
     border:0; display:block;
     background:transparent;
-  }
-
-  /* 予告バナー: 左から滑り込み → 右へ抜ける。色はランク(白/青/緑/赤/金)ごとにJSで --b1/--b2/--fg を設定 */
-  #hud-banner{
-    position:absolute; left:0; width:100%;
-    top:60%;
-    height:calc(var(--sh) * 0.17);
-    display:flex; align-items:center; justify-content:center;
-    opacity:0;
-    transform:translateX(-105%);
-    --b1:#333; --b2:#fff; --fg:#fff;
-    background: linear-gradient(90deg, transparent 0%, var(--b1) 10%, var(--b2) 50%, var(--b1) 90%, transparent 100%);
-    box-shadow: 0 0 calc(var(--sh) * 0.04) var(--b2);
-  }
-  #hud-banner.show{
-    opacity:1; transform:translateX(0);
-    transition: transform calc(.35s * var(--spd)) cubic-bezier(.2,.9,.3,1), opacity calc(.2s * var(--spd));
-  }
-  #hud-banner.hide{
-    opacity:0; transform:translateX(105%);
-    transition: transform calc(.35s * var(--spd)) cubic-bezier(.7,.1,.8,.9), opacity calc(.3s * var(--spd));
-  }
-  #hud-banner-text{
-    position:relative;
-    color:var(--fg);
-    font-size:calc(var(--sh) * 0.085);
-    letter-spacing:.12em;
-    white-space:nowrap;
-    text-shadow: 0 0 calc(var(--sh) * .01) rgba(0,0,0,.5), 0 calc(var(--sh) * .006) 0 rgba(0,0,0,.35);
-  }
-  #hud-banner[data-rank="金"]::after{
-    content:""; position:absolute; inset:0;
-    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.75) 50%, transparent 70%);
-    background-size:200% 100%;
-    animation: bannerShine calc(1.2s * var(--spd)) linear infinite;
-    mix-blend-mode:screen;
-  }
-  @keyframes bannerShine{ from{ background-position:200% 0; } to{ background-position:-200% 0; } }
-
-  /* 押し順ナビ: 左・中・右の順に押す番号を3枚のプレートで表示。番号1のプレートを金で点滅 */
-  #hud-navi{
-    position:absolute; left:50%; top:78%;
-    transform:translate(-50%,-50%) scale(.6);
-    display:flex; gap:calc(var(--sh) * 0.05);
-    opacity:0;
-    transition: opacity calc(.2s * var(--spd)), transform calc(.2s * var(--spd));
-  }
-  #hud-navi.show{
-    opacity:1; transform:translate(-50%,-50%) scale(1);
-    transition: opacity calc(.12s * var(--spd)), transform calc(.28s * var(--spd)) cubic-bezier(.2,1.5,.4,1);
-  }
-  #hud-navi .digit{
-    width:calc(var(--sh) * 0.15); height:calc(var(--sh) * 0.15);
-    border-radius:14%;
-    display:flex; align-items:center; justify-content:center;
-    font-size:calc(var(--sh) * 0.11);
-    color:#fff3c8;
-    background: radial-gradient(circle at 50% 30%, #6b3a12, #2a1206 70%);
-    border: calc(var(--sh) * 0.006) solid var(--gold);
-    box-shadow: 0 0 calc(var(--sh) * 0.02) rgba(255,215,106,.5), inset 0 0 calc(var(--sh) * 0.02) rgba(0,0,0,.6);
-    text-shadow: 0 0 calc(var(--sh) * .012) var(--gold-bright);
-  }
-  #hud-navi .digit.first{
-    background: radial-gradient(circle at 50% 30%, #ffe27a, #d4af37 70%);
-    color:#3a2400;
-    text-shadow:none;
-    animation: naviPulse calc(.8s * var(--spd)) ease-in-out infinite alternate;
-  }
-  @keyframes naviPulse{
-    from{ box-shadow: 0 0 calc(var(--sh) * 0.02) rgba(255,215,106,.6); }
-    to{   box-shadow: 0 0 calc(var(--sh) * 0.05) rgba(255,215,106,1); }
-  }
-
-  /* ポップアップ(ストック加算・上乗せ): 中央上部にバウンドして出る */
-  #hud-popup{
-    position:absolute; left:50%; top:30%;
-    transform:translate(-50%,-50%) scale(.4);
-    opacity:0;
-    text-align:center;
-    transition: opacity calc(.3s * var(--spd)) ease, transform calc(.3s * var(--spd)) ease;
-  }
-  #hud-popup.show{
-    opacity:1; transform:translate(-50%,-50%) scale(1);
-    transition: opacity calc(.12s * var(--spd)) ease, transform calc(.3s * var(--spd)) cubic-bezier(.2,1.5,.4,1);
-  }
-  #hud-popup-main{
-    font-size:calc(var(--sh) * 0.16); line-height:1;
-    color:#fff;
-    -webkit-text-stroke: calc(var(--sh) * 0.004) #7a0008;
-    text-shadow: 0 0 calc(var(--sh) * .02) rgba(255,59,59,.8), 0 calc(var(--sh) * .008) 0 #4a0000;
-  }
-  #hud-popup.stock #hud-popup-main{
-    color:#ffe27a;
-    -webkit-text-stroke-color:#5a4000;
-    text-shadow: 0 0 calc(var(--sh) * .02) rgba(255,215,106,.9), 0 calc(var(--sh) * .008) 0 #3a2400;
-  }
-  #hud-popup-sub{
-    margin-top:calc(var(--sh) * 0.01);
-    font-size:calc(var(--sh) * 0.05);
-    color:#f0e6d2; letter-spacing:.15em;
-    font-family:"Yu Gothic UI","Yu Gothic",sans-serif; font-weight:bold;
-    text-shadow: 0 0 calc(var(--sh) * .01) #000, 0 0 calc(var(--sh) * .004) #000;
-  }
-
-  /* AT終了: 中央の黒帯 */
-  #hud-end{
-    position:absolute; left:0; width:100%; top:50%;
-    height:calc(var(--sh) * 0.22);
-    transform:translateY(-50%) scaleY(0);
-    background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.85) 20%, rgba(0,0,0,.85) 80%, rgba(0,0,0,0));
-    display:flex; align-items:center; justify-content:center;
-    opacity:0;
-    transition: opacity calc(.4s * var(--spd)), transform calc(.4s * var(--spd));
-  }
-  #hud-end.show{ opacity:1; transform:translateY(-50%) scaleY(1); }
-  #hud-end::before, #hud-end::after{
-    content:""; position:absolute; left:8%; right:8%; height:calc(var(--sh) * 0.004);
-    background: linear-gradient(90deg, transparent, var(--gold) 20%, var(--gold-bright) 50%, var(--gold) 80%, transparent);
-  }
-  #hud-end::before{ top:18%; }
-  #hud-end::after{ bottom:18%; }
-  #hud-end .main{
-    font-size:calc(var(--sh) * 0.1);
-    color:#f0e6d2; letter-spacing:.2em;
-    -webkit-text-stroke: calc(var(--sh) * 0.002) #3a2400;
-    text-shadow: 0 0 calc(var(--sh) * .02) rgba(212,175,55,.8), 0 calc(var(--sh) * .006) 0 #000;
-  }
-
-  /* GG突入: 金の全面フラッシュ + 回転する光条 + GOD GAME。フリーズ演出より上(z-index:5) */
-  #gg-layer{
-    position:absolute; inset:0;
-    z-index:5;
-    pointer-events:none;
-    opacity:0;
-    overflow:hidden;
-    display:flex; align-items:center; justify-content:center;
-    background: radial-gradient(ellipse at 50% 50%, #fff6d0 0%, #ffd76a 30%, #b8860b 70%, #5a3a00 100%);
-  }
-  #gg-layer::before{
-    content:""; position:absolute; left:50%; top:50%;
-    width:300vmax; height:300vmax;
-    transform:translate(-50%,-50%);
-    background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.35) 0deg 6deg, transparent 6deg 18deg);
-    opacity:.7;
-  }
-  #gg-layer.flash{ opacity:1; animation: ggFlash calc(.3s * var(--spd)) ease-out both; }
-  #gg-layer.hold{ opacity:1; }
-  #gg-layer.hold::before, #gg-layer.flash::before{ animation: ggRays calc(12s * var(--spd)) linear infinite; }
-  #gg-layer.out{ opacity:0; transition: opacity calc(.5s * var(--spd)) ease; }
-  @keyframes ggFlash{
-    0%{ opacity:0; filter:brightness(3); }
-    40%{ opacity:1; filter:brightness(2); }
-    100%{ opacity:1; filter:brightness(1); }
-  }
-  @keyframes ggRays{ to{ transform:translate(-50%,-50%) rotate(360deg); } }
-  #gg-text{
-    position:relative; text-align:center;
-    transform:scale(3); opacity:0;
-  }
-  #gg-layer.show #gg-text{
-    opacity:1; transform:scale(1);
-    transition: transform calc(.35s * var(--spd)) cubic-bezier(.1,1.3,.4,1), opacity calc(.15s * var(--spd));
-  }
-  #gg-text .main{
-    font-size:calc(var(--sh) * 0.22); line-height:1;
-    color:#fff8e6;
-    -webkit-text-stroke: calc(var(--sh) * 0.005) #7a4a00;
-    text-shadow: 0 calc(var(--sh) * .01) 0 #a06a00, 0 0 calc(var(--sh) * .04) rgba(255,255,255,.9);
-    letter-spacing:.06em;
-  }
-  #gg-text .sub{
-    margin-top:calc(var(--sh) * 0.02);
-    font-size:calc(var(--sh) * 0.06);
-    color:#5a2a00; letter-spacing:.3em;
-    font-family:"Yu Gothic UI","Yu Gothic",sans-serif; font-weight:bold;
   }
 
   /* 設定パネル内: 接続状態と副制御イベントログ */
@@ -452,28 +157,6 @@
   .tab-content{ padding: 14px 16px; display:flex; flex-direction:column; gap:12px; }
   .tab-content[hidden]{ display:none; }
 
-  .subtabs{
-    border-bottom: 1px solid rgba(212,175,55,0.2);
-    flex-wrap: wrap;
-    margin: -14px -16px 8px -16px;
-    padding: 0 8px;
-  }
-  .subtab-btn{
-    flex:1 1 auto; padding:8px 4px;
-    background:none; border:none;
-    color:#9c8b6a;
-    font-size:11px;
-    cursor:pointer;
-    border-bottom: 2px solid transparent;
-    white-space:nowrap;
-  }
-  .subtab-btn.active{
-    color: var(--gold-bright);
-    border-bottom: 2px solid var(--gold);
-  }
-  .subtab-content{ padding: 12px 16px; display:flex; flex-direction:column; gap:12px; }
-  .subtab-content[hidden]{ display:none; }
-
   .field{ display:flex; flex-direction:column; gap:4px; }
   .field label{ color:#d8c9a3; font-size:12px; }
   .field-row{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
@@ -511,17 +194,6 @@
     font-weight:bold;
   }
 
-  #folder-status{ font-size:11px; color:#a89876; }
-  #image-list{
-    display:flex; flex-wrap:wrap; gap:6px;
-    max-height:140px; overflow-y:auto;
-  }
-  #image-list img, #image-list video{
-    width:44px; height:44px; object-fit:cover;
-    border-radius:4px; border:1px solid rgba(212,175,55,0.4);
-    background:#000;
-  }
-
   .hr{ height:1px; background: rgba(212,175,55,0.2); margin:2px 0; }
   .section-heading{
     font-size:13px; font-weight:bold; color: var(--gold-bright);
@@ -542,274 +214,81 @@
     <div id="reel-layer">
       <iframe id="reel-frame" title="リールユニット" allowtransparency="true" allow="autoplay"></iframe>
     </div>
-    <div id="hud-layer">
-      <div id="hud-banner"><div id="hud-banner-text" class="hud-font"></div></div>
-      <div id="hud-navi" class="hud-font"><div class="digit"></div><div class="digit"></div><div class="digit"></div></div>
-      <div id="hud-popup"><div id="hud-popup-main" class="hud-font"></div><div id="hud-popup-sub"></div></div>
-      <div id="hud-end"><div class="main hud-font">AT END</div></div>
-    </div>
     <div id="authoring-layer"></div>
-    <div id="illustration-layer">
-      <div id="illustration-white-bg"></div>
-      <div id="illustration-placeholder">萌えカットイン画像未読込<br>「画像指定」タブでフォルダを選択してください</div>
-      <img id="illustration-img" alt="">
-      <video id="illustration-video" playsinline preload="auto"></video>
-      <img id="illustration-effect-gif" alt="">
-      <video id="illustration-effect-video" playsinline preload="auto"></video>
-      <audio id="illustration-voice-audio" preload="auto"></audio>
-    </div>
-    <div id="blackout-layer"></div>
-    <img id="lock3-transition-gif" alt="">
-    <video id="lock3-transition-video" playsinline muted preload="auto"></video>
-    <img id="freeze-reveal-gif" alt="">
-    <video id="freeze-reveal-video" playsinline preload="auto"></video>
-    <div id="gg-layer">
-      <div id="gg-text"><div class="main hud-font">GOD GAME</div><div class="sub">ゴッドゲーム突入</div></div>
-    </div>
   </div>
 
   <button id="settings-toggle" title="設定">&#9881;</button>
   <div id="settings-panel">
     <div class="tabs">
       <button class="tab-btn active" data-tab="controls">操作</button>
+      <button class="tab-btn" data-tab="authoring">オーサリング</button>
       <button class="tab-btn" data-tab="settings">設定</button>
-      <button class="tab-btn" data-tab="yokoku">予告</button>
-      <button class="tab-btn" data-tab="at">AT</button>
       <button class="tab-btn" data-tab="reel">リール</button>
     </div>
 
     <div class="tab-content" id="tab-controls">
       <button class="action" id="slow-toggle">🐢 スロー再生: OFF</button>
-      <div class="note">スロー再生は演出全体に効きます。各演出の再生ボタンは「予告」「AT」タブの各項目にあります。</div>
+      <div class="note">スロー再生はオーサリングの再生速度に効きます。</div>
       <div class="hr"></div>
       <div class="conn-line"><b>中継(8787):</b><span id="relay-status" class="off">未接続</span></div>
       <div class="conn-line"><b>副制御(8765):</b><span id="sub-status" class="off">未接続</span></div>
-      <div class="note">副制御は god_main_board.py --serve が配信する演出イベント(予告バナー・押し順ナビ・フリーズ・GG突入など)の受信口です。切断中も3秒ごとに再接続を試みます。</div>
+      <div class="note">副制御は god_main_board.py --serve が配信する演出イベントの受信口です。切断中も3秒ごとに再接続を試みます。</div>
+      <div class="hr"></div>
+      <div class="section-heading">副制御の受信ログ</div>
+      <div id="sub-log">(まだ受信していません)</div>
+    </div>
+
+    <div class="tab-content" id="tab-authoring" hidden>
+      <div class="field-row">
+        <label for="authoringEnabled">割り当てたシーンを自動再生する</label>
+        <input type="checkbox" id="authoringEnabled">
+      </div>
+      <div class="btn-row">
+        <button class="action" id="authoring-reload">🔄 シーンを再読込</button>
+        <button class="action" id="authoring-open">🎬 予告オーサリングを開く</button>
+      </div>
+      <div id="authoring-status" class="note">未読込</div>
+      <div class="btn-row wrap" id="authoring-list"></div>
+      <div class="note">
+        演出はすべて予告オーサリング(enshutsu/authoring_editor.html)で作ったシーンです。ボタンを押すとその場で1回再生します。<br><br>
+        シーンに「割り当て」を設定しておくと、副制御からそのイベント(予告バナー・ナビ・フリーズ・GG突入・AT終了など)が
+        届いたときに自動で再生されます。上のチェックを外すと、割り当てを無視して何も出さなくなります。<br><br>
+        データは enshutsu/yokoku/authoring/&lt;id&gt;.json、素材は同フォルダの assets/ です。エディタで保存すると自動で読み直します。
+      </div>
+      <div class="hr"></div>
+      <div class="section-heading">停止演出のタイミング</div>
+      <div class="note">第1〜第3停止に割り当てたシーンを、レバーONから何秒後に出すか。筐体ビューのリール停止(1.15 / 1.6 / 2.05秒)に合わせます</div>
+      <div class="field-row">
+        <label for="stopTiming1">第1停止</label>
+        <input type="number" id="stopTiming1" min="0" max="10" step="0.05">
+      </div>
+      <div class="field-row">
+        <label for="stopTiming2">第2停止</label>
+        <input type="number" id="stopTiming2" min="0" max="10" step="0.05">
+      </div>
+      <div class="field-row">
+        <label for="stopTiming3">第3停止</label>
+        <input type="number" id="stopTiming3" min="0" max="10" step="0.05">
+      </div>
     </div>
 
     <div class="tab-content" id="tab-settings" hidden>
-      <div class="tabs subtabs">
-        <button class="subtab-btn active" data-subtab="basic">基本設定</button>
-        <button class="subtab-btn" data-subtab="io">入出力</button>
+      <div class="field-row">
+        <label for="sfxVolume">音量(オーサリングとリール)</label>
+        <input type="range" id="sfxVolume" min="0" max="1" step="0.05">
       </div>
-
-      <div class="subtab-content" id="subtab-basic">
-        <div class="field-row">
-          <label for="shakeDuration">ロック1の時間(秒)</label>
-          <input type="number" id="shakeDuration" min="0.3" max="15" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="blackInDuration">ロック3: 暗転にかかる時間(秒)</label>
-          <input type="number" id="blackInDuration" min="0.2" max="10" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="holdDuration">ロック3: 暗転保持時間(秒)</label>
-          <input type="number" id="holdDuration" min="0" max="15" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="blackOutDuration">ロック3: 暗転からの復帰時間(秒)</label>
-          <input type="number" id="blackOutDuration" min="0.1" max="10" step="0.1">
-        </div>
-        <div class="hr"></div>
-        <div class="field-row">
-          <label for="sfxVolume">効果音の音量</label>
-          <input type="range" id="sfxVolume" min="0" max="1" step="0.05">
-        </div>
-        <div class="field-row">
-          <label for="subWsUrl">副制御ポートURL</label>
-          <input type="text" id="subWsUrl" style="width:150px" spellcheck="false">
-        </div>
-        <div class="note">副制御ポートURLを変えると即座に再接続します。既定は ws://127.0.0.1:8765 です。</div>
+      <div class="field-row">
+        <label for="subWsUrl">副制御ポートURL</label>
+        <input type="text" id="subWsUrl" style="width:150px" spellcheck="false">
       </div>
-
-      <div class="subtab-content" id="subtab-io" hidden>
-        <div class="btn-row">
-          <button class="action" id="export-settings">エクスポート</button>
-          <button class="action" id="import-settings">インポート</button>
-        </div>
-        <input type="file" id="import-file" accept=".json" hidden>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-yokoku" hidden>
-      <div class="tabs subtabs">
-        <button class="subtab-btn active" data-subtab="yokoku-cutin">萌えカットイン</button>
-        <button class="subtab-btn" data-subtab="yokoku-freeze">フリーズ</button>
-        <button class="subtab-btn" data-subtab="yokoku-banner">バナー</button>
-        <button class="subtab-btn" data-subtab="yokoku-navi">ナビ</button>
-        <button class="subtab-btn" data-subtab="yokoku-authoring">オーサリング</button>
-      </div>
-
-      <div class="subtab-content" id="subtab-yokoku-cutin">
-        <div class="field-row">
-          <label for="illustDuration">萌えカットインの時間(秒)</label>
-          <input type="number" id="illustDuration" min="0.5" max="30" step="0.1">
-        </div>
-        <div class="hr"></div>
-        <div id="cutin-mode-note" class="note" hidden></div>
-        <button class="action" id="reload-folder" hidden>🔄 カットイン画像フォルダを再読込</button>
-        <button class="action" id="pick-folder">📁 萌えカットイン素材フォルダ(freeze/cutin)を選択</button>
-        <button class="action" id="reauth-folder">🔓 フォルダへのアクセスを再許可</button>
-        <div id="folder-status">未選択(enshutsu/yokoku/freeze/cutin を選んでください)</div>
-        <div id="image-list"></div>
-        <div class="note" id="cutin-fsa-note">
-          OBS再起動やページ再読込のたびに、ブラウザの仕様でフォルダへのアクセス許可が失効することがあります。設定パネルを開くと自動で再許可を試みますが、うまくいかない場合はこのボタンを押してください(フォルダを選び直す必要はありません)。
-        </div>
-        <div class="note">
-          <strong>ボイス連携:</strong> cutin フォルダの中に「voice」という名前のサブフォルダを置くと(enshutsu/yokoku/freeze/cutin/voice/)、そこから声を自動で読み込みます。画像とボイスのファイル名に含まれる数字が一致するもの同士が対応します(例: 「01_はな.png」⇔「voice/01.mp3」)。対応する声がないカットインの場合は、声は再生されません。
-        </div>
-      </div>
-
-      <div class="subtab-content" id="subtab-yokoku-freeze" hidden>
-      <div class="note" id="state-indicator">状態: 待機中</div>
+      <div class="note">副制御ポートURLを変えると即座に再接続します。既定は ws://127.0.0.1:8765 です。</div>
       <div class="hr"></div>
-      <div class="note">終了パターンを確認(ロック1から順に再生し、そこで終了)</div>
       <div class="btn-row">
-        <button class="action" id="pattern-lock1">ロック1で終了</button>
-        <button class="action" id="pattern-lock2">ロック2で終了</button>
-        <button class="action" id="pattern-lock3">ロック3まで到達</button>
+        <button class="action" id="export-settings">エクスポート</button>
+        <button class="action" id="import-settings">インポート</button>
       </div>
-      <div class="hr"></div>
-      <div class="note">各段階を単体で確認(前段を経由せずその段階だけ再生)</div>
-      <div class="btn-row">
-        <button class="action" id="preview-lock1">ロック1</button>
-        <button class="action" id="preview-lock2">ロック2</button>
-        <button class="action" id="preview-lock3">ロック3</button>
-      </div>
-        <div class="hr"></div>
-        <div id="freeze-mode-note" class="note" hidden></div>
-        <button class="action" id="reload-freeze-folder" hidden>🔄 フリーズフォルダを再読込</button>
-        <button class="action" id="pick-freeze-folder">📁 フリーズ演出フォルダ(freeze/afterblackout)を選択</button>
-        <button class="action" id="reauth-freeze-folder">🔓 フォルダへのアクセスを再許可</button>
-        <div id="freeze-status" class="note">未選択</div>
-        <div class="field-row">
-          <label for="freezeGifDuration">GIFの表示時間(秒)</label>
-          <input type="number" id="freezeGifDuration" min="0.5" max="60" step="0.1">
-        </div>
-        <div class="note">
-          萌えカットインとは別の予告です。enshutsu/yokoku/freeze/afterblackout フォルダを選択してください。フォルダ直下の動画(mp4 / webm / mov)またはGIFが対象です。音声は動画に入れておきます(別ファイルの音声フォルダはありません)。<br><br>
-          ロック2の番号などの状況に関わらず、素材が1つでもあればランダムに1つ選んで再生します(複数ある場合はランダム選出)。動画は音声込みでそのまま鳴り、再生終了で演出が終わります。GIFは無音で、上の「GIFの表示時間」だけ表示して終わります。素材が1つもない場合はこの演出はスキップされます。<br><br>
-          萌えカットインの重ね演出は enshutsu/yokoku/freeze/moe.mp4(または moe.webm)、ロック3の暗転つなぎは同じ場所の frz.mp4(または frz.webm)を、それぞれ音声込みで1回再生します(動画が無いときは moe.gif / frz.gif を無音で代用)。<br><br>
-          再生が終わり次第、通常のゲーム画面に自動で復帰します。
-        </div>
-      </div>
-
-      <div class="subtab-content" id="subtab-yokoku-banner" hidden>
-        <div class="field-row">
-          <label for="bannerDuration">バナーの表示時間(秒)</label>
-          <input type="number" id="bannerDuration" min="0.5" max="15" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="bannerY">バナーの縦位置(上端からの%)</label>
-          <input type="number" id="bannerY" min="0" max="90" step="1">
-        </div>
-        <div class="hr"></div>
-        <div class="note">停止演出のタイミング(レバーON起点の秒数)。筐体ビューのリール停止(1.15 / 1.6 / 2.05秒)に合わせます</div>
-        <div class="field-row">
-          <label for="stopTiming1">第1停止</label>
-          <input type="number" id="stopTiming1" min="0" max="10" step="0.05">
-        </div>
-        <div class="field-row">
-          <label for="stopTiming2">第2停止</label>
-          <input type="number" id="stopTiming2" min="0" max="10" step="0.05">
-        </div>
-        <div class="field-row">
-          <label for="stopTiming3">第3停止</label>
-          <input type="number" id="stopTiming3" min="0" max="10" step="0.05">
-        </div>
-        <div class="btn-row">
-          <button class="action" id="test-stepup">ステップアップ予告を再生(レバーON→第1〜第3停止)</button>
-        </div>
-        <div class="hr"></div>
-        <div class="note">ランク別に再生して確認(副制御から届く lever / stop イベントと同じ経路で表示します)</div>
-        <div class="btn-row wrap">
-          <button class="action" data-test-banner="白">白</button>
-          <button class="action" data-test-banner="青">青</button>
-          <button class="action" data-test-banner="緑">緑</button>
-          <button class="action" data-test-banner="赤">赤</button>
-          <button class="action" data-test-banner="金">金</button>
-        </div>
-        <div class="note">
-          副制御はレバーONで予告プラン(レバーON・第1〜第3停止の各時点で出すランク)を決め、レバーON時に lever、各停止時に stop イベントを送ってきます。ランクが付いた時点でバナーを出し、段階的に色が上がるステップアップ予告になります。成立役そのものは表示しません。<br><br>
-          効果音は enshutsu/yokoku/banner/sound/ に「赤.mp3」または「banner_赤.mp3」のようにランク名のファイルを置くと自動で鳴ります(無ければ無音)。
-        </div>
-      </div>
-
-      <div class="subtab-content" id="subtab-yokoku-navi" hidden>
-        <div class="field-row">
-          <label for="naviDuration">ナビの表示時間(秒)</label>
-          <input type="number" id="naviDuration" min="0.5" max="15" step="0.1">
-        </div>
-        <div class="field-row">
-          <label for="naviY">ナビの縦位置(中心の上端からの%)</label>
-          <input type="number" id="naviY" min="5" max="95" step="1">
-        </div>
-        <div class="hr"></div>
-        <div class="note">押し順1〜6を再生して確認(左・中・右の順に押す番号を表示します)</div>
-        <div class="btn-row wrap">
-          <button class="action" data-test-navi="0">1: 左中右</button>
-          <button class="action" data-test-navi="1">2: 左右中</button>
-          <button class="action" data-test-navi="2">3: 中左右</button>
-          <button class="action" data-test-navi="3">4: 右左中</button>
-          <button class="action" data-test-navi="4">5: 中右左</button>
-          <button class="action" data-test-navi="5">6: 右中左</button>
-        </div>
-        <div class="note">
-          AT/GG中に押順ベルが成立すると副制御が navi イベントを送ってきます。1ゲームのウェイト(4.1秒)に合わせて自動で消えます。<br><br>
-          効果音は enshutsu/at/sound/navi.mp3 を置くと鳴ります。
-        </div>
-      </div>
-
-      <div class="subtab-content" id="subtab-yokoku-authoring" hidden>
-        <div class="field-row">
-          <label for="authoringEnabled">割り当てたシーンを自動再生する</label>
-          <input type="checkbox" id="authoringEnabled">
-        </div>
-        <div class="btn-row">
-          <button class="action" id="authoring-reload">🔄 シーンを再読込</button>
-          <button class="action" id="authoring-open">🎬 予告オーサリングを開く</button>
-        </div>
-        <div id="authoring-status" class="note">未読込</div>
-        <div class="btn-row wrap" id="authoring-list"></div>
-        <div class="note">
-          予告オーサリング(enshutsu/authoring_editor.html)で作ったシーンの一覧です。ボタンを押すとその場で1回再生します。<br><br>
-          シーンに「割り当て」を設定しておくと、副制御からそのイベント(予告バナー・ナビ・GG突入など)が届いたときに、
-          既定の演出の代わりにシーンが再生されます。上のチェックを外すと割り当てを無視して既定の演出に戻ります。<br><br>
-          データは enshutsu/yokoku/authoring/&lt;id&gt;.json、素材は同フォルダの assets/ です。エディタで保存すると自動で読み直します。
-        </div>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-at" hidden>
-      <div class="field-row">
-        <label for="ggDuration">GG突入: 文字の表示時間(秒)</label>
-        <input type="number" id="ggDuration" min="0.5" max="15" step="0.1">
-      </div>
-      <div class="field-row">
-        <label for="popupDuration">ストック/上乗せの表示時間(秒)</label>
-        <input type="number" id="popupDuration" min="0.5" max="15" step="0.1">
-      </div>
-      <div class="field-row">
-        <label for="endDuration">AT終了の表示時間(秒)</label>
-        <input type="number" id="endDuration" min="0.5" max="15" step="0.1">
-      </div>
-      <div class="hr"></div>
-      <div class="note">各イベントを再生して確認(副制御から届くイベントと同じ経路で表示します)</div>
-      <div class="btn-row wrap">
-        <button class="action" data-test-event='{"type":"gg_start"}'>GG突入</button>
-        <button class="action" data-test-event='{"type":"stock_up","stock":2,"gain":1}'>ストック+1</button>
-        <button class="action" data-test-event='{"type":"stock_up","stock":6,"gain":5}'>ストック+5</button>
-        <button class="action" data-test-event='{"type":"add_games","games":30}'>上乗せ+30G</button>
-        <button class="action" data-test-event='{"type":"at_end","total":0}'>AT終了</button>
-        <button class="action" data-test-event='{"type":"freeze","seq":["lock1","lock2","lock3"],"rank":"金"}'>神揃い(フリーズ)</button>
-      </div>
-      <div class="note">
-        神揃いのときは主制御から「全停止→払出→ストック→状態移行」が連続で届くため、フリーズ演出とGG突入が同時に発生します。オーバーレイ側でフリーズ→GG突入の順に直列再生します。<br><br>
-        効果音は enshutsu/at/sound/ に gg_start / stock_up / add_games / at_end / navi の名前(拡張子は mp3/wav/ogg/m4a)で置くと自動で鳴ります。
-      </div>
-      <div class="hr"></div>
-      <div class="note">最近受信した副制御イベント</div>
-      <div id="sub-log">(まだ受信していません)</div>
+      <input type="file" id="import-file" accept=".json" hidden>
+      <div class="note">この画面の設定(音量・停止タイミング・リールの位置など)を JSON で保存 / 復元します。</div>
     </div>
 
     <div class="tab-content" id="tab-reel" hidden>
@@ -843,11 +322,11 @@
         <label for="reelNavi">リール上のナビランプも表示</label>
         <input type="checkbox" id="reelNavi">
       </div>
-      <div class="note">押し順ナビは既定では HUD 側だけに出します。オンにすると筐体ビュー側のナビランプも表示します(切替時に筐体ビューを読み直します)。</div>
+      <div class="note">オンにすると筐体ビュー側のナビランプを表示します(切替時に筐体ビューを読み直します)。押し順の表示はここか、押し順ナビに割り当てたオーサリングのシーンで出します。</div>
       <div class="note">
         リールの回転開始音・停止音は <code>enshutsu/real/</code> に <code>start</code> / <code>stop</code>
         (停止順に鳴らし分けるなら <code>stop1</code> / <code>stop2</code> / <code>stop3</code>) の名前で置くと鳴ります
-        (拡張子は mp3/wav/ogg/m4a、無ければ無音)。音量は「設定」タブ →「基本設定」の「効果音の音量」に従います。
+        (拡張子は mp3/wav/ogg/m4a、無ければ無音)。音量は「設定」タブの音量に従います。
       </div>
     </div>
   </div>
@@ -864,51 +343,17 @@
   // このHTMLが置かれているディレクトリのURLパス(末尾スラッシュなし)。例: "/enshutsu"
   const BASE_PATH = location.pathname.replace(/\/[^/]*$/, "");
 
-  // ▼ フォルダ配置(このHTMLからの相対パス)。構成を変えたらここだけ書き換えれば全体が追従します。
-  //   フリーズ演出ルート : enshutsu/yokoku/freeze
-  //     ├ 萌えカットイン : enshutsu/yokoku/freeze/cutin
-  //     │   └ ボイス     : enshutsu/yokoku/freeze/cutin/voice
-  //     └ 暗転後の演出   : enshutsu/yokoku/freeze/afterblackout  (mp4/webm/mov は音声込み、GIF は無音)
-  const FREEZE_ROOT = "yokoku/freeze";
-  const CUTIN_DIR = FREEZE_ROOT + "/cutin";
-  const VOICE_DIR = CUTIN_DIR + "/voice";
-  const FREEZE_DIR = FREEZE_ROOT + "/afterblackout";
-
-  // フリーズ演出ルート直下に置く固定アセット。
-  // 以前はBase64でHTMLに埋め込んでいたが、フォルダから読み込む方式に変更した。
-  const LOCK3_GIF_FILE = "frz.gif";          // ロック3の白→暗転つなぎ。通常は音声込みの frz.mp4 を使い、GIF は無音の代替
-  const ILLUST_EFFECT_GIF_FILE = "moe.gif"; // 萌えカットインに重ねる演出。通常は音声込みの moe.mp4 を使い、GIF は無音の代替
-
-  // このHTMLからの相対URLを組み立てる。相対パスなので http:// でも file:// でもそのまま解決される。
-  // ファイル名に日本語や記号が含まれても壊れないようエンコードする。
-  function assetPath(dir, name){
-    return `${dir}/${encodeURIComponent(name)}`;
-  }
-
   /* ===================== デフォルト設定 ===================== */
   const DEFAULT_SETTINGS = {
-    shakeDuration: 4.0,
-    illustDuration: 5.0,
-    blackInDuration: 0.4,
-    holdDuration: 1.2,
-    blackOutDuration: 0.4,
-    freezeGifDuration: 5.0,   // afterblackout のGIF(無音)を表示する秒数。動画は再生終了まで
-    pickMode: "random",
-    // 副制御演出(HUD)
-    bannerDuration: 2.5,
-    bannerY: 60,
-    stopTiming1: 1.15,   // 第1〜第3停止の演出をレバーONから何秒後に出すか(筐体ビューの停止タイミングと同じ)
+    // 停止演出のタイミング。第1〜第3停止に割り当てたシーンを、レバーONから何秒後に出すか
+    // (筐体ビューのリール停止と同じ時刻)
+    stopTiming1: 1.15,
     stopTiming2: 1.6,
     stopTiming3: 2.05,
-    naviDuration: 4.0,
-    naviY: 78,
-    ggDuration: 2.5,
-    popupDuration: 2.0,
-    endDuration: 2.5,
-    sfxVolume: 0.8,
+    sfxVolume: 0.8,           // オーサリングの音とリールの効果音の音量
     subWsUrl: "ws://127.0.0.1:8765",
     // 予告オーサリング(authoring_editor.html で作ったシーン)
-    authoringEnabled: true,   // 割り当て済みのシーンを、既定のバナー等の代わりに自動再生する
+    authoringEnabled: true,   // 割り当て済みのシーンをイベント受信時に自動再生する
     // リールユニット(reel.html)の出し入れ
     reelIn: false,
     reelX: 50,
@@ -971,155 +416,12 @@
 
   const screenWrapper = el("screen-wrapper");
   const gameVideo = el("game-screen-video");
-  const illustLayer = el("illustration-layer");
-  const illustWhiteBg = el("illustration-white-bg");
-  const illustImg = el("illustration-img");
-  const illustEffectGif = el("illustration-effect-gif");
-  const illustVoiceAudio = el("illustration-voice-audio");
-  const illustPlaceholder = el("illustration-placeholder");
-  const blackoutLayer = el("blackout-layer");
-  const lock3Gif = el("lock3-transition-gif");
-  const freezeRevealGif = el("freeze-reveal-gif");
-  const illustVideo = el("illustration-video");
-  const illustEffectVideo = el("illustration-effect-video");
-  const lock3Video = el("lock3-transition-video");
-  const freezeRevealVideo = el("freeze-reveal-video");
-
-  /* ===================== 動画ヘルパー =====================
-     <video> を頭から再生する。opacity は呼び出し側で制御する(フェードのタイミングが演出ごとに違うため)。
-     戻り値は再生終了(ended)で解決する Promise。loop=true のときは stopVideo されるまで解決しない。
-     自動再生ポリシーで音付き再生が拒否された場合は、無音にして再生だけは続ける。 */
-  function clampRate(){ return Math.min(4, Math.max(0.25, speedFactor)); }
-  // 音付きの自動再生がブラウザに拒否されたことを一度だけ知らせる。
-  // (単体のブラウザウィンドウで起きる。一度ウィンドウ内をクリックすれば以降は鳴る。OBS では起きない)
-  let audioBlockedNoted = false;
-  function noteAudioBlocked(){
-    if(audioBlockedNoted) return;
-    audioBlockedNoted = true;
-    console.log("[音声] 音付きの自動再生がブラウザに拒否されたため無音で再生しました。ウィンドウ内を一度クリックすると以降は音が出ます (OBS のブラウザソースでは起きません)");
-  }
-  window.noteAudioBlocked = noteAudioBlocked;
-  function startVideo(v, url, opts){
-    const { loop = false, muted = false } = opts || {};
-    return new Promise(resolve=>{
-      let done = false;
-      const finish = (why)=>{ if(done) return; done = true; resolve(why); };
-      try{
-        v.onended = null; v.onerror = null;
-        v.pause();
-        // 同じURLなら再読込せず先頭へ戻す(大きい動画を毎回ダウンロードし直さない)
-        const needLoad = v.getAttribute("src") !== url;
-        if(needLoad){ v.setAttribute("src", url); v.load(); }
-        v.loop = loop;
-        v.muted = muted;
-        v.volume = Math.min(1, Math.max(0, Number(settings.sfxVolume)));
-        v.playbackRate = clampRate();
-        v.onended = ()=> finish("ended");
-        v.onerror = ()=>{ console.log("[動画] 再生に失敗しました:", url); finish("error"); };
-        const go = ()=>{
-          if(done) return;
-          try{ v.currentTime = 0; }catch(e){}
-          const p = v.play();
-          if(p && p.catch){
-            p.catch(()=>{
-              if(done) return;
-              if(v.muted){ finish("error"); return; }
-              v.muted = true;   // 音付き自動再生が拒否された → 無音で再生を続ける
-              noteAudioBlocked();
-              const p2 = v.play();
-              if(p2 && p2.catch) p2.catch(()=> finish("error"));
-            });
-          }
-        };
-        // src を替えた直後に play() すると、読込処理と競合して再生が始まらないことがある
-        // (Chrome で再現)。メタデータが読めてから再生を開始する
-        if(needLoad && v.readyState < 1){
-          v.addEventListener("loadedmetadata", go, { once:true });
-          setTimeout(()=>{ if(!done && v.paused) go(); }, 3000); // 保険: 読込イベントが来なくても再生を試みる
-        }else{
-          go();
-        }
-      }catch(e){
-        finish("error");
-      }
-    });
-  }
-  function stopVideo(v){
-    try{ v.onended = null; v.onerror = null; v.pause(); v.currentTime = 0; }catch(e){}
-    v.style.transition = "none";
-    v.style.opacity = "0";
-  }
-  // 固定素材(frz / moe)の動画版があるか調べる。.webm → .mp4 の順に読めた方のURLを返す(無ければ null)。
-  // http:// でも file:// でも、実際に <video> でメタデータを読めるかで判定する。
-  function probeVideoVariant(dir, base){
-    return (async ()=>{
-      // サーバーモードならまず /api/list で存在するファイルだけに絞る(無いファイルを読みに行って404を出さない)
-      let existing = null;
-      if(SERVER_MODE){
-        try{ existing = new Set((await apiList(dir)).map(n=> n.toLowerCase())); }catch(e){ existing = null; }
-      }
-      for(const ext of [".webm", ".mp4"]){
-        if(existing && !existing.has((base + ext).toLowerCase())) continue;
-        const url = assetPath(dir, base + ext);
-        const ok = await new Promise(res=>{
-          const v = document.createElement("video");
-          v.preload = "metadata"; v.muted = true;
-          v.onloadedmetadata = ()=> res(true);
-          v.onerror = ()=> res(false);
-          v.src = url;
-        });
-        if(ok) return url;
-      }
-      return null;
-    })();
-  }
-  let LOCK3_VIDEO_SRC = null;          // frz.webm / frz.mp4 (音声込み)。無ければ frz.gif を無音で使う
-  let ILLUST_EFFECT_VIDEO_SRC = null;  // moe.webm / moe.mp4 (音声込み)。無ければ moe.gif を無音で使う
-  // 見つかった動画は起動時に読み込んでおく(初回再生の遅れと、読込と再生の競合を避ける)
-  function preloadVideo(v, url){
-    try{ v.setAttribute("src", url); v.load(); }catch(e){}
-  }
-  probeVideoVariant(FREEZE_ROOT, "frz").then(u=>{
-    LOCK3_VIDEO_SRC = u;
-    if(u){ preloadVideo(lock3Video, u); console.log("[動画] ロック3のつなぎに動画を使用:", u); }
-  });
-  probeVideoVariant(FREEZE_ROOT, "moe").then(u=>{
-    ILLUST_EFFECT_VIDEO_SRC = u;
-    if(u){ preloadVideo(illustEffectVideo, u); console.log("[動画] 萌えカットインの重ね演出に動画を使用:", u); }
-  });
-  /* ロック3の白→暗転つなぎの代替GIFは、フリーズ演出ルート直下から読み込む(動画が無いときだけ使う)。
-     以前はBase64でHTMLに埋め込んでいたが、差し替えを容易にするためファイル参照に変更した。 */
-  const LOCK3_GIF_SRC = assetPath(FREEZE_ROOT, LOCK3_GIF_FILE);
-  // アニメ再生し直しのため src="" にリセットする箇所があり、その空srcでもerrorが発火する。
-  // 実際にファイルを指しているときだけ警告を出す。
-  lock3Gif.addEventListener("error", ()=>{
-    if(lock3Gif.getAttribute("src")) console.log(`${FREEZE_ROOT}/${LOCK3_GIF_FILE} の読み込みに失敗しました`);
-  });
-  /* 萌えカットインに重ねる演出の代替GIFも同様にフリーズ演出ルート直下から読み込む(動画が無いときだけ使う)。 */
-  const ILLUST_EFFECT_GIF_SRC = assetPath(FREEZE_ROOT, ILLUST_EFFECT_GIF_FILE);
-  illustEffectGif.addEventListener("error", ()=>{
-    if(illustEffectGif.getAttribute("src")) console.log(`${FREEZE_ROOT}/${ILLUST_EFFECT_GIF_FILE} の読み込みに失敗しました`);
-  });
-  const stateIndicator = el("state-indicator");
 
   /* ===================== 設定UIの初期化 ===================== */
   function applySettingsToUI(){
-    el("shakeDuration").value = settings.shakeDuration;
-    el("illustDuration").value = settings.illustDuration;
-    el("blackInDuration").value = settings.blackInDuration;
-    el("holdDuration").value = settings.holdDuration;
-    el("blackOutDuration").value = settings.blackOutDuration;
-    el("freezeGifDuration").value = settings.freezeGifDuration;
-    el("bannerDuration").value = settings.bannerDuration;
-    el("bannerY").value = settings.bannerY;
     el("stopTiming1").value = settings.stopTiming1;
     el("stopTiming2").value = settings.stopTiming2;
     el("stopTiming3").value = settings.stopTiming3;
-    el("naviDuration").value = settings.naviDuration;
-    el("naviY").value = settings.naviY;
-    el("ggDuration").value = settings.ggDuration;
-    el("popupDuration").value = settings.popupDuration;
-    el("endDuration").value = settings.endDuration;
     el("sfxVolume").value = settings.sfxVolume;
     el("subWsUrl").value = settings.subWsUrl;
     el("reelX").value = settings.reelX;
@@ -1128,13 +430,11 @@
     el("reelAnim").value = settings.reelAnim;
     el("reelNavi").checked = !!settings.reelNavi;
     el("authoringEnabled").checked = !!settings.authoringEnabled;
-    applyHudLayout();
+    applyLayout();
   }
-  // HUD・リールの位置設定をCSSへ反映する(数値設定の変更時・起動時・設定インポート時)
-  function applyHudLayout(){
-    const banner = el("hud-banner"), navi = el("hud-navi"), reel = el("reel-layer");
-    if(banner) banner.style.top = `${settings.bannerY}%`;
-    if(navi) navi.style.top = `${settings.naviY}%`;
+  // リールの位置設定をCSSへ反映する(数値設定の変更時・起動時・設定インポート時)
+  function applyLayout(){
+    const reel = el("reel-layer");
     if(reel){
       reel.style.left = `${settings.reelX}%`;
       reel.style.top = `${settings.reelY}%`;
@@ -1152,28 +452,8 @@
       if(!isNaN(v)){ settings[key] = v; saveSettings(); }
     });
   }
-  bindNumber("shakeDuration","shakeDuration");
-  bindNumber("illustDuration","illustDuration");
-  bindNumber("blackInDuration","blackInDuration");
-  bindNumber("holdDuration","holdDuration");
-  bindNumber("blackOutDuration","blackOutDuration");
-  bindNumber("freezeGifDuration","freezeGifDuration");
-  bindNumber("bannerDuration","bannerDuration");
-  bindNumber("bannerY","bannerY");
-  bindNumber("stopTiming1","stopTiming1");
-  bindNumber("stopTiming2","stopTiming2");
-  bindNumber("stopTiming3","stopTiming3");
-  bindNumber("naviDuration","naviDuration");
-  bindNumber("naviY","naviY");
-  bindNumber("ggDuration","ggDuration");
-  bindNumber("popupDuration","popupDuration");
-  bindNumber("endDuration","endDuration");
-  bindNumber("sfxVolume","sfxVolume");
-  bindNumber("reelX","reelX");
-  bindNumber("reelY","reelY");
-  bindNumber("reelW","reelW");
-  bindNumber("reelAnim","reelAnim");
-  ["bannerY","naviY","reelX","reelY","reelW","reelAnim"].forEach(id=> el(id).addEventListener("change", applyHudLayout));
+  ["stopTiming1","stopTiming2","stopTiming3","sfxVolume","reelX","reelY","reelW","reelAnim"].forEach(id=> bindNumber(id, id));
+  ["reelX","reelY","reelW","reelAnim"].forEach(id=> el(id).addEventListener("change", applyLayout));
   el("subWsUrl").addEventListener("change", e=>{
     const v = String(e.target.value || "").trim();
     settings.subWsUrl = v || DEFAULT_SETTINGS.subWsUrl;
@@ -1188,23 +468,9 @@
 
   // 設定パネルの開閉。オーバーレイ上にギアは表示しないため、
   // 実際の呼び出し元はコンパネからの toggleSettings アクション。
-  async function toggleSettingsPanel(){
+  function toggleSettingsPanel(){
     settingsPanel.classList.toggle("open");
-    // 設定パネルを開いた操作(ユーザー操作)のタイミングで、
-    // 画像フォルダの権限が失効していれば自動で再許可を試みる
-    if(settingsPanel.classList.contains("open")){
-      await folderRestorePromise;
-      if(illustrationPool.length === 0 && restoredDirHandle){
-        // この再許可処理の完了を、以降の演出側からも待てるようにする
-        folderRestorePromise = reacquireFolderPermission();
-      }
-      await freezeFolderRestorePromise;
-      if(freezeGifPool.length === 0 && restoredFreezeHandle){
-        freezeFolderRestorePromise = reacquireFreezeFolderPermission();
-      }
-    }
   }
-
   // 非表示のギアボタンにも従来どおり紐づけておく(コンパネが click() で叩く方式との互換用)
   settingsToggle.addEventListener("click", toggleSettingsPanel);
   // 外部から直接呼べるようにも公開しておく
@@ -1216,23 +482,6 @@
       document.querySelectorAll(".tab-content").forEach(c=>c.hidden = true);
       btn.classList.add("active");
       el("tab-" + btn.dataset.tab).hidden = false;
-    });
-  });
-
-  document.querySelectorAll(".tabs.subtabs").forEach(group=>{
-    const btns = Array.from(group.querySelectorAll(":scope > .subtab-btn"));
-    btns.forEach(btn=>{
-      btn.addEventListener("click", ()=>{
-        // 同じグループのボタンとその対応コンテンツだけを操作する
-        btns.forEach(b=>{
-          b.classList.remove("active");
-          const c = el("subtab-" + b.dataset.subtab);
-          if(c) c.hidden = true;
-        });
-        btn.classList.add("active");
-        const target = el("subtab-" + btn.dataset.subtab);
-        if(target) target.hidden = false;
-      });
     });
   });
 
@@ -1281,894 +530,17 @@
     e.target.value = "";
   });
 
-  /* ===================== IndexedDB: フォルダハンドル永続化 ===================== */
-  const DB_NAME = "enshutsu_overlay_db";
-  const DB_STORE = "handles";
-  const DB_KEY = "illustDir";
+  let speedFactor = 1;   // 1 = 通常速度 / 0.35 = スロー再生 (下の 🐢 ボタンで切り替え)
 
-  function openDb(){
-    return new Promise((resolve, reject)=>{
-      const req = indexedDB.open(DB_NAME, 1);
-      req.onupgradeneeded = ()=>{
-        req.result.createObjectStore(DB_STORE);
-      };
-      req.onsuccess = ()=> resolve(req.result);
-      req.onerror = ()=> reject(req.error);
-    });
+  // 音付きの自動再生がブラウザに拒否されたことを一度だけ知らせる。
+  // (単体のブラウザウィンドウで起きる。一度ウィンドウ内をクリックすれば以降は鳴る。OBS では起きない)
+  let audioBlockedNoted = false;
+  function noteAudioBlocked(){
+    if(audioBlockedNoted) return;
+    audioBlockedNoted = true;
+    console.log("[音声] 音付きの自動再生がブラウザに拒否されたため無音で再生しました。ウィンドウ内を一度クリックすると以降は音が出ます (OBS のブラウザソースでは起きません)");
   }
-  async function idbSet(key, value){
-    const db = await openDb();
-    return new Promise((resolve, reject)=>{
-      const tx = db.transaction(DB_STORE, "readwrite");
-      tx.objectStore(DB_STORE).put(value, key);
-      tx.oncomplete = ()=> resolve();
-      tx.onerror = ()=> reject(tx.error);
-    });
-  }
-  async function idbGet(key){
-    const db = await openDb();
-    return new Promise((resolve, reject)=>{
-      const tx = db.transaction(DB_STORE, "readonly");
-      const req = tx.objectStore(DB_STORE).get(key);
-      req.onsuccess = ()=> resolve(req.result);
-      req.onerror = ()=> reject(req.error);
-    });
-  }
-
-  /* ===================== 画像フォルダ読み込み ===================== */
-  const IMAGE_EXT = [".png",".jpg",".jpeg",".webp",".gif"];
-  const VOICE_EXT = [".mp3",".wav",".ogg",".m4a"];
-  const VIDEO_EXT = [".mp4",".webm",".mov",".m4v"];   // 動画。<video> で再生する
-  function isVideoName(name){ return VIDEO_EXT.some(ext=> name.toLowerCase().endsWith(ext)); }
-  // フォルダ内の素材1件分のレコード。kind は "image" | "gif" | "video"
-  function assetRecord(name, url){
-    const lower = name.toLowerCase();
-    const kind = isVideoName(lower) ? "video" : (lower.endsWith(".gif") ? "gif" : "image");
-    return { name, url, number: extractNumber(name), kind };
-  }
-  let illustrationPool = []; // { name, url, number }
-  let voiceMap = new Map(); // number(string) -> url
-  let freezeGifPool = []; // { name, url, number } (freezeフォルダ直下のGIF)
-  let sequentialIndex = 0;
-
-  // ファイル名から先頭の数字列を「キャラクター番号」として取り出す(例: "01_はな.png" → "01")
-  function extractNumber(filename){
-    const base = filename.replace(/\.[^.]+$/, "");
-    const m = base.match(/\d+/);
-    if(!m) return null;
-    // 先頭のゼロを詰めて正規化(例: "01" と "1" を同一視する)
-    return String(parseInt(m[0], 10));
-  }
-
-  async function loadImagesFromDir(dirHandle){
-    const pool = [];
-    for await (const [name, handle] of dirHandle.entries()){
-      if(handle.kind !== "file") continue;
-      const lower = name.toLowerCase();
-      if(!IMAGE_EXT.some(ext=> lower.endsWith(ext)) && !isVideoName(lower)) continue;
-      const file = await handle.getFile();
-      const url = URL.createObjectURL(file);
-      pool.push(assetRecord(name, url));
-    }
-    return pool;
-  }
-
-  async function loadVoicesFromDir(dirHandle){
-    // 選択したフォルダ内にある「voice」サブフォルダから、番号に対応する声を読み込む
-    const map = new Map();
-    try{
-      for await (const [name, handle] of dirHandle.entries()){
-        if(handle.kind === "directory" && name.toLowerCase() === "voice"){
-          for await (const [vname, vhandle] of handle.entries()){
-            if(vhandle.kind !== "file") continue;
-            const lower = vname.toLowerCase();
-            if(!VOICE_EXT.some(ext=> lower.endsWith(ext))) continue;
-            const num = extractNumber(vname);
-            if(num === null) continue;
-            const file = await vhandle.getFile();
-            const url = URL.createObjectURL(file);
-            map.set(num, url);
-          }
-          break;
-        }
-      }
-    }catch(err){
-      console.log("voiceフォルダの読み込みでエラー:", err);
-    }
-    return map;
-  }
-
-  async function loadFreezeAssetsFromDir(dirHandle){
-    // 選択した「afterblackout」フォルダ直下の動画とGIFを読み込む(サブフォルダは見ない)
-    const pool = [];
-    for await (const [name, handle] of dirHandle.entries()){
-      if(handle.kind !== "file") continue;
-      const lower = name.toLowerCase();
-      if(lower.endsWith(".gif") || isVideoName(lower)){
-        const file = await handle.getFile();
-        const url = URL.createObjectURL(file);
-        pool.push(assetRecord(name, url));
-      }
-    }
-    return { pool };
-  }
-
-  /* ===================== サーバーモード(http:// 経由での自動読み込み) =====================
-     trigger_relay_server.js がプロジェクトルートを静的配信しているため、
-     http:// で開かれている場合はフォルダ選択も権限の再許可も一切不要になる。
-     このHTML自身のURLを起点に cutin / freeze を相対パスで解決する。 */
-
-  async function apiList(subPath){
-    const res = await fetch(`/api/list?dir=${encodeURIComponent(BASE_PATH + "/" + subPath)}`, {cache:"no-store"});
-    if(!res.ok) throw new Error(`/api/list に失敗しました (${res.status})`);
-    const data = await res.json();
-    return Array.isArray(data.files) ? data.files : [];
-  }
-
-  // 相対URL化。サーバーモードでもHTMLからの相対パスで解決する。
-  function assetUrl(subPath, name){
-    return assetPath(subPath, name);
-  }
-
-  function hasExt(name, extList){
-    const lower = name.toLowerCase();
-    return extList.some(ext=> lower.endsWith(ext));
-  }
-
-  async function loadImagesFromServer(){
-    const files = await apiList(CUTIN_DIR);
-    return files
-      .filter(name=> hasExt(name, IMAGE_EXT) || isVideoName(name))
-      .map(name=> assetRecord(name, assetUrl(CUTIN_DIR, name)));
-  }
-
-  async function loadVoicesFromServer(){
-    const map = new Map();
-    try{
-      const files = await apiList(VOICE_DIR);
-      files.forEach(name=>{
-        if(!hasExt(name, VOICE_EXT)) return;
-        const num = extractNumber(name);
-        if(num === null) return;
-        map.set(num, assetUrl(VOICE_DIR, name));
-      });
-    }catch(err){
-      console.log("voiceフォルダの読み込みでエラー:", err);
-    }
-    return map;
-  }
-
-  async function loadFreezeAssetsFromServer(){
-    const pool = [];
-    const files = await apiList(FREEZE_DIR);
-    files.forEach(name=>{
-      if(!name.toLowerCase().endsWith(".gif") && !isVideoName(name)) return;
-      pool.push(assetRecord(name, assetUrl(FREEZE_DIR, name)));
-    });
-    return { pool };
-  }
-
-  async function loadCutinFromServer(){
-    try{
-      illustrationPool = await loadImagesFromServer();
-      voiceMap = await loadVoicesFromServer();
-      sequentialIndex = 0;
-      renderImageList();
-      el("folder-status").textContent = illustrationPool.length > 0
-        ? `萌えカットイン ${describePool(illustrationPool)}を読込済み(自動 / ${CUTIN_DIR} フォルダ)`
-        : `${CUTIN_DIR} フォルダに画像/動画が見つかりませんでした`;
-      return true;
-    }catch(err){
-      console.log("cutinフォルダの自動読み込みに失敗:", err);
-      el("folder-status").textContent = `${CUTIN_DIR} フォルダの自動読み込みに失敗しました(サーバーが起動しているか確認してください)`;
-      return false;
-    }
-  }
-
-  async function loadFreezeFromServer(){
-    try{
-      const { pool } = await loadFreezeAssetsFromServer();
-      freezeGifPool = pool;
-      el("freeze-status").textContent = pool.length > 0
-        ? `${describePool(pool)}を読込済み(自動 / ${FREEZE_DIR} フォルダ)`
-        : `${FREEZE_DIR} フォルダに動画/GIFが見つかりませんでした`;
-      return true;
-    }catch(err){
-      console.log("freezeフォルダの自動読み込みに失敗:", err);
-      el("freeze-status").textContent = `${FREEZE_DIR} フォルダの自動読み込みに失敗しました(サーバーが起動しているか確認してください)`;
-      return false;
-    }
-  }
-
-  // 素材数の説明文(例: "GIF 2件・動画 1件")
-  function describePool(pool){
-    const videos = pool.filter(p=> p.kind === "video").length;
-    const gifs = pool.filter(p=> p.kind === "gif").length;
-    const images = pool.length - videos - gifs;
-    const parts = [];
-    if(images > 0) parts.push(`画像 ${images}件`);
-    if(gifs > 0) parts.push(`GIF ${gifs}件`);
-    if(videos > 0) parts.push(`動画 ${videos}件`);
-    return parts.join("・") || "0件";
-  }
-
-  function renderImageList(){
-    const list = el("image-list");
-    list.innerHTML = "";
-    illustrationPool.forEach(item=>{
-      let node;
-      if(item.kind === "video"){
-        node = document.createElement("video");
-        node.muted = true;
-        node.preload = "metadata";
-      }else{
-        node = document.createElement("img");
-      }
-      node.src = item.url;
-      node.title = item.name;
-      list.appendChild(node);
-    });
-  }
-
-  async function refreshFolderStatus(count){
-    el("folder-status").textContent = count > 0
-      ? `萌えカットイン ${describePool(illustrationPool)}を読込済み`
-      : "画像/動画が見つかりませんでした";
-  }
-
-  let restoredDirHandle = null; // 前回選択したフォルダのハンドル(権限失効時の再許可用に保持)
-
-  el("pick-folder").addEventListener("click", async ()=>{
-    if(!window.showDirectoryPicker){
-      alert("このブラウザは File System Access API に対応していません(OBSブラウザソースはバージョンによっては非対応です)。");
-      return;
-    }
-    try{
-      // 前回選択したフォルダがあれば、そこを起点にピッカーを開く
-      // (ブラウザの仕様上、JSからHTMLファイル自体の設置場所を直接取得することはできないため、
-      //  「前回選んだフォルダ」を起点にすることで、HTMLファイルの近くに置く運用に近づけています)
-      const previousHandle = await idbGet(DB_KEY).catch(()=>null);
-      const pickerOptions = previousHandle ? { startIn: previousHandle } : {};
-      const dirHandle = await window.showDirectoryPicker(pickerOptions);
-      await idbSet(DB_KEY, dirHandle);
-      restoredDirHandle = dirHandle;
-      illustrationPool = await loadImagesFromDir(dirHandle);
-      voiceMap = await loadVoicesFromDir(dirHandle);
-      sequentialIndex = 0;
-      renderImageList();
-      await refreshFolderStatus(illustrationPool.length);
-    }catch(err){
-      // ユーザーがキャンセルした場合など
-      console.log("フォルダ選択キャンセルまたはエラー:", err);
-    }
-  });
-
-  async function tryRestoreFolder(){
-    try{
-      const dirHandle = await idbGet(DB_KEY);
-      if(!dirHandle) return;
-      restoredDirHandle = dirHandle;
-      const perm = await dirHandle.queryPermission({mode:"read"});
-      if(perm === "granted"){
-        illustrationPool = await loadImagesFromDir(dirHandle);
-        voiceMap = await loadVoicesFromDir(dirHandle);
-        sequentialIndex = 0;
-        renderImageList();
-        await refreshFolderStatus(illustrationPool.length);
-      }else{
-        el("folder-status").textContent = "前回のフォルダへのアクセス許可が必要です(自動再許可を試みます。ダメな場合は再許可ボタンを押してください)";
-      }
-    }catch(err){
-      console.log("フォルダ復元エラー:", err);
-    }
-  }
-  let folderRestorePromise = SERVER_MODE ? loadCutinFromServer() : tryRestoreFolder();
-
-  // 権限が失効している場合に、ユーザー操作(クリック)のタイミングで再許可を試みる。
-  // requestPermission はユーザー操作直後でないと呼べない仕様のため、
-  // 設定パネルを開いた瞬間や再許可ボタンのクリックで直接呼び出す。
-  async function reacquireFolderPermission(){
-    if(!restoredDirHandle){
-      return false;
-    }
-    try{
-      const perm = await restoredDirHandle.requestPermission({mode:"read"});
-      if(perm === "granted"){
-        illustrationPool = await loadImagesFromDir(restoredDirHandle);
-        voiceMap = await loadVoicesFromDir(restoredDirHandle);
-        sequentialIndex = 0;
-        renderImageList();
-        await refreshFolderStatus(illustrationPool.length);
-        return true;
-      }else{
-        el("folder-status").textContent = "アクセスが許可されませんでした(再許可ボタンからもう一度お試しください)";
-      }
-    }catch(err){
-      console.log("フォルダ再許可エラー:", err);
-    }
-    return false;
-  }
-
-  el("reauth-folder").addEventListener("click", async ()=>{
-    await folderRestorePromise; // 復元処理(ハンドル取得)が終わっているのを確実にする
-    if(illustrationPool.length > 0){
-      return; // すでに読み込めているなら何もしない
-    }
-    if(!restoredDirHandle){
-      el("folder-status").textContent = "以前に選択したフォルダの記録がありません。「フォルダを選択」から選び直してください";
-      return;
-    }
-    // この再許可処理の完了を、以降の演出側からも待てるようにする
-    folderRestorePromise = reacquireFolderPermission();
-    await folderRestorePromise;
-  });
-
-  /* ===================== フリーズ演出フォルダ(カットイン画像フォルダとは独立) ===================== */
-  const FREEZE_DB_KEY = "freezeDir";
-  let restoredFreezeHandle = null;
-
-  async function loadFreezeAssetsAndRefreshUI(dirHandle){
-    const { pool } = await loadFreezeAssetsFromDir(dirHandle);
-    freezeGifPool = pool;
-    el("freeze-status").textContent = pool.length > 0
-      ? `${describePool(pool)}を読込済み`
-      : "動画/GIFが見つかりませんでした";
-  }
-
-  el("pick-freeze-folder").addEventListener("click", async ()=>{
-    if(!window.showDirectoryPicker){
-      alert("このブラウザは File System Access API に対応していません(OBSブラウザソースはバージョンによっては非対応です)。");
-      return;
-    }
-    try{
-      const previousHandle = await idbGet(FREEZE_DB_KEY).catch(()=>null);
-      const pickerOptions = previousHandle ? { startIn: previousHandle } : {};
-      const dirHandle = await window.showDirectoryPicker(pickerOptions);
-      await idbSet(FREEZE_DB_KEY, dirHandle);
-      restoredFreezeHandle = dirHandle;
-      await loadFreezeAssetsAndRefreshUI(dirHandle);
-    }catch(err){
-      console.log("フリーズ演出フォルダ選択キャンセルまたはエラー:", err);
-    }
-  });
-
-  async function tryRestoreFreezeFolder(){
-    try{
-      const dirHandle = await idbGet(FREEZE_DB_KEY);
-      if(!dirHandle) return;
-      restoredFreezeHandle = dirHandle;
-      const perm = await dirHandle.queryPermission({mode:"read"});
-      if(perm === "granted"){
-        await loadFreezeAssetsAndRefreshUI(dirHandle);
-      }else{
-        el("freeze-status").textContent = "前回のフォルダへのアクセス許可が必要です(自動再許可を試みます。ダメな場合は再許可ボタンを押してください)";
-      }
-    }catch(err){
-      console.log("フリーズ演出フォルダ復元エラー:", err);
-    }
-  }
-  let freezeFolderRestorePromise = SERVER_MODE ? loadFreezeFromServer() : tryRestoreFreezeFolder();
-
-  async function reacquireFreezeFolderPermission(){
-    if(!restoredFreezeHandle) return false;
-    try{
-      const perm = await restoredFreezeHandle.requestPermission({mode:"read"});
-      if(perm === "granted"){
-        await loadFreezeAssetsAndRefreshUI(restoredFreezeHandle);
-        return true;
-      }else{
-        el("freeze-status").textContent = "アクセスが許可されませんでした(再許可ボタンからもう一度お試しください)";
-      }
-    }catch(err){
-      console.log("フリーズ演出フォルダ再許可エラー:", err);
-    }
-    return false;
-  }
-
-  el("reauth-freeze-folder").addEventListener("click", async ()=>{
-    await freezeFolderRestorePromise;
-    if(freezeGifPool.length > 0) return;
-    if(!restoredFreezeHandle){
-      el("freeze-status").textContent = "以前に選択したフォルダの記録がありません。「フォルダを選択」から選び直してください";
-      return;
-    }
-    freezeFolderRestorePromise = reacquireFreezeFolderPermission();
-    await freezeFolderRestorePromise;
-  });
-
-  /* ===================== フォルダタブのUIをモードに合わせて切り替える ===================== */
-  (function setupFolderUiMode(){
-    const serverOnly = [el("reload-folder"), el("reload-freeze-folder"), el("cutin-mode-note"), el("freeze-mode-note")];
-    const fileOnly = [el("pick-folder"), el("reauth-folder"), el("pick-freeze-folder"), el("reauth-freeze-folder"), el("cutin-fsa-note")];
-
-    if(SERVER_MODE){
-      serverOnly.forEach(node=>{ if(node) node.hidden = false; });
-      fileOnly.forEach(node=>{ if(node) node.hidden = true; });
-      const modeText = `サーバー経由で開いているため、このHTMLからの相対パスで ${CUTIN_DIR} / ${FREEZE_DIR} フォルダを自動で読み込みます。フォルダ選択もアクセス許可も不要です。`;
-      el("cutin-mode-note").textContent = modeText + " フォルダに画像を追加したら「再読込」を押してください。";
-      el("freeze-mode-note").textContent = modeText + " フォルダにGIFを追加したら「再読込」を押してください。";
-
-      el("reload-folder").addEventListener("click", async ()=>{
-        el("folder-status").textContent = "再読込中...";
-        folderRestorePromise = loadCutinFromServer();
-        await folderRestorePromise;
-      });
-      el("reload-freeze-folder").addEventListener("click", async ()=>{
-        el("freeze-status").textContent = "再読込中...";
-        freezeFolderRestorePromise = loadFreezeFromServer();
-        await freezeFolderRestorePromise;
-      });
-    }else{
-      serverOnly.forEach(node=>{ if(node) node.hidden = true; });
-      fileOnly.forEach(node=>{ if(node) node.hidden = false; });
-    }
-  })();
-
-  function pickIllustration(){
-    if(illustrationPool.length === 0) return null;
-    if(settings.pickMode === "sequential"){
-      const item = illustrationPool[sequentialIndex % illustrationPool.length];
-      sequentialIndex++;
-      return item;
-    }
-    return illustrationPool[Math.floor(Math.random() * illustrationPool.length)];
-  }
-
-  /* ===================== 演出シーケンス ===================== */
-  let isPlaying = false;
-  let speedFactor = 1; // 1 = 通常速度 / 0.35 = スロー再生
-
-  function sleep(ms){ return new Promise(r=> setTimeout(r, ms / speedFactor)); }
-  function sec(s){ return (s / speedFactor).toFixed(3); } // CSSトランジション用(秒)
-
-  function setState(text){ stateIndicator.textContent = "状態: " + text; }
-
-  async function playShakeStage(){
-    setState("ロック1");
-    const ms = settings.shakeDuration * 1000;
-    await sleep(ms);
-  }
-
-  function resetImagePosition(imgEl){
-    imgEl.style.transition = "none";
-    imgEl.style.filter = "none";
-    imgEl.style.transformOrigin = "center center";
-    imgEl.style.transform = "translateY(-50%) scale(1)";
-  }
-
-  function playIllustEffect(){
-    // 萌えカットインのタイミングで重ね演出を再生する。
-    //   moe.mp4 / moe.webm … 映像と音声を1本にまとめた動画を1回再生(再生終了で自動的に消える)
-    //   moe.gif           … 動画が無いときの無音の代替
-    if(ILLUST_EFFECT_VIDEO_SRC){
-      illustEffectGif.style.opacity = "0";
-      illustEffectVideo.style.transition = "none";
-      illustEffectVideo.style.opacity = "1";
-      startVideo(illustEffectVideo, ILLUST_EFFECT_VIDEO_SRC, { loop:false, muted:false }).then(()=>{
-        illustEffectVideo.style.opacity = "0";
-      });
-    }else{
-      illustEffectGif.style.transition = "none";
-      illustEffectGif.src = "";
-      void illustEffectGif.offsetWidth; // 強制リフローでアニメーションを最初から再生し直す
-      illustEffectGif.src = ILLUST_EFFECT_GIF_SRC;
-      illustEffectGif.style.opacity = "1";
-    }
-  }
-
-  function stopIllustEffect(){
-    illustEffectGif.style.transition = "none";
-    illustEffectGif.style.opacity = "0";
-    illustEffectGif.src = "";
-    stopVideo(illustEffectVideo);
-  }
-
-  function playCharacterVoice(picked){
-    // ピックした一枚絵の番号に対応する声がvoiceフォルダにあれば再生する。なければ何もしない
-    if(!picked || picked.number === null || picked.number === undefined) return;
-    const url = voiceMap.get(picked.number);
-    if(!url) return; // 対応する声がない場合は再生しない
-    try{
-      illustVoiceAudio.src = url;
-      illustVoiceAudio.currentTime = 0;
-      illustVoiceAudio.playbackRate = Math.min(4, Math.max(0.25, speedFactor));
-      const playPromise = illustVoiceAudio.play();
-      if(playPromise && playPromise.catch){ playPromise.catch(()=>{}); }
-    }catch(e){}
-  }
-
-  function stopCharacterVoice(){
-    try{ illustVoiceAudio.pause(); }catch(e){}
-  }
-
-  async function playIllustrationStage(){
-    setState("ロック2(白表示→カットイン表示と同時に白は消える)");
-    const totalMs = settings.illustDuration * 1000;
-    // 初回再生時、フォルダの復元(前回選択した画像フォルダの読込)が
-    // まだ終わっていない場合があるため、ここで完了を待ってから画像を選ぶ
-    await folderRestorePromise;
-    const picked = pickIllustration();
-
-    // 1) 白背景を即座に表示(フェードなし)。illustLayer自体はコンテナとして常時opacity:1にする
-    illustLayer.style.transition = "none";
-    illustLayer.classList.add("active");
-    illustWhiteBg.style.transition = "none";
-    illustWhiteBg.style.opacity = "1";
-    illustImg.style.transition = "none";
-    illustImg.style.opacity = "0";
-    illustVideo.style.transition = "none";
-    illustVideo.style.opacity = "0";
-    illustVideo.style.display = "none";
-    stopIllustEffect();
-    stopCharacterVoice();
-    void illustLayer.offsetWidth; // 強制リフローで即時反映
-
-    if(picked){
-      // 表示する要素: 静止画/GIFは <img>、動画は <video>(表示時間中はループ再生)
-      const isVideo = picked.kind === "video";
-      const shown = isVideo ? illustVideo : illustImg;
-      if(isVideo){
-        illustImg.style.display = "none";
-        illustVideo.style.display = "block";
-        startVideo(illustVideo, picked.url, { loop:true }); // 動画自身の音声はそのまま鳴る(音量は効果音の音量)
-      }else{
-        illustImg.style.display = "block";
-        illustImg.src = picked.url;
-        resetImagePosition(illustImg);
-      }
-
-      // 1.5) 白背景だけをはっきり見せる時間を確保(短すぎると通常速度で白が見えなくなるため)
-      await sleep(250);
-
-      // 2) 萌えカットインを素早くちら見せると同時に、白背景は役目を終えてフェードアウトする
-      shown.style.transition = `opacity ${sec(.15)}s ease`;
-      shown.style.opacity = "1";
-      illustWhiteBg.style.transition = `opacity ${sec(.4)}s ease`;
-      illustWhiteBg.style.opacity = "0";
-      playIllustEffect();
-      playCharacterVoice(picked);
-
-      await sleep(totalMs);
-
-      // 素早くフェードアウト(ちら見せなので短め)
-      shown.style.transition = `opacity ${sec(.2)}s ease`;
-      shown.style.opacity = "0";
-      stopIllustEffect();
-      stopCharacterVoice();
-      await sleep(220);
-      if(isVideo){ stopVideo(illustVideo); illustVideo.style.display = "none"; }
-    }else{
-      // 画像が読み込めていない場合は、案内テキスト等は出さず白のみを一瞬見せてからフェードアウト
-      illustImg.style.display = "none";
-      await sleep(300);
-      illustWhiteBg.style.transition = `opacity ${sec(.5)}s ease`;
-      illustWhiteBg.style.opacity = "0";
-      await sleep(500);
-    }
-
-    // 3) illustLayerの状態をリセット(画像・白背景は既に消えているため、
-    //    ここで余計な待ち時間を挟むとロック3に切り替わるまでの間、透明になって
-    //    下のゲーム画面が見えてしまう。即座にリセットしてロック3へ間を空けず引き継ぐ
-    illustLayer.style.transition = "none";
-    illustLayer.classList.remove("active");
-    illustWhiteBg.style.transition = "none";
-    illustWhiteBg.style.opacity = "0";
-  }
-
-  async function playLock3GifSound(){
-    // ロック3の白→暗転つなぎ。
-    //   frz.mp4 / frz.webm … 映像と音声を1本にした動画を音声込みで1回再生し、再生終了で自動的に消える
-    //   frz.gif           … 動画が無いときの無音の代替。blackInDuration 秒だけ表示する
-    // 戻り値は blackInDuration 秒後に解決する(動画がそれより長くても、暗転保持へ進むタイミングは変えない。
-    // 動画の後半は黒なので、下の黒レイヤーの上で鳴り終わるまで再生を続ける)。
-    const targetMs = Math.max(200, settings.blackInDuration * 1000);
-
-    if(LOCK3_VIDEO_SRC){
-      lock3Gif.style.opacity = "0";
-      lock3Video.style.transition = "none";
-      lock3Video.style.opacity = "1";
-      startVideo(lock3Video, LOCK3_VIDEO_SRC, { loop:false, muted:false }).then(()=>{
-        lock3Video.style.opacity = "0";
-      });
-      await sleep(targetMs);
-      return;
-    }
-
-    // GIFはJSで一時停止/巻き戻しができないため、srcを一度クリアしてから
-    // 再設定することでアニメーションを最初から再生し直す
-    lock3Gif.style.transition = "none";
-    lock3Gif.src = "";
-    void lock3Gif.offsetWidth; // 強制リフロー
-    lock3Gif.src = LOCK3_GIF_SRC;
-    lock3Gif.style.opacity = "1";
-
-    await sleep(targetMs);
-
-    lock3Gif.style.transition = "none";
-    lock3Gif.style.opacity = "0";
-  }
-
-  function pickFreezeGif(){
-    // 状況(ロック2の番号など)を問わず、freezeフォルダにGIF/動画があればランダムに1つ選ぶ
-    if(!freezeGifPool || freezeGifPool.length === 0) return null;
-    return freezeGifPool[Math.floor(Math.random() * freezeGifPool.length)];
-  }
-
-  function playFreezeReveal(){
-    // afterblackout フォルダに動画/GIFがあれば、状況を問わずランダムに1つ選んで再生する。
-    //   動画 … 音声込みでそのまま再生し、再生終了で演出を終える
-    //   GIF  … 無音で settings.freezeGifDuration 秒だけ表示して終える
-    // 素材が1つもない場合は何もせず即座に完了とする。
-    return new Promise(resolve=>{
-      const pick = pickFreezeGif();
-      if(!pick){
-        resolve();
-        return;
-      }
-
-      let done = false;
-      const finish = ()=>{
-        if(done) return;
-        done = true;
-        freezeRevealGif.style.transition = "none";
-        freezeRevealGif.style.opacity = "0";
-        freezeRevealGif.src = "";
-        stopVideo(freezeRevealVideo);
-        resolve();
-      };
-
-      if(pick.kind === "video"){
-        freezeRevealVideo.style.transition = "none";
-        freezeRevealVideo.style.opacity = "1";
-        startVideo(freezeRevealVideo, pick.url).then(finish);
-        // 保険: ended が発火しない場合に備えたタイムアウト(最大120秒)
-        setTimeout(finish, 120000 / Math.max(0.25, speedFactor));
-        return;
-      }
-
-      // GIFを最初から再生し直す(srcを一度クリアしてから再設定)
-      freezeRevealGif.style.transition = "none";
-      freezeRevealGif.src = "";
-      void freezeRevealGif.offsetWidth; // 強制リフロー
-      freezeRevealGif.src = pick.url;
-      freezeRevealGif.style.opacity = "1";
-      const showMs = Math.max(500, Number(settings.freezeGifDuration) * 1000);
-      setTimeout(finish, showMs / speedFactor);
-    });
-  }
-
-  async function playBlackoutStage(){
-    setState("ロック3(GIF+サウンドで黒へ)");
-
-    // ロック3は白背景を使わないため、ロック2の白レイヤーはここで即座に消す
-    illustLayer.style.transition = "none";
-    illustLayer.classList.remove("active");
-
-    // ベースを黒にしておく(GIFの読み込みが多少遅れても白や透明が見えないように)
-    blackoutLayer.style.transition = "none";
-    blackoutLayer.style.background = "#000";
-    blackoutLayer.style.opacity = "1";
-
-    // 暗転つなぎの動画(frz.mp4)を再生してつなぐ
-    await playLock3GifSound();
-
-    await sleep(settings.holdDuration * 1000);
-
-    // freeze×soundの組み合わせがあれば、ここで再生してから復帰する
-    setState("ロック3(フリーズ演出)");
-    await playFreezeReveal();
-
-    // 復帰: 黒レイヤーをフェードアウトして透明に戻す
-    setState("ロック3(GIF+サウンドで黒へ)");
-    const outSec = settings.blackOutDuration;
-    blackoutLayer.style.transition = `opacity ${sec(outSec)}s ease`;
-    requestAnimationFrame(()=>{
-      blackoutLayer.style.opacity = "0";
-    });
-    await sleep(outSec * 1000);
-
-    // 次回サイクルのためにトランジション指定・状態をリセット
-    blackoutLayer.style.transition = "";
-    blackoutLayer.style.opacity = "0";
-    lock3Gif.style.transition = "none";
-    lock3Gif.style.opacity = "0";
-    stopVideo(lock3Video);
-    freezeRevealGif.style.transition = "none";
-    freezeRevealGif.style.opacity = "0";
-    stopVideo(freezeRevealVideo);
-  }
-
-function hideGameVideo(){
-    // 画面登録機能使用時、ブラウザ/OBSのハードウェア合成の都合でビデオ要素が
-    // z-indexの重なり順を無視して表示されてしまうことがあるため、
-    // ロック2・ロック3の間は明示的に非表示にして確実に隠す
-    gameVideo.style.visibility = "hidden";
-  }
-  function showGameVideo(){
-    gameVideo.style.visibility = "";
-  }
-
-  async function playSequence(){
-    // 確率に基づく演出選択はこのファイルでは行わず、常にロック1→ロック2→ロック3を
-    // フルで再生する(単純な確認用)。確率に応じた出し分けは別のHTML側で行う想定。
-    if(isPlaying){ return; }
-    isPlaying = true;
-    try{
-      await playShakeStage();
-      hideGameVideo();
-      try{
-        await playIllustrationStage();
-        await playBlackoutStage();
-      }finally{
-        showGameVideo();
-      }
-    }finally{
-      isPlaying = false;
-    }
-  }
-
-  // 終了パターン確認用: ロック1から順に再生し、指定した段階で終了する
-  async function playUpToLock1(){
-    if(isPlaying){ return; }
-    isPlaying = true;
-    try{
-      await playShakeStage();
-    }finally{
-      isPlaying = false;
-    }
-  }
-
-  async function playUpToLock2(){
-    if(isPlaying){ return; }
-    isPlaying = true;
-    try{
-      await playShakeStage();
-      hideGameVideo();
-      try{
-        await playIllustrationStage();
-      }finally{
-        showGameVideo();
-      }
-    }finally{
-      isPlaying = false;
-    }
-  }
-
-  async function playUpToLock3(){
-    // ロック3まで到達するパターンはフル演出(playSequence)と同一
-    await playSequence();
-  }
-
-  // 外部(Twitch連動スクリプトなど)から呼び出すためのフック
-  window.triggerEnshutsu = playSequence;   // フル演出を1回だけ再生
-
-  /* ===================== 各段階の個別確認ボタン ===================== */
-  async function previewLock1(){
-    if(isPlaying) return;
-    isPlaying = true;
-    try{
-      await playShakeStage();
-    }finally{
-      isPlaying = false;
-      setState("待機中");
-    }
-  }
-
-  async function previewLock2(){
-    if(isPlaying) return;
-    isPlaying = true;
-    hideGameVideo();
-    try{
-      await playIllustrationStage(); // 内部で白背景の表示〜フェードアウトまで完結する
-    }finally{
-      showGameVideo();
-      isPlaying = false;
-      setState("待機中");
-    }
-  }
-
-  async function previewLock3(){
-    if(isPlaying) return;
-    isPlaying = true;
-    hideGameVideo();
-    try{
-      await playBlackoutStage();
-    }finally{
-      showGameVideo();
-      isPlaying = false;
-      setState("待機中");
-    }
-  }
-
-  el("preview-lock1").addEventListener("click", previewLock1);
-  el("preview-lock2").addEventListener("click", previewLock2);
-  el("preview-lock3").addEventListener("click", previewLock3);
-
-  // 別のHTML(確率計算を行う外部コントローラーなど)から個別に演出を呼び出すためのフック
-  window.playLock1 = previewLock1; // ロック1のみ単体で再生
-  window.playLock2 = previewLock2; // ロック2のみ単体で再生(白表示〜カットイン)
-  window.playLock3 = previewLock3; // ロック3のみ単体で再生(暗転〜フリーズ演出)
-
-  // 終了パターン確認用フック: ロック1から順に再生し、指定した段階で終了する
-  window.playUpToLock1 = playUpToLock1; // ロック1で終了
-  window.playUpToLock2 = playUpToLock2; // ロック1→ロック2で終了
-  window.playUpToLock3 = playUpToLock3; // ロック1→ロック2→ロック3まで到達(フル演出と同一)
-
-  el("pattern-lock1").addEventListener("click", playUpToLock1);
-  el("pattern-lock2").addEventListener("click", playUpToLock2);
-  el("pattern-lock3").addEventListener("click", playUpToLock3);
-
-  /* ===================== 副制御の演出イベント(HUD) =====================
-     god_main_board.py の SubBoard が出す演出イベント(仕様書4.5節)を表示する。
-       lever{rank,plan}       レバーON。rank があればバナー。plan は参考情報
-       stop{n,rank}           第n停止(1〜3)。rank があればバナー(表示時刻は lever 起点でずらす)
-       navi{order}            押し順ナビ
-       banner{rank,trigger}   予告バナー(旧形式。コンパネ直送との互換用)
-       freeze{seq,rank}       神揃いフリーズ(レバーON) → 既存のロック1→2→3
-       gg_start               ゴッドゲーム突入
-       stock_up{stock,gain}   ストック獲得
-       add_games{games}       上乗せ
-       at_end{total}          AT終了
-     受信経路は2つ: 副制御ポート(8765, setupSubBoardLink) と、中継サーバー経由の
-     {action:"subEvent", event:{...}}(scripts\dev.cmd send での確認用)。どちらも handleSubEvent に集約する。 */
-
-  const hudBanner = el("hud-banner");
-  const hudBannerText = el("hud-banner-text");
-  const hudNavi = el("hud-navi");
-  const naviDigits = Array.from(hudNavi.querySelectorAll(".digit"));
-  const hudPopup = el("hud-popup");
-  const hudPopupMain = el("hud-popup-main");
-  const hudPopupSub = el("hud-popup-sub");
-  const hudEnd = el("hud-end");
-  const ggLayer = el("gg-layer");
-  const subLogEl = el("sub-log");
-
-  // ランク別の見た目。成立役(trigger)は表示しない(ランクだけで期待度を示す)
-  const BANNER_STYLE = {
-    "白": { text:"チャンス？",     c1:"#9aa3ad", c2:"#ffffff", fg:"#2a2a2a" },
-    "青": { text:"チャンス",       c1:"#0b3d91", c2:"#4fa3ff", fg:"#ffffff" },
-    "緑": { text:"チャンスアップ", c1:"#145a1f", c2:"#6fdc7a", fg:"#ffffff" },
-    "赤": { text:"激アツ",         c1:"#7a0008", c2:"#ff3b3b", fg:"#fff4d6" },
-    "金": { text:"GOD CHANCE",     c1:"#8a6400", c2:"#ffe27a", fg:"#3a2400" },
-  };
-  // 押し順番号(0起点) → 押す順にリール番号(0=左,1=中,2=右)を並べた配列。reel.html の ORDER と同じ並び
-  const NAVI_ORDER = [[0,1,2],[0,2,1],[1,0,2],[2,0,1],[1,2,0],[2,1,0]];
-
-  /* --- 効果音(任意)。サーバーモードのときだけ /api/list で探す。無ければ無音のまま --- */
-  const SFX_DIRS = ["at/sound", "yokoku/banner/sound"];
-  const sfxMap = new Map(); // ファイル名(拡張子なし・小文字) -> URL
-  async function loadSfxFromServer(){
-    if(!SERVER_MODE) return;
-    for(const dir of SFX_DIRS){
-      try{
-        const files = await apiList(dir);
-        files.forEach(name=>{
-          if(!hasExt(name, VOICE_EXT)) return;
-          const key = name.replace(/\.[^.]+$/, "").toLowerCase();
-          if(!sfxMap.has(key)) sfxMap.set(key, assetUrl(dir, name));
-        });
-      }catch(err){
-        console.log(dir + " フォルダの読み込みでエラー:", err);
-      }
-    }
-    if(sfxMap.size > 0) console.log("[効果音] " + sfxMap.size + " 件を読み込みました:", Array.from(sfxMap.keys()).join(", "));
-  }
-  loadSfxFromServer();
-  function playSfx(...keys){
-    for(const k of keys){
-      const url = sfxMap.get(String(k).toLowerCase());
-      if(!url) continue;
-      try{
-        const a = new Audio(url);
-        a.volume = Math.min(1, Math.max(0, Number(settings.sfxVolume)));
-        a.playbackRate = Math.min(4, Math.max(0.25, speedFactor));
-        const p = a.play();
-        if(p && p.catch) p.catch(()=>{});
-      }catch(e){}
-      return true;
-    }
-    return false;
-  }
+  window.noteAudioBlocked = noteAudioBlocked;
 
   /* ===================== 予告オーサリング =====================
      authoring_editor.html で作ったシーン (enshutsu/yokoku/authoring/<id>.json) を再生する。
@@ -2258,7 +630,8 @@ function hideGameVideo(){
   });
   loadAuthoringScenes();
 
-  /* --- 受信ログ(設定パネルのATタブに最新8件) --- */
+  /* --- 受信ログ(設定パネルの「操作」タブに最新8件) --- */
+  const subLogEl = el("sub-log");
   const subLogLines = [];
   function subLog(ev){
     if(ev.type === "lever" && !ev.rank) return;   // 演出なしのレバーONは毎ゲーム届くのでログには残さない
@@ -2272,89 +645,16 @@ function hideGameVideo(){
     subLogEl.textContent = subLogLines.join("\n");
   }
 
-  /* --- 予告バナー --- */
-  let bannerTimer = null;
-  function playBanner(ev){
-    // 予告オーサリングのシーンが割り当てられていれば、既定のバナーの代わりにそれを再生する
-    const scene = boundAuthoringScene(ev);
-    if(scene){ playAuthoringScene(scene); return; }
-    const st = BANNER_STYLE[ev.rank] || BANNER_STYLE["白"];
-    clearTimeout(bannerTimer);
-    hudBanner.className = "";
-    hudBanner.style.setProperty("--b1", st.c1);
-    hudBanner.style.setProperty("--b2", st.c2);
-    hudBanner.style.setProperty("--fg", st.fg);
-    hudBanner.dataset.rank = ev.rank || "白";
-    hudBannerText.textContent = st.text;
-    void hudBanner.offsetWidth; // 左端へ戻した状態を確定させてから滑り込ませる
-    hudBanner.classList.add("show");
-    playSfx("banner_" + (ev.rank || "白"), ev.rank || "白");
-    const ms = settings.bannerDuration * 1000 / speedFactor;
-    bannerTimer = setTimeout(()=>{
-      hudBanner.classList.remove("show");
-      hudBanner.classList.add("hide");
-      bannerTimer = setTimeout(()=>{ hudBanner.className = ""; }, 500 / speedFactor);
-    }, ms);
-  }
+  /* ===================== 副制御イベントの受け口 =====================
+     演出の中身はすべてオーサリングデータ(シーン)なので、ここは「届いたイベントに割り当てられた
+     シーンを、正しい時刻に、重ならない順番で流す」ことだけをする。
+     割り当てが無いイベントは何も出さない (エディタで作って割り当てれば出るようになる)。 */
 
-  /* --- 押し順ナビ --- */
-  let naviTimer = null;
-  function playNavi(ev){
-    const order = Number(ev.order);
-    const seq = NAVI_ORDER[order];
-    if(!seq) return;
-    clearTimeout(naviTimer);
-    naviDigits.forEach((d, i)=>{
-      const n = seq.indexOf(i) + 1;
-      d.textContent = String(n);
-      d.classList.toggle("first", n === 1);
-    });
-    hudNavi.classList.add("show");
-    playSfx("navi");
-    naviTimer = setTimeout(()=>{ hudNavi.classList.remove("show"); }, settings.naviDuration * 1000 / speedFactor);
-  }
-
-  /* --- ポップアップ(ストック/上乗せ) --- */
-  let popupTimer = null;
-  function playPopup(main, sub, cls){
-    clearTimeout(popupTimer);
-    hudPopup.className = "";
-    hudPopupMain.textContent = main;
-    hudPopupSub.textContent = sub || "";
-    void hudPopup.offsetWidth;
-    hudPopup.classList.add("show");
-    if(cls) hudPopup.classList.add(cls);
-    popupTimer = setTimeout(()=>{ hudPopup.classList.remove("show"); }, settings.popupDuration * 1000 / speedFactor);
-  }
-
-  /* --- GG突入(フラッシュ → 文字 → フェードアウト) --- */
-  async function playGgStart(){
-    ggLayer.className = "flash";
-    playSfx("gg_start");
-    await sleep(300);
-    ggLayer.className = "hold show";
-    await sleep(settings.ggDuration * 1000);
-    ggLayer.className = "hold show out";
-    await sleep(500);
-    ggLayer.className = "";
-  }
-
-  /* --- AT終了 --- */
-  async function playAtEnd(){
-    hudEnd.classList.add("show");
-    playSfx("at_end");
-    await sleep(settings.endDuration * 1000);
-    hudEnd.classList.remove("show");
-    await sleep(400);
-  }
-
-  /* --- 神揃いフリーズ → 既存のロック演出へ。seq の最後の要素で到達段階を決める --- */
-  /* --- 停止演出のスケジュール ---
-     主制御は1ゲームぶんのコマンドを一括で送るため、lever と stop(1〜3) はほぼ同時に届く。
-     見た目のリール停止は筐体ビューが自前のタイミングで刻むので、stop の演出は
-     lever を受けた時刻を起点に settings.stopTimingN 秒後へずらして出す。 */
-  let leverAt = 0;             // 直近の lever イベントを受けた時刻(performance.now)
-  let stopTimers = [];         // 予約中の停止演出
+  // 主制御は1ゲームぶんのコマンドを一括で送るため、lever と stop(1〜3) はほぼ同時に届く。
+  // 見た目のリール停止は筐体ビューが自前のタイミングで刻むので、停止のシーンは
+  // lever を受けた時刻を起点に settings.stopTimingN 秒後へずらして再生する。
+  let leverAt = 0;
+  let stopTimers = [];
   function clearStopTimers(){
     stopTimers.forEach(t=> clearTimeout(t));
     stopTimers = [];
@@ -2362,31 +662,17 @@ function hideGameVideo(){
   function scheduleStop(ev){
     const n = Number(ev.n);
     if(!(n >= 1 && n <= 3)) return;
-    if(!ev.rank) return;                                   // ランク無しの停止は通知だけ(演出なし)
+    const scene = boundAuthoringScene({ type:"stop", n, rank: ev.rank, trigger: ev.trigger });
+    if(!scene) return;
     const at = leverAt + Number(settings["stopTiming" + n]) * 1000;
-    const delay = Math.max(0, at - performance.now());
-    stopTimers.push(setTimeout(()=>{ playBanner({ type:"stop", n, rank: ev.rank, trigger: ev.trigger }); }, delay));
+    stopTimers.push(setTimeout(()=> playAuthoringScene(scene), Math.max(0, at - performance.now())));
   }
 
-  function clearHud(){
-    clearStopTimers();
-    clearTimeout(bannerTimer); clearTimeout(naviTimer); clearTimeout(popupTimer);
-    hudBanner.className = ""; hudNavi.classList.remove("show"); hudPopup.className = "";
-  }
-  async function playFreezeEvent(ev){
-    const seq = Array.isArray(ev.seq) && ev.seq.length ? ev.seq : ["lock1","lock2","lock3"];
-    const last = String(seq[seq.length - 1]);
-    clearHud();
-    if(last === "lock1") await playUpToLock1();
-    else if(last === "lock2") await playUpToLock2();
-    else await playSequence();
-  }
-
-  /* --- 直列キュー。フリーズ・GG突入・AT終了は重ならないよう順番に再生する。
-         神揃い時は freeze の直後(同一ゲーム内)に stock_up と gg_start が届くため、
-         これが無いとフリーズの上にGG突入が被ってしまう。 --- */
+  /* 直列キュー。フリーズ・GG突入・AT終了は重ならないよう順番に再生する
+     (神揃い時は freeze の直後・同一ゲーム内に stock_up と gg_start が届くため)。 */
+  const MAJOR_EVENTS = new Set(["freeze", "gg_start", "at_end"]);
   let majorChain = Promise.resolve();
-  let majorPending = 0; // キューに積まれて未完了の演出数(同期的に数える。isPlaying はフリーズ開始後にしか立たないため)
+  let majorPending = 0;   // キューに積まれて未完了の再生数(同期的に数える)
   function enqueueMajor(fn){
     majorPending++;
     majorChain = majorChain
@@ -2399,70 +685,24 @@ function hideGameVideo(){
   function handleSubEvent(ev){
     if(!ev || typeof ev.type !== "string") return;
     subLog(ev);
-    // 軽い演出(バナー・ポップアップ)は通常は即時表示。
-    // ただしフリーズなどの大きい演出が再生中/待機中なら、その後ろに並べて表示時間ぶん保持する
-    // (神揃い時は freeze → stock_up → gg_start が同時に届く。フリーズ → STOCK+5 → GOD GAME の順に見せる)。
-    const minor = (fn, holdSec) => {
-      if(majorPending > 0 || isPlaying){
-        enqueueMajor(async ()=>{ fn(); await sleep(holdSec * 1000); });
-      }else{
-        fn();
-      }
-    };
-    // 予告オーサリングの割り当て。バナー系(lever / stop / banner)は playBanner の中で差し替える
-    if(ev.type !== "lever" && ev.type !== "stop" && ev.type !== "banner"){
-      const scene = boundAuthoringScene(ev);
-      if(scene){
-        if(ev.type === "freeze" || ev.type === "gg_start" || ev.type === "at_end") enqueueMajor(()=> playAuthoringScene(scene));
-        else minor(()=> playAuthoringScene(scene), scene.duration);
-        return;
-      }
+    if(ev.type === "lever"){          // レバーON。ここを起点に停止演出の時刻を決める
+      leverAt = performance.now();
+      clearStopTimers();
     }
-    switch(ev.type){
-      case "freeze":    enqueueMajor(()=> playFreezeEvent(ev)); break;
-      case "gg_start":  enqueueMajor(playGgStart); break;
-      case "at_end":    enqueueMajor(playAtEnd); break;
-      case "lever":     // レバーON。ここを起点に停止演出の時刻を決める
-        leverAt = performance.now();
-        clearStopTimers();
-        if(ev.rank) minor(()=> playBanner(ev), settings.bannerDuration);
-        break;
-      case "stop":      scheduleStop(ev); break;   // 第n停止(n=1〜3)。lever からの経過で表示時刻を決める
-      case "banner":    minor(()=> playBanner(ev), settings.bannerDuration); break;   // 旧形式・コンパネ直送用
-      case "navi":      playNavi(ev); break;   // ナビは即時性が命なので待たせない
-      case "stock_up":  minor(()=> { playSfx("stock_up"); playPopup(`STOCK +${ev.gain ?? 1}`, `ストック ×${ev.stock ?? "?"}`, "stock"); }, settings.popupDuration); break;
-      case "add_games": minor(()=> { playSfx("add_games"); playPopup(`+${ev.games ?? 0}G`, "上乗せ", "add"); }, settings.popupDuration); break;
-      case "authoring": {   // オーサリングのシーンを名指しで再生する {type:"authoring", id:"..."}
-        const scene = findAuthoringScene(ev.id);
-        if(!scene){ console.log("[予告オーサリング] シーンが見つかりません:", ev.id); break; }
-        minor(()=> playAuthoringScene(scene), scene.duration);
-        break;
-      }
-      default: console.log("[副制御] 未対応のイベント:", ev.type); break;
+    if(ev.type === "stop"){ scheduleStop(ev); return; }   // 第n停止は上のタイミングまで待たせる
+    // シーンを名指しで再生する {type:"authoring", id:"..."}
+    const scene = ev.type === "authoring" ? findAuthoringScene(ev.id) : boundAuthoringScene(ev);
+    if(!scene){
+      if(ev.type === "authoring") console.log("[予告オーサリング] シーンが見つかりません:", ev.id);
+      return;                          // 割り当てが無ければ何も出さない
     }
+    // 大きい演出は順番待ちにし、それ以外(バナー相当)は即時。
+    // 大きい演出の再生中に届いた軽い演出も、被らないよう後ろに並べる
+    if(MAJOR_EVENTS.has(ev.type) || majorPending > 0) enqueueMajor(()=> playAuthoringScene(scene));
+    else playAuthoringScene(scene);
   }
   // 外部(コンソールや別スクリプト)からも同じ経路で演出を呼べるようにする
   window.handleSubEvent = handleSubEvent;
-
-  /* --- 設定パネルのテストボタン(本物のイベントと同じ経路を通す) --- */
-  document.querySelectorAll("[data-test-banner]").forEach(btn=>{
-    btn.addEventListener("click", ()=> handleSubEvent({ type:"lever", rank: btn.dataset.testBanner, plan:[btn.dataset.testBanner,null,null,null], trigger:"テスト" }));
-  });
-  // ステップアップ予告: 副制御が一括で送ってくる lever → stop1 → stop2 → stop3 をそのまま再現する
-  el("test-stepup").addEventListener("click", ()=>{
-    handleSubEvent({ type:"lever", rank:"白", plan:["白","青","緑","赤"], trigger:"テスト" });
-    handleSubEvent({ type:"stop", n:1, rank:"青" });
-    handleSubEvent({ type:"stop", n:2, rank:"緑" });
-    handleSubEvent({ type:"stop", n:3, rank:"赤" });
-  });
-  document.querySelectorAll("[data-test-navi]").forEach(btn=>{
-    btn.addEventListener("click", ()=> handleSubEvent({ type:"navi", order: Number(btn.dataset.testNavi) }));
-  });
-  document.querySelectorAll("[data-test-event]").forEach(btn=>{
-    btn.addEventListener("click", ()=>{
-      try{ handleSubEvent(JSON.parse(btn.dataset.testEvent)); }catch(e){ console.log("テストイベントの解析に失敗:", e); }
-    });
-  });
 
   /* ===================== リールユニット(reel/reel.html)の出し入れ =====================
      筐体ビューを iframe で埋め込み、液晶(ステージ)内に入れたり出したりする。
@@ -2514,7 +754,7 @@ function hideGameVideo(){
   });
   // 起動時: 保存された状態をアニメーションなしで反映してから、筐体ビューを読み込む
   reelLayer.style.transition = "none";
-  applyHudLayout();
+  applyLayout();
   void reelLayer.offsetWidth;
   reelLayer.style.transition = "";
   loadReelFrame();
@@ -2581,13 +821,6 @@ function hideGameVideo(){
   (function setupRemoteTrigger(){
     const WS_URL = "ws://localhost:8787"; // 中継サーバーのアドレス(必要に応じて変更してください)
     const ACTIONS = {
-      playLock1: () => window.playLock1 && window.playLock1(),
-      playLock2: () => window.playLock2 && window.playLock2(),
-      playLock3: () => window.playLock3 && window.playLock3(),
-      playUpToLock1: () => window.playUpToLock1 && window.playUpToLock1(),
-      playUpToLock2: () => window.playUpToLock2 && window.playUpToLock2(),
-      playUpToLock3: () => window.playUpToLock3 && window.playUpToLock3(),
-      triggerEnshutsu: () => window.triggerEnshutsu && window.triggerEnshutsu(),
       toggleSlow: () => { const b = document.getElementById("slow-toggle"); if(b) b.click(); },
       toggleSettings: () => { if(window.toggleSettings) window.toggleSettings(); },
       // 副制御の演出イベントを中継サーバー経由で直接流し込む(scripts\dev.cmd send での確認用)。

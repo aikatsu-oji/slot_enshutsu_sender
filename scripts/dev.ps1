@@ -14,7 +14,7 @@
   test                                     主制御・副制御の単体テスト(通信なし)。setup.bat と同じ内容
   open    [authoring]                      コンパネ / オーバーレイをアプリウィンドウで開く(リールは液晶内)
                                            open authoring … 予告オーサリング(単独ページ)だけを開く
-  send    <action|json>                    中継サーバーへ1件送る  例: send triggerEnshutsu / send '{"action":"playUpToLock2"}'
+  send    <action|json>                    中継サーバーへ1件送る  例: send reelIn / send '{"action":"playAuthoring","id":"akatsu"}'
                                            send lever   … -Mode manual の主制御を1ゲーム進める(レバーON)
                                            send credit  … クレジット投入信号 +50枚
                                            send manual / send auto … 進み方を切り替える
@@ -259,7 +259,7 @@ function Do-Open($Target) {
 }
 
 function Do-Send($json) {
-  if (-not $json) { Fail "送信する内容を指定してください  例: send triggerEnshutsu   /  send '{\"action\":\"playUpToLock2\"}'" }
+  if (-not $json) { Fail "送信する内容を指定してください  例: send reelIn   /  send '{\"action\":\"playAuthoring\",\"id\":\"akatsu\"}'" }
   # cmd 経由(-File)では引数のダブルクォートが剥がれるため、action 名だけの短縮形も受け付ける
   $json = $json.Trim().Trim("'")
   # 予告オーサリングの再生: send authoring:<シーンID>
