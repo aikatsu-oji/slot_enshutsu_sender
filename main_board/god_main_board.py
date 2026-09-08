@@ -5,7 +5,7 @@ GODタイプ パチスロ機 主制御（メイン基板）シミュレータ
 
 実機の主制御が1ゲームで実行する処理シーケンスを、そのまま関数単位に分解して再現する。
 
-    [1] メダル投入 / BET      -> bet()
+    [1] クレジット投入 / MAXベット -> insert_credit() / bet()
     [2] 乱数取得（16bit）      -> get_random()
     [3] 内部抽選（役決定）      -> lottery()
     [4] リール回転開始         -> spin_start()
@@ -16,6 +16,9 @@ GODタイプ パチスロ機 主制御（メイン基板）シミュレータ
 
 本機はメイン管理AT（6号機準拠）として実装する。すなわちAT状態・ゲーム数・
 ストックはすべて主制御が保持し、副制御（演出基板）には結果を通知するだけとする。
+
+ベットはMAXベット（規定投入枚数3枚）のみで、部分ベットは持たない。回転はMAXベットが
+成立したときだけ。クレジットはクレジット投入信号で増え、上限は設けない（無限）。
 
 実在の遊技機の仕様値ではなく、GODタイプに共通する構造を模したオリジナル諸元。
 
@@ -30,8 +33,10 @@ usage:
     python3 god_main_board.py --ladder                    # 設定1〜6の機械割を並べて逆転を確認
     python3 god_main_board.py --trace 30                  # 1G毎ログ＋コンパネ送信
     python3 god_main_board.py --serve --games 1000        # 実機ウェイトで稼働。副→オーバーレイ、主→コンパネ
+    python3 god_main_board.py --serve --manual --credit 50  # 回さずレバーON待ち。クレジット50枚を入れて起動
     python3 god_main_board.py --serve --panel-cmds        # 2バイトコマンド生ログもコンパネへ
     python3 god_main_board.py --serve --no-panel          # コンパネ送信を切る
+    python3 god_main_board.py --trace 30 --manual         # 端末でEnterを押すたびに1ゲームだけ進める
 """
 
 from __future__ import annotations
@@ -210,6 +215,14 @@ class MainBoard:
     at_left: int = 0
     stock: int = 0
 
+    # クレジット（貯留）。ベットはMAXベット（規定投入枚数3枚）のみで、
+    # 3クレジット無いと回転できない。最大クレジットは無限（上限なし）。
+    credit: int = 0
+    # クレジットが足りないとき、その場で投入したことにするか。集計モードと
+    # 自動で回すモードはメダルが無限にある台として扱うので既定は True。
+    # --manual（レバーON待ち）では False にし、クレジット投入信号を必須にする。
+    auto_insert: bool = True
+
     # 出玉カウンタ
     total_in: int = 0
     total_out: int = 0
@@ -273,12 +286,33 @@ class MainBoard:
         if sec > 0.0:
             self.hold_until = max(self.hold_until, time.monotonic() + sec)
 
-    # -- [1] メダル投入 ----------------------------------------------------
-    def bet(self) -> None:
+    # -- [1] クレジット投入 / MAXベット --------------------------------------
+    def insert_credit(self, n: int = 1) -> int:
+        """クレジット投入信号。入った枚数だけ貯留に足す（最大クレジットは無限）。"""
+        n = max(0, int(n))
+        self.credit += n
+        return self.credit
+
+    def can_bet(self) -> bool:
+        """MAXベットできるか。規定投入枚数に足りなければ回転できない。"""
+        return self.credit >= BET or self.auto_insert
+
+    def bet(self) -> bool:
+        """MAXベット（規定投入枚数3枚）。ベットはこれ1種類だけで、部分ベットは無い。
+
+        クレジットが3枚に満たなければベットせず False を返す（＝回転できない）。
+        auto_insert のときだけ、不足ぶんをその場で投入したことにして続行する。
+        """
+        if self.credit < BET:
+            if not self.auto_insert:
+                return False
+            self.insert_credit(BET - self.credit)
+        self.credit -= BET
         self.total_in += BET
         self.total_games += 1
         self.send(CMD_MEDAL_IN, BET)
         self.send(CMD_GAME_START, self.state)
+        return True
 
     # -- [2] 乱数取得 ------------------------------------------------------
     def get_random(self) -> int:
@@ -370,6 +404,7 @@ class MainBoard:
     def payout(self) -> int:
         p = PAYOUT.get(self.prize, 0)
         self.total_out += p
+        self.credit += p        # 最大クレジットは無限なので、払出は全部クレジットへ入る
         self.send(CMD_PAYOUT, p)
         return p
 
@@ -463,7 +498,13 @@ class MainBoard:
 
     # -- 1ゲームの主制御シーケンス ------------------------------------------
     def play(self) -> dict:
-        self.bet()
+        """1ゲーム。回転はMAXベットが成立したときだけなので、クレジット3枚が要る。
+
+        足りないまま呼ぶのは呼び出し側の誤り（--manual では can_bet() で先に弾く）。
+        """
+        if not self.bet():
+            raise RuntimeError(f"クレジット不足（{self.credit}枚）: "
+                               f"MAXベット{BET}枚が成立しないので回転できない")
         self.lottery()
         push = self.spin_start()
         # AT中は押し順ナビ（主制御が正解を指示）、通常時は遊技者のランダム押し
@@ -509,6 +550,20 @@ class SubBoard:
     - 演出抽選には主制御とは別系統の乱数を使う（出玉に影響しない）。
     - 出力は演出イベント（dict）。on_eventに渡した関数へそのまま流れるので、
       WebSocket送信やOBSオーバーレイへの中継に差し替えられる。
+
+    演出のトリガーは遊技者の操作に対応する次の4点。
+        レバーON  … 0x30 リール回転。内部当選(0x20)を材料に今ゲームの予告プランを決め、
+                    レバーON時点の演出を出す。神揃いならここでフリーズ演出を出す。
+        第1停止   … 0x31/0x32/0x33 のうち1つ目に届いた停止コマンド
+        第2停止   … 同2つ目
+        第3停止   … 同3つ目
+    lever は毎ゲーム出す（オーバーレイが停止演出の時刻を測る起点になる）。stop は
+    プランにランクがある停止だけ出す。
+    予告プランは [レバーON, 第1停止, 第2停止, 第3停止] の各時点で出すバナーのランク
+    （白/青/緑/赤/金、None=何も出さない）。最終ランクへ向けて段階的に上がる
+    （ステップアップ予告）か、どこか1点だけで出す。
+    GG突入・ストック・上乗せ・AT終了は遊技状態の通知なので、操作トリガーとは別に
+    状態移行コマンドで出す。
     """
 
     def __init__(self, rng: random.Random | None = None, on_event=None, panel=None):
@@ -524,6 +579,9 @@ class SubBoard:
         self.stock = 0
         self.heat = 0          # 副制御が独自に持つ高確示唆カウンタ
         self.rx = 0            # 受信コマンド数
+        self.flag = "ハズレ"   # 今ゲームの内部当選（0x20で受信。演出の決定はレバーONまで保留）
+        self.plan = [None] * 4 # 今ゲームの予告プラン [レバーON, 第1停止, 第2停止, 第3停止] のランク
+        self.stops = 0         # 今ゲームで受けた停止コマンド数（第n停止の n）
 
     # -- 演出イベント出力 ---------------------------------------------------
     def emit(self, kind: str, **kw) -> dict:
@@ -544,17 +602,25 @@ class SubBoard:
         if typ == CMD_GAME_START:
             self.game += 1
             self.state = data
+            self.flag = "ハズレ"
+            self.plan = [None] * 4
+            self.stops = 0
 
         elif typ == CMD_FLAG:
-            self._on_flag(ID_FLAG.get(data, "ハズレ"))
+            # 内部当選は覚えるだけ。演出はレバーON（リール回転）で決める
+            self.flag = ID_FLAG.get(data, "ハズレ")
+
+        elif typ == CMD_REEL_START:
+            self._on_lever()
 
         elif typ == CMD_NAVI and data != 0xFF:
             self.emit("navi", order=data)
 
-        elif typ == CMD_ALL_STOP:
-            if ID_FLAG.get(data) == "神揃い":
-                # 3段階のフリーズ演出：ロック1（振動）→ロック2（カットイン）→ロック3（暗転）
-                self.emit("freeze", seq=["lock1", "lock2", "lock3"], rank="金")
+        elif typ in (CMD_REEL_STOP_L, CMD_REEL_STOP_C, CMD_REEL_STOP_R):
+            self.stops += 1
+            if self.stops <= 3 and self.plan[self.stops]:
+                # 第n停止。プランにランクがある時点だけ演出イベントを出す（無い停止は何も出さない）
+                self.emit("stop", n=self.stops, rank=self.plan[self.stops])
 
         elif typ == CMD_STATE:
             if data == ST_GG and self.state != ST_GG:
@@ -584,13 +650,28 @@ class SubBoard:
             # 主制御モニタと同じ1ゲーム周期の生存確認を保つ。
             self.panel.sub_state(self, force=(typ == CMD_GAME_END))
 
-    # -- 予告演出の抽選 -----------------------------------------------------
-    def _on_flag(self, flag: str) -> None:
-        if self.state != ST_NORMAL or flag not in RARE:
-            if self.state == ST_NORMAL and self.rng.random() < 0.04:
-                self.emit("banner", rank="白", trigger=flag)
+    # -- レバーON: 予告プランの決定 --------------------------------------------
+    def _on_lever(self) -> None:
+        flag = self.flag
+        if flag == "神揃い":
+            # レバーONフリーズ。3段階：ロック1（振動）→ロック2（カットイン）→ロック3（暗転）
+            self.plan = [None] * 4
+            self.emit("freeze", seq=["lock1", "lock2", "lock3"], rank="金")
             return
 
+        rank = self._draw_rank(flag)
+        self.plan = self._make_plan(rank)
+        # レバーON時点の演出。plan は試験用モニタ向けの参考情報（オーバーレイは rank だけを見る）
+        self.emit("lever", rank=self.plan[0], plan=list(self.plan), trigger=flag, heat=self.heat)
+        if self.state == ST_NORMAL and flag in RARE:
+            self.heat = min(self.heat + 3, 9)
+
+    def _draw_rank(self, flag: str):
+        """今ゲームの予告の最終ランクを決める。None は予告なし。"""
+        if self.state != ST_NORMAL:
+            return None                     # AT/GG中は予告バナーを出さない（ナビが主役）
+        if flag not in RARE:
+            return "白" if self.rng.random() < 0.04 else None   # 非レア役はたまにガセ
         # レア役の強さ × 自前ヒートで予告ランクを決める
         base = {"スイカ": 1, "チャンス目": 2}[flag]
         level = base + (1 if self.heat >= 3 else 0)
@@ -600,9 +681,35 @@ class SubBoard:
             [8, 22, 32, 30, 8],
             [3, 12, 25, 45, 15],
         ][min(level, 3)]
-        rank = self.rng.choices(BANNER_RANK, weights=weights)[0]
-        self.emit("banner", rank=rank, trigger=flag, heat=self.heat)
-        self.heat = min(self.heat + 3, 9)
+        return self.rng.choices(BANNER_RANK, weights=weights)[0]
+
+    # 最終ランクごとの「最後に出す時点」の重み [レバーON, 第1停止, 第2停止, 第3停止]。
+    # 高ランクほど遅い時点まで引っ張り、ステップアップさせやすい。
+    REVEAL_STEP_WEIGHTS = {
+        "白": [70, 15, 10, 5],
+        "青": [45, 20, 20, 15],
+        "緑": [25, 20, 25, 30],
+        "赤": [15, 15, 25, 45],
+        "金": [10, 10, 20, 60],
+    }
+    STAGE_COUNT_WEIGHTS = [50, 30, 15, 5]   # 段階数 1,2,3,4 の重み（可能な範囲で切り詰める）
+
+    def _make_plan(self, rank) -> list:
+        """最終ランクから [レバーON, 第1停止, 第2停止, 第3停止] の予告プランを作る。
+
+        最後に出す時点 f と段階数 k を抽選し、f を終点に k 段階で最終ランクへ上げる。
+        例: 赤・f=第3停止・k=3 → [None, 青, 緑, 赤]
+        """
+        plan = [None] * 4
+        if rank is None:
+            return plan
+        t = BANNER_RANK.index(rank)
+        f = self.rng.choices(range(4), weights=self.REVEAL_STEP_WEIGHTS[rank])[0]
+        kmax = min(f + 1, t + 1)
+        k = self.rng.choices(range(1, kmax + 1), weights=self.STAGE_COUNT_WEIGHTS[:kmax])[0]
+        for j in range(k):
+            plan[f - (k - 1) + j] = BANNER_RANK[t - (k - 1) + j]
+        return plan
 
 
 # ---------------------------------------------------------------------------
@@ -898,6 +1005,24 @@ class PanelLink:
                       "waitMs": 0 if accept else round(b.wait_left() * 1000),
                       "reason": reason, "game": b.total_games})
 
+    def send_credit(self, b: MainBoard, note: str = "") -> None:
+        """クレジット（貯留）。投入信号を受けたときと、ベットできずに弾いたときに送る。
+        遊技中の増減は state に載るので、ここでは遊技の切れ目だけを知らせる。"""
+        self.ws.send({"action": "mainBoard", "type": "credit", "credit": b.credit,
+                      "canBet": b.credit >= BET, "bet": BET, "note": note,
+                      "game": b.total_games})
+
+    def send_mode(self, b: MainBoard, manual: bool, waiting: bool) -> None:
+        """遊技の進み方。manual なら主制御は自分から回さず、レバーON入力を待つ。
+
+        waiting は「いま入力待ちで止まっている」ことを表す。待っている間は無風で
+        何も送らないと、コンパネの生存監視が受信途絶と誤判定するため、
+        run_live が数秒おきに送り直す。あとから開いたコンパネにも今の貯留が出るよう、
+        クレジットもここに載せる。"""
+        self.ws.send({"action": "mainBoard", "type": "mode", "manual": manual,
+                      "waiting": waiting, "credit": b.credit,
+                      "canBet": b.credit >= BET, "game": b.total_games})
+
     def send_game(self, b: MainBoard, r: dict) -> None:
         normal = b.state == ST_NORMAL
         self.ws.send({
@@ -915,6 +1040,7 @@ class PanelLink:
             "reelPos": list(b.reel_pos),          # 停止位置(コマ番号)。筐体側のリール停止再現用
             "navi": (b.bell_answer + 1) if (not normal and r["flag"] == "押順ベル") else None,
             "diff": r["diff"],
+            "credit": b.credit,
             "totalIn": b.total_in,
             "totalOut": b.total_out,
             "stock": b.stock,
@@ -965,12 +1091,26 @@ class PanelLink:
 # 9. 実行モード
 # ---------------------------------------------------------------------------
 
-def run_trace(board: MainBoard, games: int, interval: float = 0.0) -> None:
+def run_trace(board: MainBoard, games: int, interval: float = 0.0,
+              manual: bool = False) -> None:
+    """1G毎のログを表示する。manual（--manual）なら1ゲームずつEnter待ちで進める。"""
+    step = manual and _stdin_is_tty()
+    if manual and not step:
+        print("[警告] 標準入力が端末ではないため --manual は無視し、続けて回します",
+              file=sys.stderr)
     print(f"{'G':>5} {'状態':<4} {'成立役':<8} {'表示役':<8} {'払出':>4} {'差枚':>7}  通知")
     print("-" * 68)
     board.power_on()
+    if step:
+        print("Enter で1ゲーム進む（q で終了）")
     try:
         for _ in range(games):
+            if step:
+                try:
+                    if input().strip().lower() in ("q", "quit", "exit"):
+                        break
+                except EOFError:
+                    break
             r = board.play()
             note = " / ".join(r["notice"])
             print(f"{r['game']:>5} {STATE_NAME[r['state']]:<4} {r['flag']:<8} "
@@ -1014,12 +1154,107 @@ def run_events(board: MainBoard, games: int, seed: int | None = None) -> None:
         pass
 
 
-def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
+class LiveInput:
+    """遊技を進める入力を1か所に集める（--manual 用）。
+
+    実機のレバーは主制御への入力そのものなので、コンパネの「レバーON」と
+    筐体ビューのレバー（どちらも panelInject layer:"lever"）、端末のEnterを
+    同じ扱いにする。受信スレッドは put でキューに積むだけにし、値の反映（drain）は
+    遊技スレッドで行う（レジスタを触る処理と競合させない）。
+    """
+
+    def __init__(self, manual: bool = False):
+        self.manual = manual        # True … 主制御は自分から回さず、レバーONを待つ
+        self.lever = 0              # 受け取ったレバーONの数（1つにつき1ゲーム進む）
+        self.credit_in = 0          # クレジット投入信号で受け取った枚数（未反映ぶん）
+        self.quit = False           # 端末から q が入った
+        self.q: "queue.Queue[tuple[str, object]]" = queue.Queue()
+
+    def put(self, kind: str, value: object = None) -> None:
+        self.q.put((kind, value))
+
+    def drain(self) -> None:
+        while True:
+            try:
+                kind, value = self.q.get_nowait()
+            except queue.Empty:
+                return
+            if kind == "lever":
+                try:
+                    n = int(value) if value is not None else 1
+                except (TypeError, ValueError):
+                    n = 1
+                self.lever += max(1, min(n, 1000))
+            elif kind == "credit":
+                try:
+                    n = int(value) if value is not None else 1
+                except (TypeError, ValueError):
+                    n = 1
+                self.credit_in += max(1, min(n, 100000))
+            elif kind == "mode":
+                self.manual = bool(value)
+                self.lever = 0          # 切り替え前の入力は持ち越さない
+            elif kind == "quit":
+                self.quit = True
+
+    def take_lever(self) -> bool:
+        """レバーONを1つ消費する。無ければ False。"""
+        if self.lever <= 0:
+            return False
+        self.lever -= 1
+        return True
+
+    def take_credit(self) -> int:
+        """受け取ったクレジット投入信号ぶんの枚数を取り出す（無ければ0）。"""
+        n, self.credit_in = self.credit_in, 0
+        return n
+
+
+def _stdin_is_tty() -> bool:
+    """標準入力が端末か。バックグラウンド起動では偽になる。"""
+    try:
+        return sys.stdin is not None and sys.stdin.isatty()
+    except (AttributeError, ValueError):    # 標準入力が閉じている
+        return False
+
+
+def watch_stdin(inp: LiveInput) -> None:
+    """端末から起動したときだけ、Enterをレバーオンとして拾う（a=自動 / m=手動 / q=終了）。
+
+    scripts\\dev.cmd start のようなバックグラウンド起動では標準入力が端末では
+    ないので何もしない。その場合の入力はコンパネと筐体ビューのレバーONだけになる。
+    """
+    if not _stdin_is_tty():
+        return
+
+    def loop() -> None:
+        for line in sys.stdin:
+            s = line.strip().lower()
+            if s in ("q", "quit", "exit"):
+                inp.put("quit")
+                return
+            if s in ("a", "auto"):
+                inp.put("mode", False)
+                print("[自動] 以後は主制御が自分で回します", file=sys.stderr)
+            elif s in ("m", "manual"):
+                inp.put("mode", True)
+                print("[手動] レバーON待ちに戻します（Enterで1ゲーム）", file=sys.stderr)
+            else:
+                inp.put("lever", 1)
+
+    threading.Thread(target=loop, daemon=True).start()
+
+
+def drain_inject(board: MainBoard, srv: "EnshutsuServer",
+                 inp: "LiveInput | None" = None) -> None:
     """コンパネから届いた注入フレームを遊技スレッド側で流し込む。
 
     main2sub … 主制御の送信口をそのまま使う。副制御は正規の受信と区別できず、
                コマンド生ログにも同じ形で残る。副制御のロジック検証用。
     enshutsu … 副制御の判断を飛ばしてオーバーレイへ直送する。表示確認用。
+    lever    … レバーON（--manual のときだけ意味を持つ）。games で複数ゲーム分。
+    credit   … クレジット投入信号。{"layer":"credit","n":50}（既定1枚・上限なし）
+    mode     … 自動/手動の切り替え。{"layer":"mode","manual":true|false}
     """
     if board.panel is None:
         return
@@ -1037,18 +1272,34 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
                 if isinstance(ev, dict):
                     srv.broadcast(ev)
                     board.panel.sub_event(ev)
+            elif layer == "lever" and inp is not None:
+                inp.put("lever", msg.get("games", 1))
+            elif layer == "credit" and inp is not None:
+                inp.put("credit", msg.get("n", 1))
+            elif layer == "mode" and inp is not None:
+                inp.put("mode", msg.get("manual", True))
         except (TypeError, ValueError):
             pass
 
 
 def run_live(board: MainBoard, games: int, host: str, port: int,
              interval: float, seed: int | None = None,
-             freeze_hold: float = 0.0) -> None:
+             freeze_hold: float = 0.0, manual: bool = False) -> None:
     """演出イベントをWebSocketで配信しながら稼働させる。
 
     遊技の周期はウェイトが決める。前回の回転開始から interval 秒たつまでは
     レバーONを受け付けず、明けてから play()（=回転開始）に入る。したがって
     周期は max(interval, 実際の遊技時間) になり、固定スリープの加算にはならない。
+
+    manual（--manual）のときは主制御が自分から回さない。起動直後も含め、毎ゲーム
+    レバーON入力を待ってから play() に入る。入力はコンパネの「レバーON」、
+    筐体ビューのレバー（Space/Enter・レバー欄のクリック）、端末のEnterのいずれか。
+    ウェイトは手動でも生きている（無効時間中のレバーONは実機と同じく効かない）。
+
+    手動のときはクレジットも実機どおり要る。MAXベット（規定投入枚数3枚）が
+    成立しないとレバーONを叩いても回らないので、先にクレジット投入信号を送る
+    （コンパネの「🪙投入」／--credit で起動時に入れておく）。自動のときは
+    メダルが無限にある台として扱い、不足ぶんは投入したことにして回し続ける。
     """
     srv = EnshutsuServer(host, port)
     srv.start()
@@ -1058,22 +1309,79 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
                          panel=board.panel)
     board.power_on()
 
+    inp = LiveInput(manual=manual)
+    board.auto_insert = not manual      # 手動はクレジット必須、自動はメダル無限
+    watch_stdin(inp)
+    if manual:
+        print(f"手動: レバーON待ち（コンパネ／筐体ビューのレバー、端末ならEnterで1G。"
+              f"a=自動 m=手動 q=終了）／クレジット {board.credit}枚", file=sys.stderr)
+        if board.panel is None and not _stdin_is_tty():
+            print("[警告] コンパネへ繋がらず(--no-panel)、標準入力も端末ではないため、"
+                  "レバーONを受け取る経路がありません", file=sys.stderr)
+
     def notify(accept: bool, reason: str = "") -> None:
         if board.panel is not None:
             board.panel.send_input(board, accept, reason)
 
+    def notify_mode(waiting: bool) -> None:
+        if board.panel is not None:
+            board.panel.send_mode(board, inp.manual, waiting)
+
+    def pump() -> None:
+        drain_inject(board, srv, inp)   # コンパネからの注入・レバーON・投入・自動手動切替
+        inp.drain()                     # 端末のEnterを含め、受け取った入力を反映
+        board.auto_insert = not inp.manual      # 手動へ切り替えたらクレジット必須になる
+        n = inp.take_credit()
+        if n:                           # クレジット投入信号（最大クレジットは無限）
+            board.insert_credit(n)
+            if board.panel is not None:
+                board.panel.send_credit(board, f"投入 +{n}")
+
     try:
-        for _ in range(games):
-            # レバーON無効時間。明けるまで遊技を始めない（注入はこの間も拾う）
+        notify_mode(False)              # 起動直後の進み方をコンパネへ知らせる
+        if board.panel is not None:
+            board.panel.send_credit(board, "起動時")
+        played = 0
+        while played < games and not inp.quit:
+            # [1] レバーON無効時間。明けるまで遊技を始めない（注入はこの間も拾う）
             if not board.accepts_lever():
+                held = inp.lever        # 無効時間に入る前に受け取っていたぶんは残す
                 notify(False, "フリーズ" if board.hold_until > board.spin_at + board.wait_time
                               else "ウェイト")
-                while not board.accepts_lever():
-                    drain_inject(board, srv)
+                while not board.accepts_lever() and not inp.quit:
+                    pump()
                     time.sleep(0.05)
+                inp.lever = min(inp.lever, held)   # 無効時間中のレバーONは効かない（実機と同じ）
                 notify(True)
-            drain_inject(board, srv)
+            # [2] 手動モード。レバーON入力が来るまで回さない（起動直後もここで止まる）。
+            #     クレジットが規定投入枚数に満たないときは、叩かれても回らない。
+            if inp.manual:
+                pump()
+                waiting = False
+                last = time.monotonic()
+                while inp.manual and not inp.quit:
+                    if inp.take_lever():
+                        if board.can_bet():
+                            break                       # MAXベット成立 → 回す
+                        if board.panel is not None:     # 実機と同じくレバーONは無効
+                            board.panel.send_credit(board, f"クレジット不足（MAXベット{BET}枚）")
+                        print(f"レバーON: クレジット不足（{board.credit}枚）", file=sys.stderr)
+                    if not waiting:
+                        waiting = True
+                        notify_mode(True)
+                        last = time.monotonic()
+                    time.sleep(0.02)
+                    pump()
+                    if time.monotonic() - last >= 5.0:
+                        notify_mode(True)   # 無風でも生存を示す（コンパネの受信途絶よけ）
+                        last = time.monotonic()
+                if waiting:
+                    notify_mode(False)
+            if inp.quit:
+                break
+            pump()
             r = board.play()
+            played += 1
             if freeze_hold > 0.0 and "神揃い" in r["notice"]:
                 board.hold_lever(freeze_hold)   # フリーズぶん回転開始を止める
     except KeyboardInterrupt:
@@ -1207,6 +1515,12 @@ def main() -> None:
                          f"既定は実機ウェイトの{WAIT_TIME}秒")
     ap.add_argument("--freeze-hold", type=float, default=0.0,
                     help="神揃いフリーズの間、回転開始をさらに止める秒数（既定0＝止めない）")
+    ap.add_argument("--credit", type=int, default=0,
+                    help="起動時のクレジット枚数（既定0）。ベットはMAXベット固定で、"
+                         f"--manual では{BET}枚無いと回せない（投入信号で足す）")
+    ap.add_argument("--manual", action="store_true",
+                    help="起動しても自分から回さず、レバーON入力を待つ（--serve / --trace）。"
+                         "入力はコンパネの「レバーON」・筐体ビューのレバー・端末のEnter")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--panel", default=PANEL_URL,
                     help=f"コンパネ中継サーバー(trigger_relay_server.js)のURL。既定 {PANEL_URL}")
@@ -1215,6 +1529,8 @@ def main() -> None:
                     help="主→副の2バイトコマンド生ログもコンパネへ送る")
     a = ap.parse_args()
     games = a.games if a.games is not None else (5_000_000 if a.ladder else 10000)
+    if a.manual and not (a.serve or a.trace):
+        ap.error("--manual は --serve か --trace と一緒に使う（集計モードでは意味を持たない）")
 
     if a.ladder:
         run_ladder(games, a.seed)
@@ -1222,20 +1538,21 @@ def main() -> None:
     if a.sim:
         run_sim(a.setting, a.sim, games)
         return
-    board = MainBoard(setting=a.setting, rng=random.Random(a.seed))
+    board = MainBoard(setting=a.setting, rng=random.Random(a.seed),
+                      credit=max(0, a.credit))
     # --serve / --trace のときだけコンパネへ送る（集計モードでは送らない）
     if not a.no_panel and (a.serve or a.trace):
         board.panel = PanelLink(a.panel, raw_cmds=a.panel_cmds)
     try:
         if a.serve:
             run_live(board, games, a.host, a.port, a.interval, a.seed,
-                     freeze_hold=a.freeze_hold)
+                     freeze_hold=a.freeze_hold, manual=a.manual)
         elif a.commands:
             run_commands(board, a.commands)
         elif a.events:
             run_events(board, a.events, a.seed)
         elif a.trace:
-            run_trace(board, a.trace, interval=0.0)
+            run_trace(board, a.trace, interval=0.0, manual=a.manual)
         else:
             run_single(board, games)
     finally:

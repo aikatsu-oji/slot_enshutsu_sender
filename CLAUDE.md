@@ -14,9 +14,11 @@ slot_enshutsu_sender/
 │   └── trigger_relay_server.js  WebSocket 中継 + 静的配信 + /api/list + /api/health (port 8787)
 ├── main_board/
 │   ├── god_main_board.py        主制御(MainBoard)・副制御(SubBoard) シミュレータ。--serve で ws://127.0.0.1:8765
+│   │                            --manual で「起動しても回さずレバーON待ち」。ベットはMAXベット(3枚)のみ
 │   └── reels.json               図柄配列 (1リール21コマ) の唯一の定義。主制御と筐体ビューの両方が読む
 ├── control/
 │   └── main_control.html        コンパネ。演出ボタン・主制御/副制御モニタ・映像配信(WebRTC)・図柄設定(エディタを内蔵)
+│                                「主制御 詳細」に遊技操作 (🕹️レバーON / 🪙クレジット投入 / 自動・手動の切替) がある
 ├── reel/
 │   ├── reel.html                筐体ビュー(リールユニットのみ)。?mode=link で主制御と連動
 │   ├── symbols.js               図柄定義 (SVG スプライト、viewBox 240×80)。globalThis.SlotSymbols。画像がある図柄は <image>
@@ -47,9 +49,13 @@ slot_enshutsu_sender/
 
 - 中継サーバー `ws://127.0.0.1:8787` … コンパネ ⇔ オーバーレイ、主制御モニタ端子 → コンパネ。同じポートで http 静的配信。
 - 副制御ポート `ws://127.0.0.1:8765` … god_main_board.py --serve が演出イベントを配信し、オーバーレイが受信。
-  オーバーレイは `banner`(予告バナー) / `navi`(押し順ナビ) / `freeze`(ロック1→2→3) / `gg_start` / `stock_up` /
-  `add_games` / `at_end` を表示する。`freeze`・`gg_start`・`at_end` は直列キューで順番に再生する
-  (神揃い時は同一ゲーム内で freeze → stock_up → gg_start が連続して届くため)。
+  副制御の演出トリガーは遊技者の操作に対応する4点: **レバーON** (0x30) / **第1停止** / **第2停止** / **第3停止**
+  (0x31〜0x33 の到着順)。レバーONで内部当選 (0x20) から予告プラン `[レバーON, 第1, 第2, 第3]` の各ランクを決め、
+  `lever{rank,plan}` を出し、各停止で `stop{n,rank}` を出す (rank=null は演出なし)。神揃いの `freeze` もレバーONで出す。
+  主制御は1ゲームぶんのコマンドを一括送出するので lever/stop はほぼ同時に届く。オーバーレイは lever 受信時刻を起点に
+  `stopTiming1..3` (既定 1.15/1.6/2.05 秒 = 筐体ビューの停止タイミング) だけ遅らせて停止演出を出す。
+  そのほか `navi`(押し順ナビ) / `gg_start` / `stock_up` / `add_games` / `at_end` は状態通知として従来どおり。
+  `freeze`・`gg_start`・`at_end` は直列キューで順番に再生する (神揃い時は同一ゲーム内で連続して届くため)。
 - URL (すべて 8787 経由で開くこと。file:// で開くと素材フォルダ選択が必要になる)
   - コンパネ     http://localhost:8787/control/main_control.html
   - オーバーレイ http://localhost:8787/enshutsu/enshutsu_overlay.html  (OBS ブラウザソース)
@@ -61,12 +67,14 @@ slot_enshutsu_sender/
 ## コマンド (Claude Code から実行してよいもの)
 
 ```
-scripts\dev.cmd start [-Mode normal|fast|tenjo|none]   # 中継サーバー + 主制御をバックグラウンド起動
+scripts\dev.cmd start [-Mode normal|fast|tenjo|manual|none]   # 中継サーバー + 主制御をバックグラウンド起動
 scripts\dev.cmd status                                 # ポート・health・PID を表示 (exit 0 = サーバー稼働中)
 scripts\dev.cmd test                                   # 主制御 2000G / 副制御 300 イベント / JS 構文チェック
 scripts\dev.cmd send triggerEnshutsu                  # コンパネのボタンと同じメッセージを送る (JSON 直指定も可)
 scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","rank":"赤"}}'   # 副制御イベントをオーバーレイへ直送
 scripts\dev.cmd send reelIn                          # リールユニットを液晶(オーバーレイ)内に入れる (reelOut / reelToggle も可)
+scripts\dev.cmd send lever                           # -Mode manual の主制御を1ゲーム進める (レバーON)
+scripts\dev.cmd send credit                          # クレジット投入信号 +50枚 (send manual / send auto で進み方の切替)
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
@@ -74,11 +82,24 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
 - `-Mode fast` (0.5 秒/G・設定 6) は動作確認向け。`normal` は実機ウェイト 4.1 秒/G。
+- `-Mode manual` (`--manual --credit 50`) は**起動しても勝手に回さない**。1ゲームずつレバーON入力を待つ。
+  入力はコンパネ「主制御 詳細」の🕹️レバーON、筐体ビューの Space/Enter (連動中)、端末起動なら Enter
+  (`a`=自動 `m`=手動 `q`=終了)。稼働中でもコンパネの「手動にする/自動にする」で切り替えられる
+  (`{action:"panelInject", layer:"mode", manual:true|false}`)。
+- ベットは**MAXベット (3枚) のみ**で、回転はMAXベット成立時だけ。クレジットはクレジット投入信号
+  (`{action:"panelInject", layer:"credit", n:50}`) で増え、**上限は無い**。払出はすべてクレジットへ入る。
+  手動のときはクレジットが3枚未満だとレバーONを叩いても回らない (コンパネの「🪙+3 / +50」で足す)。
+  自動 (normal/fast/tenjo や集計モード) はメダルが無限にある台として扱い、不足ぶんは自動で投入する
+  (`MainBoard.auto_insert`)。したがって `--ladder` などの集計結果はクレジット導入の前後で変わらない。
 - ウェイト (レバーON無効時間): 主制御は `--interval` 秒を「前回の**回転開始**から」計り、明けるまで
   次の遊技を始めない (周期は `max(interval, 実際の遊技時間)`。固定スリープの加算ではない)。
   無効化と復帰の2点だけ `{action:"mainBoard", type:"input", accept, waitMs, reason}` をコンパネへ送り、
   残り時間は受け側が数える。コンパネの「レバー」欄と筐体ビューのリール下の帯がこれを表示する。
   `--freeze-hold 秒` で神揃いフリーズの間さらに回転開始を止められる (既定 0 = 止めない)。
+  ウェイトは `--manual` でも生きていて、無効時間中のレバーONは実機と同じく効かない
+  (無効時間に入る前に受けたぶん、たとえば `layer:"lever", games:3` は残す)。
+  手動で入力待ちの間は `{action:"mainBoard", type:"mode", manual, waiting}` を数秒おきに送り、
+  無風でもコンパネの生存監視 (20秒で「受信途絶」) に引っかからないようにしている。
 - コード変更後は必ず `scripts\dev.cmd test` を通してから `restart` する。
 - 図柄の差し替え: 中継サーバー起動中にコンパネの「図柄設定」→「図柄設定を開く」(または直接
   http://localhost:8787/reel/symbol_editor.html) を開き、カードに画像をドロップして保存。
@@ -86,6 +107,7 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   (主制御連動中の筐体ビューは自動再読込)。
 - 主制御単体の挙動確認: `py -3 main_board\god_main_board.py --games 2000 --seed 1 --no-panel` (通信なし、集計のみ)。
   `--trace N` で 1G ごとのログ、`--events N` で副制御イベントを JSON 出力。
+  `--trace N --manual` は端末で Enter を押すたびに1ゲームだけ進む (`q` で終了)。
 - 設定差の確認: `py -3 main_board\god_main_board.py --ladder` (設定1〜6の機械割を並べ、逆転があれば警告。
   既定 500万G/設定・約10秒、マルチプロセス)。抽選テーブル (`LOTTERY_TABLE` / `LOTTERY_TABLE_AT`) を
   変更したら必ず通す。単発の `--games 10000` は±10%以上ぶれるので設定差の判断には使えない。
@@ -143,7 +165,8 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 ## 起動の前提 (人手)
 
 - setup.bat をダブルクリックすれば依存インストールから全起動まで行う。dev.ps1 と同時に使うとポート競合の警告が出るが問題ない
-  (dev.ps1 の stop はポートからも探して止める)。
+  (dev.ps1 の stop はポートからも探して止める)。起動モードの選択肢は `[1] 通常 [2] 高速 [3] 天井 [4] 手動 [5] 起動しない`
+  で、`-Mode` と対応している (`[4] 手動` = `--manual --credit 50`)。
 - Node.js と Python 3 (`py -3` または `python`) が PATH にあること。ws は `npm install` で入る。
 - `.claude/settings.json` (Claude Code の許可コマンド) と `.vscode/tasks.json` は `scripts/config/` から
   `scripts\migrate_layout.bat` が配置する。変更するときは `scripts/config/` 側も同じ内容にしておく。
