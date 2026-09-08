@@ -120,6 +120,13 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   `<video>` の再生は必ず `startVideo` / `stopVideo` を通す (src 変更直後の play() は Chrome で失敗することがあるため
   `loadedmetadata` を待ってから再生している)。静的配信は Range (206) / Last-Modified (304) 対応済みなので、動画の
   巻き戻し・シークはサーバー側で完結する。
+- コンパネの骨格: `body` を縦フレックスにし、ヘッダ(接続) → 未接続ヘルプ → 主制御ダイジェスト(`.strip`) →
+  タブ(`.tabs`) → 面(`.panes`) → ログ(`.logbar`) を積む。スクロールするのは `.panes` だけで、ダイジェストと
+  ログはどのタブでも見えたまま。面は「操作 / モニタ / 設定 / 注入」の4枚 (`.pane` を `.on` で切り替え)。
+  setup.bat と dev.ps1 が 480×900 のウィンドウで開くので、要素を足すときはこの幅と高さで収まるか確かめる。
+  1200px 以上ではモニタ面を右列に常設し、そのタブは CSS で隠す (JS の `activatePane` が対で逃がす)。
+  イベント表示 (`mb-events` / `mb-cmds` / `sb-events`) は隠れている間スクロールが追従しないので、
+  面を出すときに末尾へ送っている。
 - `main_control.html` は相対パス依存なし。接続先は画面内の ws URL 入力欄 (既定 ws://localhost:8787)。
   「図柄設定」カードは `reel/symbol_editor.html` を全画面モーダルの iframe で開くが、その URL も ws URL の
   ホストから組み立てる (ws URL が読めないときだけ `location.origin` を使う)。相対パスを書かないこと。

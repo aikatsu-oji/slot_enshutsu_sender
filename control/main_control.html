@@ -10,85 +10,64 @@
     --bg:#0a0a12;
     --panel:#15121e;
     --panel2:#1c1828;
+    --line:#3a3348;
     --red:#c0392b;
     --green:#2ecc71;
     --text:#eee;
+    --muted:#8a8398;
+    --pad:12px;
   }
   *{box-sizing:border-box;}
+  html,body{height:100%;}
+
+  /* setup.bat / dev.ps1 は 480×900 のアプリウィンドウでこのページを開く。
+     ヘッダ・主制御ダイジェスト・タブ・ログを固定し、中身(.panes)だけをスクロールさせる。 */
   body{
     margin:0;
     font-family:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
     background:
-      radial-gradient(circle at 50% -10%, #2a2138 0%, var(--bg) 60%);
+      radial-gradient(circle at 50% -10%, #2a2138 0%, var(--bg) 60%) fixed;
     color:var(--text);
-    min-height:100vh;
-    padding:24px;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
   }
-  h1{
-    text-align:center;
-    font-size:22px;
-    letter-spacing:.15em;
-    margin:0 0 4px;
+
+  /* ===== ヘッダ (接続設定は常時ここに出す) ===== */
+  .topbar{
+    flex:none;
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    padding:8px var(--pad);
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border-bottom:1px solid rgba(212,175,55,.28);
+    box-shadow:0 4px 14px rgba(0,0,0,.45);
+    z-index:5;
+  }
+  .brand{
+    font-size:14px;
+    font-weight:700;
+    letter-spacing:.12em;
+    white-space:nowrap;
     background:linear-gradient(180deg,var(--gold-bright),var(--gold));
     -webkit-background-clip:text;
     background-clip:text;
     color:transparent;
-    text-shadow:0 0 20px rgba(212,175,55,.35);
   }
-  .sub{
-    text-align:center;
-    font-size:12px;
-    color:#8a8398;
-    margin-bottom:20px;
-  }
-  .wrap{
-    max-width:760px;
-    margin:0 auto;
-    display:flex;
-    flex-direction:column;
-    gap:16px;
-  }
-  .card{
-    background:linear-gradient(180deg,var(--panel2),var(--panel));
-    border:1px solid rgba(212,175,55,.25);
-    border-radius:14px;
-    padding:18px 20px;
-    box-shadow:0 8px 24px rgba(0,0,0,.4);
-  }
-  .card h2{
-    font-size:13px;
-    letter-spacing:.1em;
-    margin:0 0 12px;
-    color:var(--gold-bright);
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .card h2::before{
-    content:"";
-    width:6px;height:6px;border-radius:50%;
-    background:var(--gold);
-    box-shadow:0 0 8px var(--gold);
-  }
-
-  /* 接続バー */
-  .conn-row{
-    display:flex;
-    gap:8px;
-    align-items:center;
-    flex-wrap:wrap;
-  }
-  .conn-row input[type=text]{
+  .topbar input[type=text]{
     flex:1;
-    min-width:180px;
+    min-width:150px;
     background:#0d0b14;
-    border:1px solid #3a3348;
+    border:1px solid var(--line);
     color:var(--text);
-    padding:9px 12px;
+    padding:7px 10px;
     border-radius:8px;
-    font-size:13px;
+    font-size:12.5px;
   }
-  .conn-row input[type=text]:focus{outline:1px solid var(--gold);}
+  .topbar input[type=text]:focus{outline:1px solid var(--gold);}
+
   .btn{
     cursor:pointer;
     border:1px solid rgba(212,175,55,.4);
@@ -96,6 +75,7 @@
     color:var(--text);
     padding:9px 16px;
     border-radius:8px;
+    font-family:inherit;
     font-size:13px;
     font-weight:600;
     transition:all .15s ease;
@@ -108,163 +88,213 @@
   }
   .btn:active{transform:translateY(0);}
   .btn:disabled{opacity:.35;cursor:not-allowed;transform:none;}
+  .btn-sm{padding:7px 12px !important;font-size:12px !important;}
 
   .status-pill{
     display:inline-flex;
     align-items:center;
     gap:6px;
-    font-size:12px;
-    padding:6px 12px;
+    font-size:11.5px;
+    padding:5px 10px;
     border-radius:999px;
     background:#241a1a;
     border:1px solid var(--red);
     color:#ff8a7a;
+    white-space:nowrap;
   }
   .status-pill.on{
     background:#12261a;
     border-color:var(--green);
     color:#7cf2a8;
   }
-  .status-pill .dot{
-    width:7px;height:7px;border-radius:50%;
-    background:currentColor;
-    box-shadow:0 0 6px currentColor;
-  }
   .status-pill.pending{
     border-color:var(--gold);
     color:var(--gold-bright);
     background:#241f12;
   }
-
-  /* ボタングリッド */
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:10px;
+  .status-pill .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:currentColor;
+    box-shadow:0 0 6px currentColor;
   }
-  .grid .btn{width:100%;padding:14px 8px;font-size:13px;}
 
+  /* 未接続のときだけヘッダ直下に出す */
+  .offline-help{
+    display:none;
+    flex:none;
+    border-bottom:1px solid rgba(192,57,43,.5);
+    background:#1c1216;
+    padding:10px var(--pad);
+  }
+  .offline-help.show{display:block;}
+  .offline-help-title{
+    font-size:12.5px;
+    font-weight:700;
+    color:#ff9a8a;
+    margin-bottom:6px;
+  }
+  .offline-help-body p{
+    margin:0 0 6px;
+    font-size:12px;
+    color:#c9bfc5;
+    line-height:1.55;
+  }
+  .cmd-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+  .cmd-row code{
+    flex:1;
+    min-width:0;
+    background:#08070c;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:7px 9px;
+    font-family:"Consolas",monospace;
+    font-size:11.5px;
+    color:var(--gold-bright);
+    overflow-x:auto;
+    white-space:nowrap;
+  }
+
+  /* ===== 主制御ダイジェスト (どのタブでも常時表示) ===== */
+  .strip{
+    flex:none;
+    padding:8px var(--pad);
+    background:rgba(13,11,20,.55);
+    border-bottom:1px solid #241f30;
+  }
+  .strip-head{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+  .strip-title{font-size:11px;letter-spacing:.1em;color:var(--gold-bright);font-weight:700;}
+  .strip-total{
+    margin-left:auto;
+    font-size:11px;
+    color:var(--muted);
+    font-variant-numeric:tabular-nums;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+
+  /* ===== タブ ===== */
+  .tabs{
+    flex:none;
+    display:flex;
+    gap:4px;
+    padding:6px var(--pad) 0;
+    border-bottom:1px solid rgba(212,175,55,.22);
+  }
+  .tab{
+    flex:1;
+    cursor:pointer;
+    background:transparent;
+    border:1px solid transparent;
+    color:var(--muted);
+    font-family:inherit;
+    font-size:12.5px;
+    font-weight:700;
+    letter-spacing:.06em;
+    padding:8px 4px;
+    border-radius:8px 8px 0 0;
+    transition:all .12s ease;
+  }
+  .tab:hover{color:var(--text);background:rgba(255,255,255,.05);}
+  .tab.on{
+    color:var(--gold-bright);
+    background:rgba(212,175,55,.10);
+    border-color:rgba(212,175,55,.35);
+  }
+
+  /* ===== 面 (ここだけスクロールする) ===== */
+  .panes{
+    flex:1;
+    min-height:0;
+    overflow-y:auto;
+    padding:var(--pad);
+  }
+  .pane{display:none;flex-direction:column;gap:12px;}
+  .pane.on{display:flex;}
+
+  .card{
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid rgba(212,175,55,.25);
+    border-radius:12px;
+    padding:14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.4);
+  }
+  .card h2{
+    font-size:12.5px;
+    letter-spacing:.1em;
+    margin:0 0 10px;
+    color:var(--gold-bright);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2::before{
+    content:"";
+    width:6px;height:6px;border-radius:50%;
+    background:var(--gold);
+    box-shadow:0 0 8px var(--gold);
+  }
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;}
+  .card-head h2{margin:0;}
+  .grp{
+    font-size:11px;
+    letter-spacing:.08em;
+    color:var(--muted);
+    margin:12px 0 6px;
+  }
+
+  /* ボタン配置 */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .grid .btn{width:100%;padding:13px 6px;font-size:12.5px;}
+  .row2{display:flex;gap:8px;}
+  .row2 .btn{flex:1;}
   .btn-main{
+    width:100%;
     background:linear-gradient(180deg,#3a2f14,#241c0c);
     border-color:var(--gold);
     color:var(--gold-bright);
-    font-size:15px !important;
-    padding:16px !important;
+    font-size:15px;
+    padding:16px;
     letter-spacing:.05em;
   }
   .btn-main:hover{
     background:linear-gradient(180deg,#4a3c1a,#2e2410);
     box-shadow:0 0 18px rgba(212,175,55,.35);
   }
-
-  .row2{
-    display:flex;
-    gap:10px;
-  }
-  .row2 .btn{flex:1;}
   .toggle-on{
     background:#20351f !important;
     border-color:var(--green) !important;
     color:#a8f2c0 !important;
   }
 
-  /* ログ */
-  .log{
-    background:#08070c;
-    border:1px solid #2a2436;
-    border-radius:8px;
-    padding:10px 12px;
-    height:140px;
-    overflow-y:auto;
-    font-family:"Consolas",monospace;
-    font-size:11.5px;
-    line-height:1.6;
-    color:#9d97ad;
-    white-space:pre-wrap;
-  }
-
-  .lbl{
-    font-size:11px;
-    color:#7a7488;
-    margin-bottom:6px;
-  }
-
-  /* オフライン時ヘルプ */
-  .offline-help{
-    display:none;
-    margin-top:14px;
-    border:1px solid rgba(192,57,43,.5);
-    background:#1c1216;
-    border-radius:10px;
-    padding:14px 16px;
-  }
-  .offline-help.show{display:block;}
-  .offline-help-title{
-    font-size:13px;
-    font-weight:700;
-    color:#ff9a8a;
-    margin-bottom:8px;
-  }
-  .offline-help-body p{
-    margin:0 0 8px;
-    font-size:12.5px;
-    color:#c9bfc5;
-    line-height:1.6;
-  }
-  .cmd-row{
-    display:flex;
-    gap:8px;
-    align-items:center;
-    margin-bottom:10px;
-  }
-  .cmd-row code{
-    flex:1;
-    background:#08070c;
-    border:1px solid #3a3348;
-    border-radius:6px;
-    padding:8px 10px;
-    font-family:"Consolas",monospace;
-    font-size:12px;
-    color:var(--gold-bright);
-  }
-  .btn-sm{
-    padding:7px 12px !important;
-    font-size:12px !important;
-  }
-  .offline-actions{display:flex;gap:8px;}
+  .lbl{font-size:10.5px;color:#7a7488;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 
   .screen-info{
-    margin-top:10px;
-    font-size:12.5px;
+    margin-top:8px;
+    font-size:12px;
+    line-height:1.5;
     color:#c9bfc5;
     background:#0d0b14;
-    border:1px solid #3a3348;
+    border:1px solid var(--line);
     border-radius:8px;
-    padding:9px 12px;
+    padding:8px 10px;
   }
   .screen-info.selected{
     color:var(--gold-bright);
     border-color:rgba(212,175,55,.4);
   }
 
-  /* 主制御モニタ（god_main_board.py の試験用モニタ端子から受信） */
-  .mb-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;}
-  .mb-head h2{margin:0;}
-  .mb-grid{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:8px;
-  }
+  /* ===== 主制御 / 副制御モニタ ===== */
+  .mb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px;}
+  .sb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));gap:8px;}
   .mb-tile{
     background:#0d0b14;
-    border:1px solid #3a3348;
+    border:1px solid var(--line);
     border-radius:8px;
-    padding:8px 10px;
+    padding:6px 8px;
     min-width:0;
   }
   .mb-tile .lbl{margin-bottom:2px;}
   .mb-val{
-    font-size:20px;
+    font-size:17px;
     font-weight:700;
     color:var(--text);
     font-variant-numeric:tabular-nums;
@@ -273,54 +303,48 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .mb-val small{font-size:11px;font-weight:400;color:#8a8398;margin-left:4px;}
+  .mb-val small{font-size:10.5px;font-weight:400;color:var(--muted);margin-left:4px;}
   .mb-tile.state-normal .mb-val{color:#c9bfc5;}
   .mb-tile.state-gg .mb-val{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.5);}
   .mb-tile.state-at .mb-val{color:#7cf2a8;text-shadow:0 0 10px rgba(46,204,113,.4);}
   .mb-val.plus{color:#7cf2a8;}
   .mb-val.minus{color:#ff9a8a;}
-  .mb-reels{
-    display:flex;gap:8px;margin-top:8px;
-  }
+  .mb-reels{display:flex;gap:6px;margin-top:6px;}
   .mb-reel{
     flex:1;text-align:center;
-    background:#08070c;border:1px solid #3a3348;border-radius:8px;
-    padding:10px 0;font-size:18px;font-weight:700;color:var(--text);
+    background:#08070c;border:1px solid var(--line);border-radius:6px;
+    padding:6px 0;font-size:16px;font-weight:700;color:var(--text);
   }
   .mb-reel.hit{border-color:var(--gold);color:var(--gold-bright);box-shadow:0 0 10px rgba(212,175,55,.35) inset;}
   .mb-roles{
-    display:flex;gap:8px;margin-top:8px;font-size:12.5px;color:#c9bfc5;
+    /* 480px 幅では 2×2 に畳む (役名が折り返さない幅を最低値にする) */
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px;
+    font-size:12px;color:#c9bfc5;
   }
-  .mb-roles span{flex:1;background:#0d0b14;border:1px solid #3a3348;border-radius:8px;padding:7px 10px;}
+  .mb-roles span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
   .mb-events{
-    margin-top:10px;
-    background:#08070c;border:1px solid #3a3348;border-radius:8px;
-    padding:8px 10px;height:110px;overflow-y:auto;
+    margin-top:8px;
+    background:#08070c;border:1px solid var(--line);border-radius:8px;
+    padding:8px 10px;height:132px;overflow-y:auto;
     font-family:"Consolas",monospace;font-size:11.5px;line-height:1.6;color:#9d97ad;white-space:pre-wrap;
   }
   .mb-events .ev-gg{color:var(--gold-bright);}
   .mb-events .ev-god{color:#ff6b6b;font-weight:700;}
   .mb-events .ev-at{color:#7cf2a8;}
   .mb-events .ev-end{color:#ff9a8a;}
-  .mb-opts{display:flex;gap:14px;align-items:center;margin-top:8px;font-size:12px;color:#8a8398;}
+  .mb-opts{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:11.5px;color:var(--muted);}
   .mb-opts label{display:flex;align-items:center;gap:5px;cursor:pointer;}
   .mb-cmds{display:none;}
   .mb-cmds.show{display:block;}
 
-  /* 副制御モニタ */
-  .sb-grid{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:8px;
-  }
   .sb-guess{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.4);}
-  .sb-real{font-size:11px;color:#7a7488;margin-top:3px;}
+  .sb-real{font-size:10.5px;color:#7a7488;margin-top:3px;}
   .sb-real.gap{color:#ff9a8a;}
   .sb-heat{display:flex;gap:3px;margin-top:7px;}
   .sb-heat i{
-    flex:1;height:12px;border-radius:2px;
-    background:#0d0b14;border:1px solid #3a3348;
+    flex:1;height:10px;border-radius:2px;
+    background:#0d0b14;border:1px solid var(--line);
   }
   .sb-heat i.lit{
     background:var(--gold);border-color:var(--gold-bright);
@@ -329,11 +353,11 @@
   .sb-events .ev-freeze{color:#ff6b6b;font-weight:700;}
   .sb-events .ev-banner{color:var(--gold-bright);}
 
-  /* 信号注入 */
+  /* ===== 信号注入 ===== */
   .inj-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .inj-row select,
   .inj-row input[type=text]{
-    background:#0d0b14;border:1px solid #3a3348;border-radius:8px;
+    background:#0d0b14;border:1px solid var(--line);border-radius:8px;
     color:var(--text);font-family:inherit;font-size:12.5px;padding:8px 10px;min-width:0;
   }
   .inj-row select{flex:1;}
@@ -343,14 +367,46 @@
   }
   .inj-json{
     width:100%;margin-top:10px;height:44px;resize:vertical;
-    background:#08070c;border:1px solid #3a3348;border-radius:8px;
+    background:#08070c;border:1px solid var(--line);border-radius:8px;
     color:var(--gold-bright);font-family:"Consolas",monospace;font-size:11.5px;
     padding:8px 10px;
   }
   .inj-note{font-size:11.5px;color:#7a7488;margin-top:8px;line-height:1.6;}
-  .inj-sep{border-top:1px solid #3a3348;margin:16px 0 14px;}
+  .inj-sep{border-top:1px solid var(--line);margin:16px 0 14px;}
 
-  /* 図柄設定 (reel/symbol_editor.html を iframe で開く全画面モーダル) */
+  /* ===== ログ (最下段に固定) ===== */
+  .logbar{
+    flex:none;
+    padding:6px var(--pad) 8px;
+    background:rgba(8,7,12,.8);
+    border-top:1px solid #241f30;
+  }
+  .logbar-head{display:flex;align-items:center;gap:8px;font-size:10.5px;color:#7a7488;margin-bottom:4px;}
+  .link-btn{
+    margin-left:auto;
+    cursor:pointer;
+    background:none;border:none;padding:0;
+    font-family:inherit;font-size:10.5px;color:var(--muted);
+    text-decoration:underline;
+  }
+  .link-btn:hover{color:var(--gold-bright);}
+  .log{
+    /* ウィンドウの高さに合わせる (480×900 で約 117px) */
+    height:clamp(88px, 13vh, 180px);
+    background:#08070c;
+    border:1px solid #2a2436;
+    border-radius:8px;
+    padding:8px 10px;
+    overflow-y:auto;
+    font-family:"Consolas",monospace;
+    font-size:11.5px;
+    line-height:1.6;
+    color:#9d97ad;
+    white-space:pre-wrap;
+  }
+  body.log-collapsed .log{display:none;}
+
+  /* ===== 図柄設定 (reel/symbol_editor.html を iframe で開く全画面モーダル) ===== */
   .modal{
     display:none;
     position:fixed;inset:0;z-index:50;
@@ -372,191 +428,218 @@
   .modal-head .spacer{margin-left:auto;}
   .modal iframe{flex:1;width:100%;border:0;background:var(--bg);}
 
-  @media (max-width:560px){
-    .mb-grid{grid-template-columns:repeat(2,1fr);}
-    .sb-grid{grid-template-columns:repeat(2,1fr);}
+  /* 横に余裕があるときはモニタ面を右に常設し、タブからは外す (JS の activatePane と対) */
+  @media (min-width:1200px){
+    .panes{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) 400px;
+      gap:12px;
+      align-items:start;
+    }
+    /* 行を明示しないと、先に置かれるモニタ面に押されて左の面が 2 行目に落ちる */
+    .pane{grid-column:1;grid-row:1;}
+    #pane-monitor{display:flex;grid-column:2;grid-row:1;}
+    .tab[data-pane="pane-monitor"]{display:none;}
   }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div>
-    <h1>演出コントロールパネル</h1>
-    <div class="sub">enshutsu_overlay.html 外部操作用 / WebSocket中継サーバー経由</div>
-  </div>
 
-  <div class="card">
-    <h2>接続設定</h2>
-    <div class="conn-row">
-      <input id="ws-url" type="text" value="ws://localhost:8787" spellcheck="false">
-      <button class="btn" id="btn-connect">接続</button>
-      <span class="status-pill" id="status-pill"><span class="dot"></span><span id="status-text">未接続</span></span>
-    </div>
-    <div class="offline-help" id="offline-help">
-      <div class="offline-help-title">⚠️ 中継サーバーに接続できていません</div>
-      <div class="offline-help-body">
-        <p><b>setup.bat</b> をこのファイルと同じフォルダで実行すると、サーバーの起動から接続まで自動で行われます。</p>
-        <p>手動で起動する場合は、同じフォルダで以下のコマンドを実行してください:</p>
-        <div class="cmd-row">
-          <code id="cmd-text">node trigger_relay_server.js</code>
-          <button class="btn btn-sm" id="btn-copy-cmd">コピー</button>
-        </div>
-        <div class="offline-actions">
-          <button class="btn btn-sm" id="btn-retry-now">今すぐ再接続を試す</button>
-        </div>
-      </div>
-    </div>
-  </div>
+<header class="topbar">
+  <span class="brand" title="enshutsu_overlay.html 外部操作用 / WebSocket中継サーバー経由">🎰 演出コンパネ</span>
+  <input id="ws-url" type="text" value="ws://localhost:8787" spellcheck="false">
+  <button class="btn btn-sm" id="btn-connect">接続</button>
+  <span class="status-pill" id="status-pill"><span class="dot"></span><span id="status-text">未接続</span></span>
+</header>
 
-  <div class="card">
-    <h2>フル演出</h2>
-    <button class="btn btn-main" id="btn-full" disabled>🎰 フル演出を再生(ロック1→2→3)</button>
-  </div>
-
-  <div class="card">
-    <h2>段階まで再生</h2>
-    <div class="grid">
-      <button class="btn" id="btn-upto1" disabled>ロック1で終了</button>
-      <button class="btn" id="btn-upto2" disabled>ロック2で終了</button>
-      <button class="btn" id="btn-upto3" disabled>ロック3まで到達</button>
+<div class="offline-help" id="offline-help">
+  <div class="offline-help-title">⚠️ 中継サーバーに接続できていません</div>
+  <div class="offline-help-body">
+    <p>リポジトリ直下の <b>setup.bat</b> を実行すると、サーバーの起動から接続まで自動で行われます。</p>
+    <p>手動で起動する場合は、リポジトリ直下で以下のコマンドを実行してください:</p>
+    <div class="cmd-row">
+      <code id="cmd-text">node server/trigger_relay_server.js</code>
+      <button class="btn btn-sm" id="btn-copy-cmd">コピー</button>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>単体ステージ再生</h2>
-    <div class="grid">
-      <button class="btn" id="btn-lock1" disabled>ロック1単体</button>
-      <button class="btn" id="btn-lock2" disabled>ロック2単体</button>
-      <button class="btn" id="btn-lock3" disabled>ロック3単体</button>
+    <div class="offline-actions">
+      <button class="btn btn-sm" id="btn-retry-now">今すぐ再接続を試す</button>
     </div>
-  </div>
-
-  <div class="card">
-    <h2>オーバーレイ操作</h2>
-    <div class="row2">
-      <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
-      <button class="btn" id="btn-settings" disabled>⚙️ 設定パネル開閉</button>
-    </div>
-    <div class="row2" style="margin-top:8px">
-      <button class="btn" id="btn-reel-in" disabled>🎰 リールを液晶に入れる</button>
-      <button class="btn" id="btn-reel-out" disabled>リールを液晶から出す</button>
-    </div>
-  </div>
-
-  <div class="card">
-    <h2>ゲーム画面</h2>
-    <div class="row2">
-      <button class="btn" id="btn-pick-screen">🖥️ 画面/ウィンドウを選択</button>
-      <button class="btn" id="btn-clear-screen" disabled>選択解除</button>
-    </div>
-    <div class="screen-info" id="screen-info">未選択</div>
-  </div>
-
-  <div class="card">
-    <h2>図柄設定</h2>
-    <div class="row2">
-      <button class="btn" id="btn-symbols">🎴 図柄設定を開く</button>
-      <button class="btn" id="btn-symbols-window">別ウィンドウで開く</button>
-    </div>
-    <div class="screen-info" id="symbols-info">図柄画像の差し替えとリールの見た目 (地色・背景画像・枠・影・図柄の大きさ) を編集します</div>
-  </div>
-
-  <div class="card">
-    <div class="mb-head">
-      <h2>主制御モニタ</h2>
-      <span class="status-pill" id="mb-pill"><span class="dot"></span><span id="mb-pill-text">未受信</span></span>
-    </div>
-    <div class="mb-grid">
-      <div class="mb-tile state-normal" id="mb-state-tile">
-        <div class="lbl">遊技状態</div>
-        <div class="mb-val" id="mb-state">—</div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl" id="mb-games-lbl">ゲーム数</div>
-        <div class="mb-val" id="mb-games">—</div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl">差枚数</div>
-        <div class="mb-val" id="mb-diff">—</div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl">ストック</div>
-        <div class="mb-val" id="mb-stock">—</div>
-      </div>
-    </div>
-    <div class="mb-reels">
-      <div class="mb-reel" id="mb-reel-0">—</div>
-      <div class="mb-reel" id="mb-reel-1">—</div>
-      <div class="mb-reel" id="mb-reel-2">—</div>
-    </div>
-    <div class="mb-roles">
-      <span>成立役 <b id="mb-flag">—</b></span>
-      <span>表示役 <b id="mb-prize">—</b></span>
-      <span>ナビ <b id="mb-navi">—</b></span>
-      <span>払出 <b id="mb-pay">—</b></span>
-      <span>レバー <b id="mb-accept">—</b></span>
-    </div>
-    <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
-    <div class="mb-opts">
-      <label><input type="checkbox" id="mb-show-cmds" checked> 主→副コマンド生ログを表示</label>
-      <label><input type="checkbox" id="mb-to-log" checked> 主要イベントを下のログにも出す</label>
-      <span id="mb-total" style="margin-left:auto"></span>
-    </div>
-    <div class="mb-events mb-cmds" id="mb-cmds"></div>
-  </div>
-
-  <div class="card">
-    <div class="mb-head">
-      <h2>副制御モニタ</h2>
-      <span class="status-pill" id="sb-pill"><span class="dot"></span><span id="sb-pill-text">未受信</span></span>
-    </div>
-    <div class="sb-grid">
-      <div class="mb-tile">
-        <div class="lbl">副制御の推測</div>
-        <div class="mb-val sb-guess" id="sb-guess">—</div>
-        <div class="sb-real" id="sb-real">主制御の実値 —</div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl">ヒート</div>
-        <div class="mb-val" id="sb-heat-n">—</div>
-        <div class="sb-heat" id="sb-heat"></div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl">副制御が見ている状態</div>
-        <div class="mb-val" id="sb-state">—</div>
-      </div>
-      <div class="mb-tile">
-        <div class="lbl">受信コマンド数</div>
-        <div class="mb-val" id="sb-rx">—</div>
-      </div>
-    </div>
-    <div class="mb-events sb-events" id="sb-events">副制御が発火した演出がここに流れます</div>
-  </div>
-
-  <div class="card">
-    <h2>信号注入</h2>
-    <div class="inj-row">
-      <select id="inj-cmd"></select>
-      <select id="inj-arg"></select>
-      <input class="inj-hex" id="inj-b0" type="text" maxlength="2" spellcheck="false" value="20">
-      <input class="inj-hex" id="inj-b1" type="text" maxlength="2" spellcheck="false" value="07">
-      <button class="btn btn-sm" id="inj-send" disabled>メイン→サブへ流す</button>
-    </div>
-    <div class="inj-note">主制御の送信口を通るため、副制御は正規の受信と区別できません。上の生ログにも同じ形で残ります。反映は次のゲームの切れ目です。</div>
-    <div class="inj-sep"></div>
-    <div class="inj-row">
-      <select id="inj-evt"></select>
-      <button class="btn btn-sm" id="inj-evt-send" disabled>サブの出力として流す</button>
-    </div>
-    <textarea class="inj-json" id="inj-json" spellcheck="false"></textarea>
-    <div class="inj-note">副制御の判断を飛ばして 8765 のオーバーレイへ直送します。上のボタン群と違い、演出イベントの形そのものを検証できます。</div>
-  </div>
-
-  <div class="card">
-    <div class="lbl">ログ</div>
-    <div class="log" id="log"></div>
   </div>
 </div>
+
+<!-- 主制御ダイジェスト。タブを切り替えても消えない位置に置く。 -->
+<section class="strip">
+  <div class="strip-head">
+    <span class="strip-title">主制御</span>
+    <span class="status-pill" id="mb-pill"><span class="dot"></span><span id="mb-pill-text">未受信</span></span>
+    <span class="strip-total" id="mb-total"></span>
+  </div>
+  <div class="mb-grid">
+    <div class="mb-tile state-normal" id="mb-state-tile">
+      <div class="lbl">遊技状態</div>
+      <div class="mb-val" id="mb-state">—</div>
+    </div>
+    <div class="mb-tile">
+      <div class="lbl" id="mb-games-lbl">ゲーム数</div>
+      <div class="mb-val" id="mb-games">—</div>
+    </div>
+    <div class="mb-tile">
+      <div class="lbl">差枚数</div>
+      <div class="mb-val" id="mb-diff">—</div>
+    </div>
+    <div class="mb-tile">
+      <div class="lbl">ストック</div>
+      <div class="mb-val" id="mb-stock">—</div>
+    </div>
+  </div>
+  <div class="mb-reels">
+    <div class="mb-reel" id="mb-reel-0">—</div>
+    <div class="mb-reel" id="mb-reel-1">—</div>
+    <div class="mb-reel" id="mb-reel-2">—</div>
+  </div>
+</section>
+
+<nav class="tabs">
+  <button class="tab on" data-pane="pane-op" type="button">操作</button>
+  <button class="tab" data-pane="pane-monitor" type="button">モニタ</button>
+  <button class="tab" data-pane="pane-setup" type="button">設定</button>
+  <button class="tab" data-pane="pane-inject" type="button">注入</button>
+</nav>
+
+<main class="panes">
+
+  <!-- 操作: 配信中に一番よく押すもの -->
+  <div class="pane on" id="pane-op">
+    <div class="card">
+      <h2>フリーズ演出</h2>
+      <button class="btn btn-main" id="btn-full" disabled>🎰 フル演出を再生(ロック1→2→3)</button>
+      <div class="grp">段階まで再生</div>
+      <div class="grid">
+        <button class="btn" id="btn-upto1" disabled>ロック1で終了</button>
+        <button class="btn" id="btn-upto2" disabled>ロック2で終了</button>
+        <button class="btn" id="btn-upto3" disabled>ロック3まで到達</button>
+      </div>
+      <div class="grp">単体ステージ再生</div>
+      <div class="grid">
+        <button class="btn" id="btn-lock1" disabled>ロック1単体</button>
+        <button class="btn" id="btn-lock2" disabled>ロック2単体</button>
+        <button class="btn" id="btn-lock3" disabled>ロック3単体</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>オーバーレイ操作</h2>
+      <div class="row2">
+        <button class="btn" id="btn-slow" disabled>🐢 スロー再生: OFF</button>
+        <button class="btn" id="btn-settings" disabled>⚙️ 設定パネル開閉</button>
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <button class="btn" id="btn-reel-in" disabled>🎰 リールを液晶に入れる</button>
+        <button class="btn" id="btn-reel-out" disabled>リールを液晶から出す</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- モニタ: ダイジェストに載らない詳細 -->
+  <div class="pane" id="pane-monitor">
+    <div class="card">
+      <h2>主制御 詳細</h2>
+      <div class="mb-roles">
+        <span>成立役 <b id="mb-flag">—</b></span>
+        <span>表示役 <b id="mb-prize">—</b></span>
+        <span>ナビ <b id="mb-navi">—</b></span>
+        <span>払出 <b id="mb-pay">—</b></span>
+        <span>レバー <b id="mb-accept">—</b></span>
+      </div>
+      <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
+      <div class="mb-opts">
+        <label><input type="checkbox" id="mb-show-cmds" checked> 主→副コマンド生ログを表示</label>
+        <label><input type="checkbox" id="mb-to-log" checked> 主要イベントを下のログにも出す</label>
+      </div>
+      <div class="mb-events mb-cmds" id="mb-cmds"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>副制御モニタ</h2>
+        <span class="status-pill" id="sb-pill"><span class="dot"></span><span id="sb-pill-text">未受信</span></span>
+      </div>
+      <div class="sb-grid">
+        <div class="mb-tile">
+          <div class="lbl">副制御の推測</div>
+          <div class="mb-val sb-guess" id="sb-guess">—</div>
+          <div class="sb-real" id="sb-real">主制御の実値 —</div>
+        </div>
+        <div class="mb-tile">
+          <div class="lbl">ヒート</div>
+          <div class="mb-val" id="sb-heat-n">—</div>
+          <div class="sb-heat" id="sb-heat"></div>
+        </div>
+        <div class="mb-tile">
+          <div class="lbl">副制御が見ている状態</div>
+          <div class="mb-val" id="sb-state">—</div>
+        </div>
+        <div class="mb-tile">
+          <div class="lbl">受信コマンド数</div>
+          <div class="mb-val" id="sb-rx">—</div>
+        </div>
+      </div>
+      <div class="mb-events sb-events" id="sb-events">副制御が発火した演出がここに流れます</div>
+    </div>
+  </div>
+
+  <!-- 設定: 配信の頭で一度だけ触るもの -->
+  <div class="pane" id="pane-setup">
+    <div class="card">
+      <h2>ゲーム画面</h2>
+      <div class="row2">
+        <button class="btn" id="btn-pick-screen">🖥️ 画面/ウィンドウを選択</button>
+        <button class="btn" id="btn-clear-screen" disabled>選択解除</button>
+      </div>
+      <div class="screen-info" id="screen-info">未選択</div>
+    </div>
+
+    <div class="card">
+      <h2>図柄設定</h2>
+      <div class="row2">
+        <button class="btn" id="btn-symbols">🎴 図柄設定を開く</button>
+        <button class="btn" id="btn-symbols-window">別ウィンドウで開く</button>
+      </div>
+      <div class="screen-info" id="symbols-info">図柄画像の差し替えとリールの見た目 (地色・背景画像・枠・影・図柄の大きさ) を編集します</div>
+    </div>
+  </div>
+
+  <!-- 注入: 検証用 -->
+  <div class="pane" id="pane-inject">
+    <div class="card">
+      <h2>信号注入</h2>
+      <div class="inj-row">
+        <select id="inj-cmd"></select>
+        <select id="inj-arg"></select>
+        <input class="inj-hex" id="inj-b0" type="text" maxlength="2" spellcheck="false" value="20">
+        <input class="inj-hex" id="inj-b1" type="text" maxlength="2" spellcheck="false" value="07">
+        <button class="btn btn-sm" id="inj-send" disabled>メイン→サブへ流す</button>
+      </div>
+      <div class="inj-note">主制御の送信口を通るため、副制御は正規の受信と区別できません。モニタ面の生ログにも同じ形で残ります。反映は次のゲームの切れ目です。</div>
+      <div class="inj-sep"></div>
+      <div class="inj-row">
+        <select id="inj-evt"></select>
+        <button class="btn btn-sm" id="inj-evt-send" disabled>サブの出力として流す</button>
+      </div>
+      <textarea class="inj-json" id="inj-json" spellcheck="false"></textarea>
+      <div class="inj-note">副制御の判断を飛ばして 8765 のオーバーレイへ直送します。上のボタン群と違い、演出イベントの形そのものを検証できます。</div>
+    </div>
+  </div>
+
+</main>
+
+<footer class="logbar">
+  <div class="logbar-head">
+    <span>ログ</span>
+    <button class="link-btn" id="btn-log-toggle" type="button">折りたたむ</button>
+  </div>
+  <div class="log" id="log"></div>
+</footer>
 
 <!-- 図柄設定。中身は reel/symbol_editor.html をそのまま iframe で開く (URL は ws URL のホストから組み立てる) -->
 <div class="modal" id="symbols-modal">
@@ -871,7 +954,7 @@
     mb.stateTile.className = "mb-tile " + (MB_STATE_CLASS[st] || "state-normal");
     if(st === "通常"){
       mb.state.innerHTML = `通常<small>${d.mode ?? ""}</small>`;
-      mb.gamesLbl.textContent = "ゲーム数 / 天井まで";
+      mb.gamesLbl.textContent = "G数 / 天井まで";
       mb.games.innerHTML = `${d.gameCount ?? "—"}<small>/ ${d.ceilingLeft ?? "—"}</small>`;
     }else if(st === "GG"){
       mb.state.innerHTML = `GG<small>残${d.ggLeft ?? "—"}G</small>`;
@@ -879,7 +962,7 @@
       mb.games.innerHTML = `${d.ggLeft ?? "—"}<small>G</small>`;
     }else{
       mb.state.innerHTML = `AT<small>神々の宴</small>`;
-      mb.gamesLbl.textContent = "AT残ゲーム数";
+      mb.gamesLbl.textContent = "AT残G";
       mb.games.innerHTML = `${d.atLeft ?? "—"}<small>G</small>`;
     }
     const diff = Number(d.diff ?? 0);
@@ -1351,6 +1434,49 @@
     if(reconnectTimer){ clearTimeout(reconnectTimer); reconnectTimer = null; }
     log("🔄 手動で再接続を試みます...");
     connect();
+  });
+
+  // ---------------------------------------------------------------
+  // タブとログ開閉
+  //   setup.bat / dev.ps1 は 480×900 のウィンドウでこのページを開くので、
+  //   面を切り替えて縦スクロールを短く保つ。主制御ダイジェスト(.strip)と
+  //   ログ(.logbar)はタブの外にあるため、どの面でも見えたままになる。
+  //   1200px 以上ではモニタ面を右列に常設し、そのタブは隠す(CSS と対)。
+  // ---------------------------------------------------------------
+  const tabBtns = Array.from(document.querySelectorAll(".tab"));
+  const panes = Array.from(document.querySelectorAll(".pane"));
+  const wideQuery = window.matchMedia("(min-width:1200px)");
+  const feeds = [mb.events, mb.cmds, sb.events];
+
+  // 隠れている間は scrollHeight が 0 になり追従できないので、出したときに末尾へ送る
+  function scrollFeedsToEnd(){
+    feeds.forEach(el => { el.scrollTop = el.scrollHeight; });
+  }
+
+  function activatePane(id){
+    if(wideQuery.matches && id === "pane-monitor") id = "pane-op";
+    tabBtns.forEach(b => b.classList.toggle("on", b.dataset.pane === id));
+    panes.forEach(p => p.classList.toggle("on", p.id === id));
+    scrollFeedsToEnd();
+  }
+
+  tabBtns.forEach(b => b.addEventListener("click", ()=> activatePane(b.dataset.pane)));
+
+  function onWideChange(){
+    // 幅が広がってモニタタブが消えるとき、それが選択中なら操作面へ逃がす
+    if(wideQuery.matches && document.getElementById("pane-monitor").classList.contains("on")){
+      activatePane("pane-op");
+    }else{
+      scrollFeedsToEnd();
+    }
+  }
+  if(wideQuery.addEventListener) wideQuery.addEventListener("change", onWideChange);
+  else wideQuery.addListener(onWideChange);   // 古い WebView 向け
+
+  const logToggle = document.getElementById("btn-log-toggle");
+  logToggle.addEventListener("click", ()=>{
+    const collapsed = document.body.classList.toggle("log-collapsed");
+    logToggle.textContent = collapsed ? "開く" : "折りたたむ";
   });
 
   // 初回自動接続
