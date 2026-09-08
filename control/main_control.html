@@ -499,6 +499,10 @@
       <div class="lbl">ストック</div>
       <div class="mb-val" id="mb-stock">—</div>
     </div>
+    <div class="mb-tile">
+      <div class="lbl">クレジット</div>
+      <div class="mb-val" id="mb-credit-top">—</div>
+    </div>
   </div>
   <div class="mb-reels">
     <div class="mb-reel" id="mb-reel-0">—</div>
@@ -519,14 +523,19 @@
   <!-- 操作: 配信中に一番よく押すもの -->
   <div class="pane on" id="pane-op">
     <div class="card">
-      <h2>フリーズ演出</h2>
-      <button class="btn btn-main" id="btn-full" disabled>🎰 フル演出を再生(ロック1→2→3)</button>
-      <div class="grp">段階まで再生</div>
-      <div class="grid">
-        <button class="btn" id="btn-upto1" disabled>ロック1で終了</button>
-        <button class="btn" id="btn-upto2" disabled>ロック2で終了</button>
-        <button class="btn" id="btn-upto3" disabled>ロック3まで到達</button>
+      <h2>主制御 操作</h2>
+      <div class="mb-play">
+        <span>進み方 <b id="mb-mode">—</b></span>
+        <span>クレジット <b id="mb-credit">—</b></span>
+        <button class="btn btn-sm" id="btn-credit3" disabled>🪙 +3</button>
+        <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
+        <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
+        <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
       </div>
+    </div>
+
+    <div class="card">
+      <h2>フリーズ演出</h2>
       <div class="grp">単体ステージ再生</div>
       <div class="grid">
         <button class="btn" id="btn-lock1" disabled>ロック1単体</button>
@@ -558,14 +567,6 @@
         <span>ナビ <b id="mb-navi">—</b></span>
         <span>払出 <b id="mb-pay">—</b></span>
         <span>レバー <b id="mb-accept">—</b></span>
-      </div>
-      <div class="mb-play">
-        <span>進み方 <b id="mb-mode">—</b></span>
-        <span>クレジット <b id="mb-credit">—</b></span>
-        <button class="btn btn-sm" id="btn-credit3" disabled>🪙 +3</button>
-        <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
-        <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
-        <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
       </div>
       <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
       <div class="mb-opts">
@@ -685,10 +686,6 @@
   const retryNowBtn = document.getElementById("btn-retry-now");
 
   const buttons = {
-    full: document.getElementById("btn-full"),
-    upto1: document.getElementById("btn-upto1"),
-    upto2: document.getElementById("btn-upto2"),
-    upto3: document.getElementById("btn-upto3"),
     lock1: document.getElementById("btn-lock1"),
     lock2: document.getElementById("btn-lock2"),
     lock3: document.getElementById("btn-lock3"),
@@ -823,10 +820,6 @@
     }
   }
 
-  buttons.full.addEventListener("click", ()=> sendAction("triggerEnshutsu","フル演出"));
-  buttons.upto1.addEventListener("click", ()=> sendAction("playUpToLock1","ロック1で終了"));
-  buttons.upto2.addEventListener("click", ()=> sendAction("playUpToLock2","ロック2で終了"));
-  buttons.upto3.addEventListener("click", ()=> sendAction("playUpToLock3","ロック3まで到達"));
   buttons.lock1.addEventListener("click", ()=> sendAction("playLock1","ロック1単体"));
   buttons.lock2.addEventListener("click", ()=> sendAction("playLock2","ロック2単体"));
   buttons.lock3.addEventListener("click", ()=> sendAction("playLock3","ロック3単体"));
@@ -921,6 +914,7 @@
     accept: document.getElementById("mb-accept"),
     mode: document.getElementById("mb-mode"),
     credit: document.getElementById("mb-credit"),
+    creditTop: document.getElementById("mb-credit-top"),   // 常時見えるダイジェスト側
     events: document.getElementById("mb-events"),
     cmds: document.getElementById("mb-cmds"),
     showCmds: document.getElementById("mb-show-cmds"),
@@ -1073,10 +1067,16 @@
   }
   function mbSetCredit(credit){
     if(credit == null) return;
-    mb.credit.textContent = `${credit}枚`;
     const short = credit < MB_BET;
-    mb.credit.style.color = short ? "#ff9a8a" : "";
-    mb.credit.title = short ? `MAXベット${MB_BET}枚に足りません（投入信号で足してください）` : "";
+    const title = short ? `MAXベット${MB_BET}枚に足りません（投入信号で足してください）` : "";
+    // ダイジェスト(常時表示)とモニタタブの両方に出す。手動で打つときは貯留が要るので、
+    // タブを切り替えなくても残りが見えるようにしておく。
+    [mb.credit, mb.creditTop].forEach(el=>{
+      if(!el) return;
+      el.textContent = `${credit}枚`;
+      el.style.color = short ? "#ff9a8a" : "";
+      el.title = title;
+    });
   }
 
   function mbRenderCmd(d){
@@ -1107,8 +1107,11 @@
         mb.accept.style.color = "";
         mb.mode.textContent = "—";
         mb.mode.classList.remove("waiting");
-        mb.credit.textContent = "—";
-        mb.credit.style.color = "";
+        [mb.credit, mb.creditTop].forEach(el=>{
+          if(!el) return;
+          el.textContent = "—";
+          el.style.color = "";
+        });
         buttons.lever.classList.remove("toggle-on");
         break;
     }
@@ -1256,6 +1259,7 @@
     0x34:{name:"全停止",       args:asEnum(INJ_FLAG)},
     0x40:{name:"払出",         args:null, def:8},
     0x41:{name:"遊技終了",     args:null},
+    0x42:{name:"状態通知",     args:asEnum(INJ_STATE)},
     0x50:{name:"状態移行",     args:asEnum(INJ_STATE)},
     0x51:{name:"ストック数",   args:null, def:1},
     0x52:{name:"AT残G",        args:null, def:50},
