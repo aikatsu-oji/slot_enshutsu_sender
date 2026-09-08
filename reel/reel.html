@@ -332,6 +332,14 @@
   }
 
   function leverOn(){
+    // 主制御連動: レバーは主制御への入力。--manual で待っている主制御を1ゲーム進める
+    // (自動で回っている主制御に送っても何も起きない)。
+    if(mode === "link"){
+      if(!acceptsLever()){ denyLever(); return; }        // ウェイト中は実機と同じく無効
+      if(ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({action:"panelInject", layer:"lever"}));
+      else wsSt.textContent = "未接続のためレバーONを送れません";
+      return;
+    }
     if(mode !== "local" || game) return;
     if(!acceptsLever()){ denyLever(); return; }   // ウェイト中はレバーON無効
     const flag = lottery();
@@ -374,6 +382,17 @@
       // 主制御の入力受付状態。無効化のときに長さが来るので、以後は自前で数える
       if(d && d.action === "mainBoard" && d.type === "input"){
         if(d.accept) clearWait(); else armWait((Number(d.waitMs) || 0) / 1000);
+      }
+      // 主制御が --manual で入力待ちのときは、こちらのレバーで進むことを知らせる
+      if(d && d.action === "mainBoard" && d.type === "mode" && mode === "link" && !busy){
+        wsSt.textContent = d.manual
+          ? (d.waiting ? "レバー待ち（Space/Enter でレバーON）" : "手動（主制御はレバーON待ちで進みます）")
+          : "接続済み（主制御が自動で回します）";
+      }
+      // クレジット。MAXベット(3枚)に足りないとレバーONを叩いても回らない
+      if(d && d.action === "mainBoard" && d.type === "credit" && mode === "link" && !busy){
+        wsSt.textContent = d.canBet ? `クレジット ${d.credit}枚`
+                                    : `クレジット ${d.credit}枚（MAXベット${d.bet || 3}枚に足りません）`;
       }
       if(d && d.action === "symbolsUpdated") location.reload();   // 図柄設定ページで保存されたら新しい図柄で開き直す
     });

@@ -693,7 +693,24 @@
           <input type="number" id="bannerY" min="0" max="90" step="1">
         </div>
         <div class="hr"></div>
-        <div class="note">ランク別に再生して確認(副制御から届く banner イベントと同じ経路で表示します)</div>
+        <div class="note">停止演出のタイミング(レバーON起点の秒数)。筐体ビューのリール停止(1.15 / 1.6 / 2.05秒)に合わせます</div>
+        <div class="field-row">
+          <label for="stopTiming1">第1停止</label>
+          <input type="number" id="stopTiming1" min="0" max="10" step="0.05">
+        </div>
+        <div class="field-row">
+          <label for="stopTiming2">第2停止</label>
+          <input type="number" id="stopTiming2" min="0" max="10" step="0.05">
+        </div>
+        <div class="field-row">
+          <label for="stopTiming3">第3停止</label>
+          <input type="number" id="stopTiming3" min="0" max="10" step="0.05">
+        </div>
+        <div class="btn-row">
+          <button class="action" id="test-stepup">ステップアップ予告を再生(レバーON→第1〜第3停止)</button>
+        </div>
+        <div class="hr"></div>
+        <div class="note">ランク別に再生して確認(副制御から届く lever / stop イベントと同じ経路で表示します)</div>
         <div class="btn-row wrap">
           <button class="action" data-test-banner="白">白</button>
           <button class="action" data-test-banner="青">青</button>
@@ -702,7 +719,7 @@
           <button class="action" data-test-banner="金">金</button>
         </div>
         <div class="note">
-          通常時にレア役を引くと副制御が白/青/緑/赤/金のランクを抽選して送ってきます。成立役そのものは表示しません(ランクだけで期待度を示します)。<br><br>
+          副制御はレバーONで予告プラン(レバーON・第1〜第3停止の各時点で出すランク)を決め、レバーON時に lever、各停止時に stop イベントを送ってきます。ランクが付いた時点でバナーを出し、段階的に色が上がるステップアップ予告になります。成立役そのものは表示しません。<br><br>
           効果音は enshutsu/yokoku/banner/sound/ に「赤.mp3」または「banner_赤.mp3」のようにランク名のファイルを置くと自動で鳴ります(無ければ無音)。
         </div>
       </div>
@@ -848,6 +865,9 @@
     // 副制御演出(HUD)
     bannerDuration: 2.5,
     bannerY: 60,
+    stopTiming1: 1.15,   // 第1〜第3停止の演出をレバーONから何秒後に出すか(筐体ビューの停止タイミングと同じ)
+    stopTiming2: 1.6,
+    stopTiming3: 2.05,
     naviDuration: 4.0,
     naviY: 78,
     ggDuration: 2.5,
@@ -1048,6 +1068,9 @@
     el("freezeGifDuration").value = settings.freezeGifDuration;
     el("bannerDuration").value = settings.bannerDuration;
     el("bannerY").value = settings.bannerY;
+    el("stopTiming1").value = settings.stopTiming1;
+    el("stopTiming2").value = settings.stopTiming2;
+    el("stopTiming3").value = settings.stopTiming3;
     el("naviDuration").value = settings.naviDuration;
     el("naviY").value = settings.naviY;
     el("ggDuration").value = settings.ggDuration;
@@ -1092,6 +1115,9 @@
   bindNumber("freezeGifDuration","freezeGifDuration");
   bindNumber("bannerDuration","bannerDuration");
   bindNumber("bannerY","bannerY");
+  bindNumber("stopTiming1","stopTiming1");
+  bindNumber("stopTiming2","stopTiming2");
+  bindNumber("stopTiming3","stopTiming3");
   bindNumber("naviDuration","naviDuration");
   bindNumber("naviY","naviY");
   bindNumber("ggDuration","ggDuration");
@@ -2029,9 +2055,11 @@ function hideGameVideo(){
 
   /* ===================== 副制御の演出イベント(HUD) =====================
      god_main_board.py の SubBoard が出す演出イベント(仕様書4.5節)を表示する。
+       lever{rank,plan}       レバーON。rank があればバナー。plan は参考情報
+       stop{n,rank}           第n停止(1〜3)。rank があればバナー(表示時刻は lever 起点でずらす)
        navi{order}            押し順ナビ
-       banner{rank,trigger}   予告バナー(白/青/緑/赤/金)
-       freeze{seq,rank}       神揃いフリーズ → 既存のロック1→2→3
+       banner{rank,trigger}   予告バナー(旧形式。コンパネ直送との互換用)
+       freeze{seq,rank}       神揃いフリーズ(レバーON) → 既存のロック1→2→3
        gg_start               ゴッドゲーム突入
        stock_up{stock,gain}   ストック獲得
        add_games{games}       上乗せ
@@ -2100,6 +2128,7 @@ function hideGameVideo(){
   /* --- 受信ログ(設定パネルのATタブに最新8件) --- */
   const subLogLines = [];
   function subLog(ev){
+    if(ev.type === "lever" && !ev.rank) return;   // 演出なしのレバーONは毎ゲーム届くのでログには残さない
     const detail = Object.keys(ev)
       .filter(k=> k !== "type" && k !== "g")
       .map(k=> `${k}=${typeof ev[k] === "object" ? JSON.stringify(ev[k]) : ev[k]}`)
@@ -2184,7 +2213,27 @@ function hideGameVideo(){
   }
 
   /* --- 神揃いフリーズ → 既存のロック演出へ。seq の最後の要素で到達段階を決める --- */
+  /* --- 停止演出のスケジュール ---
+     主制御は1ゲームぶんのコマンドを一括で送るため、lever と stop(1〜3) はほぼ同時に届く。
+     見た目のリール停止は筐体ビューが自前のタイミングで刻むので、stop の演出は
+     lever を受けた時刻を起点に settings.stopTimingN 秒後へずらして出す。 */
+  let leverAt = 0;             // 直近の lever イベントを受けた時刻(performance.now)
+  let stopTimers = [];         // 予約中の停止演出
+  function clearStopTimers(){
+    stopTimers.forEach(t=> clearTimeout(t));
+    stopTimers = [];
+  }
+  function scheduleStop(ev){
+    const n = Number(ev.n);
+    if(!(n >= 1 && n <= 3)) return;
+    if(!ev.rank) return;                                   // ランク無しの停止は通知だけ(演出なし)
+    const at = leverAt + Number(settings["stopTiming" + n]) * 1000;
+    const delay = Math.max(0, at - performance.now());
+    stopTimers.push(setTimeout(()=>{ playBanner({ rank: ev.rank, trigger: ev.trigger }); }, delay));
+  }
+
   function clearHud(){
+    clearStopTimers();
     clearTimeout(bannerTimer); clearTimeout(naviTimer); clearTimeout(popupTimer);
     hudBanner.className = ""; hudNavi.classList.remove("show"); hudPopup.className = "";
   }
@@ -2228,7 +2277,13 @@ function hideGameVideo(){
       case "freeze":    enqueueMajor(()=> playFreezeEvent(ev)); break;
       case "gg_start":  enqueueMajor(playGgStart); break;
       case "at_end":    enqueueMajor(playAtEnd); break;
-      case "banner":    minor(()=> playBanner(ev), settings.bannerDuration); break;
+      case "lever":     // レバーON。ここを起点に停止演出の時刻を決める
+        leverAt = performance.now();
+        clearStopTimers();
+        if(ev.rank) minor(()=> playBanner(ev), settings.bannerDuration);
+        break;
+      case "stop":      scheduleStop(ev); break;   // 第n停止(n=1〜3)。lever からの経過で表示時刻を決める
+      case "banner":    minor(()=> playBanner(ev), settings.bannerDuration); break;   // 旧形式・コンパネ直送用
       case "navi":      playNavi(ev); break;   // ナビは即時性が命なので待たせない
       case "stock_up":  minor(()=> { playSfx("stock_up"); playPopup(`STOCK +${ev.gain ?? 1}`, `ストック ×${ev.stock ?? "?"}`, "stock"); }, settings.popupDuration); break;
       case "add_games": minor(()=> { playSfx("add_games"); playPopup(`+${ev.games ?? 0}G`, "上乗せ", "add"); }, settings.popupDuration); break;
@@ -2240,7 +2295,14 @@ function hideGameVideo(){
 
   /* --- 設定パネルのテストボタン(本物のイベントと同じ経路を通す) --- */
   document.querySelectorAll("[data-test-banner]").forEach(btn=>{
-    btn.addEventListener("click", ()=> handleSubEvent({ type:"banner", rank: btn.dataset.testBanner, trigger:"テスト" }));
+    btn.addEventListener("click", ()=> handleSubEvent({ type:"lever", rank: btn.dataset.testBanner, plan:[btn.dataset.testBanner,null,null,null], trigger:"テスト" }));
+  });
+  // ステップアップ予告: 副制御が一括で送ってくる lever → stop1 → stop2 → stop3 をそのまま再現する
+  el("test-stepup").addEventListener("click", ()=>{
+    handleSubEvent({ type:"lever", rank:"白", plan:["白","青","緑","赤"], trigger:"テスト" });
+    handleSubEvent({ type:"stop", n:1, rank:"青" });
+    handleSubEvent({ type:"stop", n:2, rank:"緑" });
+    handleSubEvent({ type:"stop", n:3, rank:"赤" });
   });
   document.querySelectorAll("[data-test-navi]").forEach(btn=>{
     btn.addEventListener("click", ()=> handleSubEvent({ type:"navi", order: Number(btn.dataset.testNavi) }));

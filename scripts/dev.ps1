@@ -7,13 +7,16 @@
   scripts\dev.cmd <command> [options]      (cmd / Git Bash から)
   powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 <command> [options]
 
-  start   [-Mode normal|fast|tenjo|none]   中継サーバーと主制御をバックグラウンド起動(ログは .run\ 配下)
+  start   [-Mode normal|fast|tenjo|manual|none]   中継サーバーと主制御をバックグラウンド起動(ログは .run\ 配下)
   stop                                     start で起動したプロセスを停止(PIDファイル → ポート の順で探す)
   restart [-Mode ...]                      stop → start
   status                                   ポート/ヘルスチェック/PIDの状態を表示
   test                                     主制御・副制御の単体テスト(通信なし)。setup.bat と同じ内容
   open                                     コンパネ / オーバーレイをアプリウィンドウで開く(リールは液晶内)
   send    <action|json>                    中継サーバーへ1件送る  例: send triggerEnshutsu / send '{"action":"playUpToLock2"}'
+                                           send lever   … -Mode manual の主制御を1ゲーム進める(レバーON)
+                                           send credit  … クレジット投入信号 +50枚
+                                           send manual / send auto … 進み方を切り替える
   logs    [-Tail 40]                       .run\ 配下のログ末尾を表示
   help
 
@@ -21,13 +24,16 @@
     normal : 実機ウェイト(4.1秒/G) 設定1        (既定)
     fast   : 0.5秒/G 設定6
     tenjo  : seed固定 0.2秒/G 1200Gで天井
+    manual : 起動しても勝手に回さず、レバーON待ち。実機ウェイト 設定1・クレジット50枚
+             (コンパネ「主制御 詳細」の🕹️レバーON / 筐体ビューで Space・Enter。
+              クレジットが3枚未満だと回らないので「🪙+50」で足す)
     none   : 主制御は起動せず中継サーバーのみ
 #>
 [CmdletBinding()]
 param(
   [Parameter(Position = 0)] [string]$Command = "help",
   [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]]$Rest,
-  [ValidateSet("normal", "fast", "tenjo", "none")] [string]$Mode = "normal",
+  [ValidateSet("normal", "fast", "tenjo", "manual", "none")] [string]$Mode = "normal",
   [int]$Tail = 40
 )
 
@@ -120,6 +126,9 @@ function Board-Args($m) {
     "normal" { return @("--serve", "--setting", "1", "--games", "100000") }
     "fast"   { return @("--serve", "--setting", "6", "--interval", "0.5", "--games", "100000") }
     "tenjo"  { return @("--serve", "--setting", "1", "--interval", "0.2", "--games", "3000", "--seed", "6") }
+    # 起動しても自分から回さない。レバーON(コンパネ/筐体ビュー)が来たぶんだけ進む。
+    # 手動はクレジットが要る(MAXベット3枚)ので、すぐ打てるよう50枚入れて起動する
+    "manual" { return @("--serve", "--setting", "1", "--manual", "--credit", "50", "--games", "100000") }
     default  { return $null }
   }
 }
@@ -147,11 +156,20 @@ function Start-Board($m) {
   if (-not $py) { Fail "Python 3 が見つかりません (https://www.python.org/)" }
   $bargs = @($py.Pre) + @("`"$MainBoard`"") + $a + @("--panel-cmds", "--panel", "ws://127.0.0.1:$Port")
   if (Test-Path $LogBoard) { Remove-Item $LogBoard -Force }
+  # 標準入力は空ファイルにつなぐ。--manual の端末入力(Enter=レバーON)は端末から
+  # 起動したときだけの機能で、バックグラウンドの主制御にこの端末のキー入力を
+  # 拾わせないため(空ファイル = 即EOF)。
+  $StdIn = Join-Path $RunDir "empty.in"
+  if (-not (Test-Path $StdIn)) { New-Item -ItemType File -Path $StdIn | Out-Null }
   $p = Start-Process -FilePath $py.Exe -ArgumentList $bargs -WorkingDirectory $Root `
-        -WindowStyle Hidden -PassThru -RedirectStandardOutput $LogBoard -RedirectStandardError (Join-Path $RunDir "main_board.err.log")
+        -WindowStyle Hidden -PassThru -RedirectStandardInput $StdIn `
+        -RedirectStandardOutput $LogBoard -RedirectStandardError (Join-Path $RunDir "main_board.err.log")
   Set-Content $PidBoard $p.Id
   for ($i = 0; $i -lt 20; $i++) { if (Test-Port $SubPort) { break }; Start-Sleep -Milliseconds 500 }
-  if (Test-Port $SubPort) { Ok "主制御起動 (PID $($p.Id), mode=$m)  ws://127.0.0.1:$SubPort" } else { Warn "主制御が $SubPort で応答しません。$LogBoard を確認してください" }
+  if (Test-Port $SubPort) {
+    Ok "主制御起動 (PID $($p.Id), mode=$m)  ws://127.0.0.1:$SubPort"
+    if ($m -eq "manual") { Info "手動: 主制御はレバーON待ちです。コンパネ「主制御 詳細」の🕹️レバーON、または筐体ビューで Space/Enter" }
+  } else { Warn "主制御が $SubPort で応答しません。$LogBoard を確認してください" }
 }
 
 function Do-Stop {
@@ -234,10 +252,19 @@ function Do-Send($json) {
   if (-not $json) { Fail "送信する内容を指定してください  例: send triggerEnshutsu   /  send '{\"action\":\"playUpToLock2\"}'" }
   # cmd 経由(-File)では引数のダブルクォートが剥がれるため、action 名だけの短縮形も受け付ける
   $json = $json.Trim().Trim("'")
+  # 主制御への入力の短縮形。lever は --manual で待っている主制御を1ゲーム進める
+  switch ($json.ToLower()) {
+    "lever"  { $json = '{"action":"panelInject","layer":"lever"}' }
+    "credit" { $json = '{"action":"panelInject","layer":"credit","n":50}' }
+    "manual" { $json = '{"action":"panelInject","layer":"mode","manual":true}' }
+    "auto"   { $json = '{"action":"panelInject","layer":"mode","manual":false}' }
+  }
   if ($json -notmatch '^\s*\{') { $json = '{"action":"' + $json + '"}' }
   if (-not (Test-Port $Port)) { Fail "中継サーバーが起動していません" }
   Ensure-Deps
-  & node (Join-Path $PSScriptRoot "ws_send.js") "ws://127.0.0.1:$Port" $json
+  # PowerShell 5.1 は外部プログラムへ渡す引数の中のダブルクォートを落とすので、
+  # node に届くよう \" にしておく(これが無いと {action:...} になり JSON として読めない)
+  & node (Join-Path $PSScriptRoot "ws_send.js") "ws://127.0.0.1:$Port" ($json -replace '"', '\"')
 }
 
 function Do-Logs {

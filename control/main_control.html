@@ -323,6 +323,14 @@
   }
   .mb-roles span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
+  /* 遊技操作 (--manual のときのレバーON)。実機のレバーは主制御への入力なので、ここは操作部の代わり */
+  .mb-play{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;
+           font-size:12px;color:#c9bfc5;}
+  .mb-play span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+  .mb-play b{color:var(--gold-bright);font-weight:600;}
+  .mb-play .btn{margin-left:auto;}
+  .mb-play .btn + .btn{margin-left:0;}
+  .mb-play .waiting{color:#7cf2a8;}
   .mb-events{
     margin-top:8px;
     background:#08070c;border:1px solid var(--line);border-radius:8px;
@@ -551,6 +559,14 @@
         <span>払出 <b id="mb-pay">—</b></span>
         <span>レバー <b id="mb-accept">—</b></span>
       </div>
+      <div class="mb-play">
+        <span>進み方 <b id="mb-mode">—</b></span>
+        <span>クレジット <b id="mb-credit">—</b></span>
+        <button class="btn btn-sm" id="btn-credit3" disabled>🪙 +3</button>
+        <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
+        <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
+        <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
+      </div>
       <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
       <div class="mb-opts">
         <label><input type="checkbox" id="mb-show-cmds" checked> 主→副コマンド生ログを表示</label>
@@ -682,6 +698,10 @@
     reelOut: document.getElementById("btn-reel-out"),
     injMain: document.getElementById("inj-send"),
     injEvt: document.getElementById("inj-evt-send"),
+    credit3: document.getElementById("btn-credit3"),
+    credit50: document.getElementById("btn-credit50"),
+    lever: document.getElementById("btn-lever"),
+    manual: document.getElementById("btn-manual"),
   };
 
   let ws = null;
@@ -899,6 +919,8 @@
     navi: document.getElementById("mb-navi"),
     pay: document.getElementById("mb-pay"),
     accept: document.getElementById("mb-accept"),
+    mode: document.getElementById("mb-mode"),
+    credit: document.getElementById("mb-credit"),
     events: document.getElementById("mb-events"),
     cmds: document.getElementById("mb-cmds"),
     showCmds: document.getElementById("mb-show-cmds"),
@@ -977,6 +999,7 @@
     mb.prize.textContent = d.prize ?? "—";
     mb.navi.textContent = d.navi ? `押し順${d.navi}` : "—";
     mb.pay.textContent = d.pay != null ? `${d.pay}枚` : "—";
+    mbSetCredit(d.credit);
     mb.total.textContent = `${(d.game ?? 0).toLocaleString()}G / IN ${(d.totalIn ?? 0).toLocaleString()} / OUT ${(d.totalOut ?? 0).toLocaleString()}`;
 
     // 副制御の推測と突き合わせるため、主制御の実モードを控えておく
@@ -1025,6 +1048,37 @@
     mbAcceptTimer = setInterval(tick, 100);
   }
 
+  // 遊技の進み方（--manual）。主制御が「自分から回す(自動)」か「レバーON待ち(手動)」かを表示する。
+  // 手動で待っている間は無風なので、主制御が数秒おきに同じ通知を送り直してくる。
+  let mbManual = false;
+  function mbRenderMode(d){
+    mbManual = !!d.manual;
+    const waiting = !!d.waiting;
+    mbAlive(waiting ? "レバー待ち" : "受信中");
+    mbSetCredit(d.credit);        // あとから開いたときも今の貯留が出るように
+    mb.mode.textContent = mbManual ? (waiting ? "手動（レバー待ち）" : "手動") : "自動";
+    mb.mode.classList.toggle("waiting", mbManual && waiting);
+    buttons.manual.textContent = mbManual ? "自動にする" : "手動にする";
+    buttons.manual.classList.toggle("toggle-on", mbManual);
+    buttons.lever.classList.toggle("toggle-on", mbManual && waiting);
+  }
+
+  // クレジット（貯留）。ベットはMAXベット3枚のみで、足りないとレバーONを叩いても回らない。
+  // 最大クレジットは無限なので、投入信号のぶんだけ増える。
+  const MB_BET = 3;
+  function mbRenderCredit(d){
+    mbAlive("受信中");
+    mbSetCredit(d.credit);
+    if(d.note) log(`🎰 主制御 クレジット: ${d.credit}枚（${d.note}）`);
+  }
+  function mbSetCredit(credit){
+    if(credit == null) return;
+    mb.credit.textContent = `${credit}枚`;
+    const short = credit < MB_BET;
+    mb.credit.style.color = short ? "#ff9a8a" : "";
+    mb.credit.title = short ? `MAXベット${MB_BET}枚に足りません（投入信号で足してください）` : "";
+  }
+
   function mbRenderCmd(d){
     const html = `${escapeHtml(d.cmd || "")}  ${escapeHtml((d.name || "").padEnd(6, "　"))} ${String(d.data ?? "").padStart(3)}  ${escapeHtml(d.note || "")}`;
     mbAppend(mb.cmds, html, "", "cmd");
@@ -1040,6 +1094,8 @@
       case "event": mbRenderEvent(d); break;
       case "cmd": mbRenderCmd(d); break;
       case "input": mbRenderInput(d); break;
+      case "mode": mbRenderMode(d); break;
+      case "credit": mbRenderCredit(d); break;
       case "summary":
         mbAppend(mb.events, `── 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚 ──`, "ev-end", "ev");
         log(`🎰 主制御 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚`);
@@ -1049,9 +1105,31 @@
         if(mbAcceptTimer){ clearInterval(mbAcceptTimer); mbAcceptTimer = null; }
         mb.accept.textContent = "—";
         mb.accept.style.color = "";
+        mb.mode.textContent = "—";
+        mb.mode.classList.remove("waiting");
+        mb.credit.textContent = "—";
+        mb.credit.style.color = "";
+        buttons.lever.classList.remove("toggle-on");
         break;
     }
   }
+
+  // レバーONと自動/手動の切り替え。実機のレバーは主制御への入力そのものなので、
+  // ここは筐体の操作部の代わり（モニタ表示は従来どおり主制御→コンパネの一方向）。
+  // --manual で起動した主制御はレバーONが来るまで次のゲームを始めない。
+  // 自動で回っている主制御に送っても何も起きない。
+  buttons.lever.addEventListener("click", ()=>
+    sendRaw({ action:"panelInject", layer:"lever" }, "レバーON"));
+  // クレジット投入信号。最大クレジットは無限なので何度でも足せる
+  buttons.credit3.addEventListener("click", ()=>
+    sendRaw({ action:"panelInject", layer:"credit", n:3 }, "クレジット投入 +3"));
+  buttons.credit50.addEventListener("click", ()=>
+    sendRaw({ action:"panelInject", layer:"credit", n:50 }, "クレジット投入 +50"));
+  buttons.manual.addEventListener("click", ()=>{
+    const next = !mbManual;
+    sendRaw({ action:"panelInject", layer:"mode", manual:next },
+            next ? "手動へ切り替え（レバーON待ち）" : "自動へ切り替え");
+  });
 
   mb.showCmds.addEventListener("change", ()=>{
     mb.cmds.classList.toggle("show", mb.showCmds.checked);
@@ -1080,6 +1158,8 @@
   };
   const SB_EVENT_LABEL = {
     freeze:    ["★ フリーズ演出", "ev-freeze"],
+    lever:     ["レバーON",       "ev-banner"],
+    stop:      ["停止",           ""],
     banner:    ["バナー予告",     "ev-banner"],
     navi:      ["押し順ナビ",     ""],
     gg_start:  ["▶ GG開始",       "ev-gg"],
@@ -1183,7 +1263,9 @@
   };
   const INJ_EVT = {
     freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
-    banner:    ["バナー予告",     {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
+    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", heat:0}],
+    stop:      ["停止予告",       {type:"stop", n:3, rank:"赤"}],
+    banner:    ["バナー予告(旧)", {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
     navi:      ["押し順ナビ",     {type:"navi", order:0}],
     gg_start:  ["GG開始",         {type:"gg_start"}],
     stock_up:  ["ストック加算",   {type:"stock_up", stock:2, gain:1}],

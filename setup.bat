@@ -190,15 +190,18 @@ echo   主→副の2バイトコマンド生ログも常に送ります。
 echo     [1] 通常        実機ウェイト(4.1秒/G)で稼働。設定1
 echo     [2] 高速テスト  0.5秒/G。契機が早く出るよう設定6
 echo     [3] 天井テスト  seed固定。1200G目で天井到達(0.2秒/G・約4分)
-echo     [4] 起動しない  (あとで手動: %PY% %MB% --serve)
+echo     [4] 手動        勝手に回さずレバーON待ち。設定1・クレジット50枚
+echo                     (コンパネの[レバーON] / 筐体ビューで Space・Enter)
+echo     [5] 起動しない  (あとで手動: %PY% %MB% --serve)
 echo.
-choice /c 1234 /n /m "  番号を入力: "
+choice /c 12345 /n /m "  番号を入力: "
 set "MB_SEL=%errorlevel%"
 
 set "MB_ARGS="
 if "%MB_SEL%"=="1" set "MB_ARGS=--serve --setting 1 --games 100000"
 if "%MB_SEL%"=="2" set "MB_ARGS=--serve --setting 6 --interval 0.5 --games 100000"
 if "%MB_SEL%"=="3" set "MB_ARGS=--serve --setting 1 --interval 0.2 --games 3000 --seed 6"
+if "%MB_SEL%"=="4" set "MB_ARGS=--serve --setting 1 --manual --credit 50 --games 100000"
 if not defined MB_ARGS goto MAIN_BOARD_SKIPPED
 
 rem 主副間のやり取りを1コマンド単位で追うため、コマンド生ログは常に送る。

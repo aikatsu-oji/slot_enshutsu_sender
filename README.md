@@ -11,12 +11,18 @@ WebSocket 中継サーバーを介して OBS のオーバーレイ、コンパ�
 **コマンドライン (Claude Code / VS Code ターミナル)**:
 
 ```
-scripts\dev.cmd start            # 中継サーバー + 主制御 (実機ウェイト)
-scripts\dev.cmd start -Mode fast # 0.5秒/G の動作確認モード
+scripts\dev.cmd start              # 中継サーバー + 主制御 (実機ウェイト)
+scripts\dev.cmd start -Mode fast   # 0.5秒/G の動作確認モード
+scripts\dev.cmd start -Mode manual # 勝手に回さず、レバーON待ちで起動 (1ゲームずつ手動)
 scripts\dev.cmd status
 scripts\dev.cmd test
 scripts\dev.cmd stop
 ```
+
+`-Mode manual` (setup.bat なら選択肢 `[4] 手動`) は、主制御が自分から回さずレバーON入力を待ちます。
+コンパネ「主制御 詳細」の 🕹️レバーON、または筐体ビュー (`?mode=link`) で Space / Enter を押すと1ゲーム進みます。
+ベットは MAX ベット (3枚) のみで、クレジットが足りないと回りません。クレジットはコンパネの 🪙+3 / 🪙+50
+(クレジット投入信号) で足せます (上限なし)。
 
 ## URL
 
