@@ -2,9 +2,12 @@
   "_readme": [
     "Twitch のイベントを何に変換するかの対応表。ここだけが人の編集対象。",
     "評価順: 上から順に見て、最初に when が一致したルールの enshutsu を採用する。",
-    "        medals / counter / vote は一致したルールぶんすべて適用する。",
-    "段階1 (演出のみ) では medals / counter / vote は無視される。--medals で有効化する。",
-    "メダルの入口は無料でできることだけ。課金 (cheer/sub/subgift) には medals を持たせない。"
+    "        medals / counter / vote / input / force は一致したルールぶんすべて適用する。",
+    "ルールに \"enabled\": false を書くとそのルールだけ無効にできる。",
+    "メダルの入口は無料でできることだけ。課金 (cheer/sub/subgift) には medals を持たせない。",
+    "guard.mods にモデレータの login 名を書く。チャンネルポイントにはバッジが付いてこないので、",
+    "  requires:'mod' の判定はこの一覧で行う。",
+    "force (強制フラグ) はブリッジと主制御の両方に --allow-force を付けたときだけ効く。"
   ],
   "enabled": true,
   "guard": {
@@ -13,80 +16,205 @@
     "maxMedalsPerMinute": 6000,
     "chatMedalsPerMinute": 10,
     "enshutsuMinIntervalMs": 1500,
-    "modOnlyInputs": ["powerCycle", "stopOrder", "forceFlag"],
-    "ignoreUsers": ["nightbot", "streamelements", "moobot", "fossabot"],
-    "chatHype": { "windowSec": 60, "threshold": 30, "boost": 1 }
+    "modOnlyInputs": [
+      "powerCycle",
+      "stopOrder",
+      "forceFlag"
+    ],
+    "ignoreUsers": [
+      "nightbot",
+      "streamelements",
+      "moobot",
+      "fossabot"
+    ],
+    "chatHype": {
+      "windowSec": 60,
+      "threshold": 30,
+      "boost": 1
+    },
+    "mods": []
   },
   "rules": [
     {
       "name": "100回転",
-      "when": { "kind": "redeem", "reward": "100回転" },
-      "medals": { "fixed": 120 },
-      "enshutsu": { "type": "banner", "rank": "青" }
+      "when": {
+        "kind": "redeem",
+        "reward": "100回転"
+      },
+      "medals": {
+        "fixed": 120
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "青"
+      }
     },
     {
       "name": "10回転",
-      "when": { "kind": "redeem", "reward": "10回転" },
-      "medals": { "fixed": 12 },
-      "enshutsu": { "type": "banner", "rank": "白" }
+      "when": {
+        "kind": "redeem",
+        "reward": "10回転"
+      },
+      "medals": {
+        "fixed": 12
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "白"
+      }
     },
     {
       "name": "レイド",
-      "when": { "kind": "raid" },
-      "medals": { "of": "amount", "unit": 20, "max": 1000 },
-      "enshutsu": { "type": "banner", "rank": "金" }
+      "when": {
+        "kind": "raid"
+      },
+      "medals": {
+        "of": "amount",
+        "unit": 20,
+        "max": 1000
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "金"
+      }
     },
     {
       "name": "チャット連帯カウンタ",
-      "when": { "kind": "chat" },
+      "when": {
+        "kind": "chat"
+      },
       "counter": {
         "goal": 200,
         "medals": 120,
         "label": "100回転",
         "minLength": 2,
         "perUserCooldownSec": 10,
-        "ignore": ["^!", "^\\W+$"],
+        "ignore": [
+          "^!",
+          "^\\W+$"
+        ],
         "resetOn": "stream.online",
         "overflowTo": "bank"
       }
     },
     {
       "name": "初コメ歓迎",
-      "when": { "kind": "chat", "first": true },
-      "enshutsu": { "type": "banner", "rank": "白" }
+      "when": {
+        "kind": "chat",
+        "first": true
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "白"
+      }
     },
     {
       "name": "押し順投票",
-      "when": { "kind": "chat", "match": "^!(左|中|右)$" },
-      "vote": { "input": "stopOrder", "windowSec": 3 }
+      "when": {
+        "kind": "chat",
+        "match": "^!(左|中|右)$"
+      },
+      "vote": {
+        "input": "stopOrder",
+        "windowSec": 3
+      },
+      "enabled": false
     },
     {
       "name": "フォロー",
-      "when": { "kind": "follow" },
-      "enshutsu": { "type": "banner", "rank": "白" }
+      "when": {
+        "kind": "follow"
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "白"
+      }
     },
     {
       "name": "ビッツ",
-      "when": { "kind": "cheer" },
+      "when": {
+        "kind": "cheer"
+      },
       "enshutsu": {
         "type": "banner",
-        "rankBy": [[100, "白"], [500, "青"], [1000, "緑"], [5000, "赤"], [10000, "金"]]
+        "rankBy": [
+          [
+            100,
+            "白"
+          ],
+          [
+            500,
+            "青"
+          ],
+          [
+            1000,
+            "緑"
+          ],
+          [
+            5000,
+            "赤"
+          ],
+          [
+            10000,
+            "金"
+          ]
+        ]
       }
     },
     {
       "name": "サブスク",
-      "when": { "kind": "sub" },
-      "enshutsu": { "type": "banner", "rankByTier": { "1": "赤", "2": "赤", "3": "金" } }
+      "when": {
+        "kind": "sub"
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rankByTier": {
+          "1": "赤",
+          "2": "赤",
+          "3": "金"
+        }
+      }
     },
     {
       "name": "継続サブスク",
-      "when": { "kind": "resub" },
-      "enshutsu": { "type": "banner", "rankByTier": { "1": "赤", "2": "赤", "3": "金" } }
+      "when": {
+        "kind": "resub"
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rankByTier": {
+          "1": "赤",
+          "2": "赤",
+          "3": "金"
+        }
+      }
     },
     {
       "name": "サブギフト",
-      "when": { "kind": "subgift" },
-      "enshutsu": { "type": "banner", "rank": "赤" }
+      "when": {
+        "kind": "subgift"
+      },
+      "enshutsu": {
+        "type": "banner",
+        "rank": "赤"
+      }
+    },
+    {
+      "name": "設定変更",
+      "when": {
+        "kind": "redeem",
+        "reward": "設定変更"
+      },
+      "input": "powerCycle",
+      "requires": "mod",
+      "settingChoices": [
+        1,
+        2
+      ],
+      "enshutsu": {
+        "type": "banner",
+        "rank": "青"
+      }
     }
   ]
 }

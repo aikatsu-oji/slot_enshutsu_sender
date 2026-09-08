@@ -1,4 +1,4 @@
-// Twitch → 中継サーバー ブリッジ (段階1: 演出のみ)
+// Twitch → 中継サーバー ブリッジ
 //
 // Twitch の EventSub から届くイベントを正規化し、rules.json に従って
 // 中継サーバー (ws://127.0.0.1:8787) へ流す。中継サーバーは一切改造しない。
@@ -9,14 +9,16 @@
 //   node twitch/twitch_bridge.js --ws-url ws://127.0.0.1:8080/ws --no-subscribe
 //                                                    Twitch CLI のモック EventSub サーバーに繋ぐ
 //
-// 段階3 でやること:
+// やること:
 //   演出 (予告バナー) をオーバーレイへ直接流し、無料アクションぶんのメダルを主制御へ投入する。
-//   抽選には一切触らない (触れる口をそもそも作らない)。--no-medals で段階1 の挙動に戻せる。
+//   押し順の投票と、モデレータ限定の操作 (設定変更) も中継する。
+//   **抽選には触らない。** 触る口は --allow-force を両方に付けたときだけ開く (既定は閉じている)。
+//   --no-medals を付けると演出だけになる。
 //
 // 演出の送り先に subEvent を使う理由:
 //   {"action":"subEvent","event":{...}} はオーバーレイが 8787 で直接受ける。
 //   panelInject(layer:"enshutsu") は主制御を経由するので、主制御が起動していないと届かない。
-//   段階1 は「中継サーバー + オーバーレイ」だけで動くことが要件なので subEvent を使う。
+//   演出だけなら「中継サーバー + オーバーレイ」だけで動く (主制御を起動しなくてよい)。
 
 const fs = require("fs");
 const path = require("path");
@@ -41,6 +43,7 @@ function parseArgs(argv) {
     medals: true,
     subscribe: true,
     dryRun: false,
+    allowForce: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const v = argv[i];
@@ -53,6 +56,7 @@ function parseArgs(argv) {
     else if (v === "--speed") a.speed = Math.max(0.1, Number(next()) || 1);
     else if (v === "--medals") a.medals = true;
     else if (v === "--no-medals") a.medals = false;
+    else if (v === "--allow-force") a.allowForce = true;
     else if (v === "--no-subscribe") a.subscribe = false;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--help" || v === "-h") { printHelp(); process.exit(0); }
@@ -71,6 +75,8 @@ function printHelp() {
   --mock <file>     擬似イベント JSONL を流す (Twitch に繋がない)
   --speed <n>       --mock の再生倍率     (既定 1 = 1.5 秒に 1 件)
   --no-medals       メダルの投入をしない (段階1 の演出だけの挙動に戻す)
+  --allow-force     強制フラグ (イベント用のやらせ) を送れるようにする。既定は無効。
+                    主制御側にも --allow-force が要る (両方に付けないと効かない)
   --no-subscribe    購読登録をしない      (モックサーバー向け)
   --dry-run         中継へ送らずログだけ出す`);
 }
@@ -114,6 +120,8 @@ const DEFAULT_GUARD = {
   chatMedalsPerMinute: 10,
   enshutsuMinIntervalMs: 1500,
   modOnlyInputs: [],
+  mods: [],            // モデレータの login 名。チャット以外 (チャンネルポイントなど) は
+                       // バッジが付いてこないので、ここに書いた名前で判定する
   ignoreUsers: [],
   chatHype: { windowSec: 60, threshold: 30, boost: 1 },
 };
@@ -132,6 +140,8 @@ function loadRules(file) {
   const guard = { ...DEFAULT_GUARD, ...(raw.guard || {}) };
   guard.chatHype = { ...DEFAULT_GUARD.chatHype, ...(raw.guard && raw.guard.chatHype) };
   guard.ignoreUsers = (guard.ignoreUsers || []).map((s) => String(s).toLowerCase());
+  guard.mods = (guard.mods || []).map((s) => String(s).toLowerCase());
+  guard.modOnlyInputs = guard.modOnlyInputs || [];
   return { enabled: raw.enabled !== false, guard, rules: raw.rules };
 }
 
@@ -518,6 +528,88 @@ function countChat(rule, ev, ctx) {
   log(`[チャット] ${chatCounter.goal}コメント達成 → ${medals}枚 (${c.label || ""})`);
 }
 
+// ---------------------------------------------------------------------------
+// 押し順投票 / 遊技者の操作
+// ---------------------------------------------------------------------------
+// チャット以外 (チャンネルポイントなど) にはバッジが付いてこないので、
+// guard.mods に書いた login 名でモデレータ判定する。
+function isMod(ev) {
+  if (ev.user && ev.user.isMod) return true;
+  const login = ev.user && ev.user.login;
+  return !!(login && rules.guard.mods.includes(login));
+}
+
+// 第一停止だけ投票で決める。残りの2択は運 (実機で「左から押す」と言うのと同じ)。
+const FIRST_REEL_ORDER = { "左": 0, "中": 2, "右": 4 };
+
+const vote = { open: false, tally: new Map(), voters: new Set(), timer: null };
+
+function castVote(rule, ev, ctx) {
+  const m = new RegExp(rule.when.match).exec(ev.text || "");
+  const key = m && m[1];
+  if (!key || FIRST_REEL_ORDER[key] == null) return;
+  const sec = Number(rule.vote.windowSec) || 3;
+  if (!vote.open) {
+    vote.open = true;
+    vote.tally.clear();
+    vote.voters.clear();
+    clearTimeout(vote.timer);
+    vote.timer = setTimeout(() => closeVote(ctx), sec * 1000);
+    log(`[押し順] 投票を開始しました (${sec}秒)`);
+  }
+  const login = ev.user && ev.user.login;
+  if (login && vote.voters.has(login)) return;     // 1人1票
+  if (login) vote.voters.add(login);
+  vote.tally.set(key, (vote.tally.get(key) || 0) + 1);
+}
+
+function closeVote(ctx) {
+  vote.open = false;
+  const top = [...vote.tally.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (!top) return;
+  const order = FIRST_REEL_ORDER[top[0]] + Math.floor(Math.random() * 2);
+  ctx.relay.send({ action: "playerInput", input: "stopOrder", order });
+  const detail = [...vote.tally.entries()].map(([k, n]) => `${k}${n}`).join(" ");
+  log(`[押し順] ${top[0]}第一停止 に決まりました (${detail}) → 押し順${order + 1}`);
+}
+
+// powerCycle / pause / resume。抽選には触らない。
+function applyInput(rule, ev, ctx) {
+  const inp = rule.input;
+  const needsMod = rule.requires === "mod" || rules.guard.modOnlyInputs.includes(inp);
+  if (needsMod && !isMod(ev)) {
+    log(`[操作] ${rule.name || inp}: モデレータ限定なので無視しました (${ev.user && ev.user.name})`);
+    return;
+  }
+  if (inp === "powerCycle") {
+    // クレジット制は設定3以上だと下皿が増え続けて止まらなくなるので、既定は 1〜2 から選ぶ
+    const choices = Array.isArray(rule.settingChoices) && rule.settingChoices.length
+      ? rule.settingChoices : [1, 2];
+    const setting = choices[Math.floor(Math.random() * choices.length)];
+    ctx.relay.send({ action: "playerInput", input: "powerCycle", setting });
+    log("[操作] 設定変更 (打ち直し) を送りました");
+  } else if (inp === "pause" || inp === "resume") {
+    ctx.relay.send({ action: "playerInput", input: inp });
+    log(`[操作] ${inp} を送りました`);
+  } else {
+    log(`[操作] 未対応の input: ${inp}`);
+  }
+}
+
+// 強制フラグ (Tier 3)。ブリッジと主制御の両方に --allow-force が要る。
+function applyForce(rule, ev, ctx) {
+  if (!args.allowForce) {
+    log(`[強制] ${rule.name || "force"} は無効です (--allow-force が要ります)`);
+    return;
+  }
+  if (!isMod(ev)) {
+    log(`[強制] ${rule.name || "force"}: モデレータ限定なので無視しました`);
+    return;
+  }
+  ctx.relay.send({ action: "playerInput", input: "forceFlag", flag: rule.force.flag });
+  log(`[強制] 次ゲームを ${rule.force.flag} に指定しました (演出)`);
+}
+
 function handleEvent(ev, ctx) {
   if (!rules.enabled) return;
   if (ev.user && ev.user.login && rules.guard.ignoreUsers.includes(ev.user.login)) return;
@@ -542,7 +634,9 @@ function handleEvent(ev, ctx) {
     if (ev.user.login) seenChatters.add(ev.user.login);
   }
 
-  const hit = rules.rules.filter((r) => matches(r.when, ev));
+  // enabled:false のルールは無効。出玉に影響する遊びは既定で切っておき、
+  // 使いたくなったら rules.json で true にする。
+  const hit = rules.rules.filter((r) => r.enabled !== false && matches(r.when, ev));
   if (!hit.length) return;
 
   // 演出は最初に一致したルールのぶんだけ (バナーが二重に出るのを防ぐ)。
@@ -574,6 +668,9 @@ function handleEvent(ev, ctx) {
         }
       }
       if (r.counter && ev.kind === "chat") countChat(r, ev, ctx);
+      if (r.vote && ev.kind === "chat") castVote(r, ev, ctx);
+      if (r.input) applyInput(r, ev, ctx);
+      if (r.force) applyForce(r, ev, ctx);
     }
   }
 
@@ -620,6 +717,7 @@ async function main() {
   ctx.queue = queue;
   ctx.medals = medals;
   log(args.medals ? "[起動] メダル投入: 有効" : "[起動] メダル投入: 無効 (--no-medals)");
+  if (args.allowForce) log("[警告] 強制フラグを許可しています (主制御側にも --allow-force が要ります)");
 
   // 生存と状態を 1 秒周期で流す。コンパネのランプとオーバーレイ HUD がこれを見る。
   let esConnected = false;

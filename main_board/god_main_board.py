@@ -219,6 +219,16 @@ class MainBoard:
     reserve: int = 0           # 下皿（上限 RESERVE_MAX）
     bank: int = 0              # 下皿から溢れた分。次回配信へ持ち越す
     paused: bool = False       # 外部からの一時停止
+    # 遊技者が選んだ次ゲームの押し順（0-5）。使ったら消す。
+    #   0,1 = 左第一停止 / 2,3 = 中第一停止 / 4,5 = 右第一停止
+    #   AT中にこれが入っていると、主制御が出したナビを無視して押すことになる（損をする）。
+    next_order: "int | None" = None
+    # イベント用の強制フラグ。--allow-force を付けたときだけ効く（既定は無効）。
+    #   通常の抽選とは別経路にし、使った回数を forced_games に必ず残す。
+    #   混ぜると設定判別としての意味が消えるため、集計から切り分けられるようにしておく。
+    allow_force: bool = False
+    next_flag: "str | None" = None
+    forced_games: int = 0
     # 「いま消化しているメダルは誰が入れたか」。表示用の付帯情報でしかなく、
     # 抽選にも状態遷移にも一切関与しない。2バイトコマンド（副制御）には出さない。
     credit_src: deque = field(default_factory=deque)   # [[出所, 残り枚数], ...]
@@ -335,6 +345,16 @@ class MainBoard:
 
     # -- [3] 内部抽選 ------------------------------------------------------
     def lottery(self) -> str:
+        # 強制フラグ（イベント用）。--allow-force を付けていないときは無視する。
+        if self.next_flag is not None:
+            forced, self.next_flag = self.next_flag, None
+            if self.allow_force and forced in FLAG_ID:
+                self.flag = forced
+                self.forced_games += 1
+                if self.flag == "押順ベル":
+                    self.bell_answer = self.get_random() % 6
+                self.send(CMD_FLAG, FLAG_ID[self.flag])
+                return self.flag
         r = self.get_random()
         acc = 0
         idx = self.setting - 1
@@ -513,14 +533,21 @@ class MainBoard:
     def play(self) -> dict | None:
         if not self.bet():
             return None            # クレジット不足。ゲームを始めない（待機）
+        forced_before = self.forced_games
         self.lottery()
         push = self.spin_start()
         # AT中は押し順ナビ（主制御が正解を指示）、通常時は遊技者のランダム押し
         navi = self.state != ST_NORMAL and self.flag == "押順ベル"
         self.send(CMD_NAVI, self.bell_answer if navi else 0xFF)
-        order = self.bell_answer if self.state != ST_NORMAL else self.get_random() % 6
+        # 押し順: 遊技者の指定があればそれを使う（AT中でもナビを無視できる＝損をする）。
+        # 指定が無ければ、AT中はナビ通り、通常時はランダム押し。
+        if self.next_order is not None:
+            order, self.next_order = self.next_order, None
+        else:
+            order = self.bell_answer if self.state != ST_NORMAL else self.get_random() % 6
         self.judge(push, order)
         pay = self.payout()
+        forced_this_game = self.forced_games != forced_before
         state_before = self.state
         self.update_state()
         self.send(CMD_GAME_END, self.game_count & 0xFF)
@@ -532,6 +559,8 @@ class MainBoard:
             "pay": pay,
             "diff": self.total_out - self.total_in,
             "notice": list(self.notice),
+            "order": order,
+            "forced": forced_this_game,
         }
         if self.panel is not None:
             self.panel.send_game(self, result)
@@ -969,6 +998,9 @@ class PanelLink:
             "reserve": b.reserve if b.credit_mode else None,
             "bank": b.bank if b.credit_mode else None,
             "by": b.last_src if b.credit_mode else None,
+            # 強制した回数。0 でない = 通常の抽選ではないゲームが混ざっている。
+            "forcedGames": b.forced_games or None,
+            "forced": r.get("forced") or None,
         })
         for note in r["notice"]:
             ev = next((e for key, e in PANEL_EVENT if note.startswith(key)), "info")
@@ -1024,7 +1056,8 @@ class PanelLink:
     def send_summary(self, b: MainBoard) -> None:
         self.ws.send({"action": "mainBoard", "type": "summary", "setting": b.setting,
                       "games": b.total_games, "diff": b.total_out - b.total_in,
-                      "totalIn": b.total_in, "totalOut": b.total_out})
+                      "totalIn": b.total_in, "totalOut": b.total_out,
+                      "forcedGames": b.forced_games})
 
     def close(self) -> None:
         self.ws.close()
@@ -1158,6 +1191,30 @@ def _apply_player_input(board: MainBoard, msg: dict) -> None:
               file=sys.stderr, flush=True)
         if board.panel is not None:
             board.panel.player_event(board, "insertMedal", note, src=src, medals=n, **got)
+    elif inp == "stopOrder":
+        try:
+            n = int(msg.get("order", -1))
+        except (TypeError, ValueError):
+            return
+        if 0 <= n <= 5:
+            board.next_order = n
+            print(f"[押し順] 次ゲームは押し順{n + 1}", file=sys.stderr, flush=True)
+            if board.panel is not None:
+                board.panel.player_event(board, "stopOrder", f"押し順{n + 1} を指定", order=n)
+    elif inp == "forceFlag":
+        # イベント用。--allow-force を付けていなければ何も起きない（既定は無効）。
+        flag = str(msg.get("flag", ""))
+        if flag not in FLAG_ID:
+            return
+        if not board.allow_force:
+            print(f"[強制] {flag} は無効です（--allow-force が必要）", file=sys.stderr, flush=True)
+            if board.panel is not None:
+                board.panel.player_event(board, "forceRejected", f"強制{flag}は無効（--allow-force なし）")
+            return
+        board.next_flag = flag
+        print(f"[強制] 次ゲームは {flag}（演出）", file=sys.stderr, flush=True)
+        if board.panel is not None:
+            board.panel.player_event(board, "forceFlag", f"次ゲームを {flag} に強制（演出）", flag=flag)
     elif inp == "pause":
         board.paused = True
         print("[停止] 遊技を一時停止しました", file=sys.stderr, flush=True)
@@ -1226,7 +1283,8 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
     finally:
         srv.close()
         d = board.total_out - board.total_in
-        print(f"停止: {board.total_games:,}G / 差枚 {d:+,}枚", file=sys.stderr)
+        forced = f" / うち強制 {board.forced_games}G" if board.forced_games else ""
+        print(f"停止: {board.total_games:,}G / 差枚 {d:+,}枚{forced}", file=sys.stderr)
         if board.credit_mode:
             # 下皿に残っているぶんも次回へ持ち越す（配信をまたいでも消えない）
             carry = board.bank + board.reserve + board.credit
@@ -1301,12 +1359,19 @@ def main() -> None:
                     help="配信開始時のクレジット（既定500枚 ≒ 427回転 ≒ 29分ぶん）")
     ap.add_argument("--no-bank", action="store_true",
                     help="前回配信からの貯金（.run/twitch_bank.json）を引き継がない")
+    ap.add_argument("--allow-force", action="store_true",
+                    help="外部からの強制フラグ（イベント用のやらせ）を許可する。既定は無効。"
+                         "使った回数は forced_games に残り、集計から切り分けられる")
     a = ap.parse_args()
 
     if a.sim:
         run_sim(a.setting, a.sim, a.games)
         return
     board = MainBoard(setting=a.setting, rng=random.Random(a.seed))
+    board.allow_force = a.allow_force
+    if a.allow_force:
+        print("[警告] 強制フラグを許可しています。通常の抽選ではないゲームが混ざります",
+              file=sys.stderr)
     if a.credit:
         # クレジット制。主制御は「メダルが入った」ことしか知らない（Twitch を知らない）。
         board.credit_mode = True
