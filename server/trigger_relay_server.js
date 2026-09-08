@@ -31,7 +31,8 @@
 //     "toggleSettings"                               … 設定パネルの開閉
 //     "reelIn" / "reelOut" / "reelToggle"            … リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切替
 //     "subEvent" (event: {...})                      … 副制御の演出イベントをオーバーレイへ直接流す(確認用)
-//                                                      例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
+//                                                      例: {"action":"subEvent","event":{"type":"banner"}}
+//                                                          画像差し替えつき: {"type":"banner","images":{"main":"02.png"}}
 //     "playAuthoring" (id: "...")                    … 予告オーサリングのシーンを1回再生する
 //                                                      例: {"action":"playAuthoring","id":"akatsu"}
 //

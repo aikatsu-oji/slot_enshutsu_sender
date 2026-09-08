@@ -10,12 +10,14 @@
 //       name: "激アツ予告",
 //       version: 1,
 //       duration: 3.0,             // 全体の長さ(秒)
-//       bind: { event:"banner", rank:"赤" } | null,   // どの副制御イベントで自動再生するか
+//       bind: { event:"banner", trigger:"lever" } | null,   // どの副制御イベントで自動再生するか
 //       tracks: [ クリップ, ... ]  // 配列の順に重なる (後ろほど手前)
 //     }
 //
 //   クリップ (1つの素材の出し入れ):
-//     { id, name, type:"text|image|video|shape|sound", src:"assets/xx.png", text:"激アツ",
+//     { id, name, type:"text|image|video|shape|sound|scene", src:"assets/xx.png", text:"激アツ",
+//       slot:"main",                          // 差し替え名。副制御が images:{main:"..."} を送ってきたらその素材に化ける
+//       (type:"scene" は「その時刻から別の予告を再生する」呼び出しクリップ。src に呼ぶシーンの id を入れる)
 //       start:0, dur:1.5,                     // シーン先頭からの開始秒と長さ
 //       x:50, y:50, w:40, h:16,               // 中心座標と大きさ (ステージに対する %)
 //       opacity:1, scale:1, rot:0,            // 見た目 (rot は度)
@@ -31,7 +33,8 @@
   "use strict";
 
   const VERSION = 1;
-  const CLIP_TYPES = ["text", "image", "video", "shape", "sound"];
+  const CLIP_TYPES = ["text", "image", "video", "shape", "sound", "scene"];
+  const MEDIA_TYPES = ["image", "video", "sound"];   // 差し替え(slot)が効くのはこの3つ
   const VIDEO_EXT = [".mp4", ".webm", ".mov", ".m4v"];
   const SOUND_EXT = [".mp3", ".wav", ".ogg", ".m4a"];
   const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"];
@@ -60,7 +63,7 @@
   const ANIM_PROPS = ["x", "y", "w", "h", "opacity", "scale", "rot"];
 
   const CLIP_DEFAULT = {
-    id: "", name: "", type: "text", src: "", text: "",
+    id: "", name: "", type: "text", src: "", text: "", slot: "",
     start: 0, dur: 1.0,
     x: 50, y: 50, w: 60, h: 18,
     opacity: 1, scale: 1, rot: 0,
@@ -98,6 +101,7 @@
     c.id = String(c.id || newId("c"));
     c.type = CLIP_TYPES.includes(c.type) ? c.type : "text";
     c.src = String(c.src || "");
+    c.slot = String(c.slot || "");
     c.text = String(c.text == null ? "" : c.text);
     c.start = Math.max(0, num(c.start, 0));
     c.dur = Math.max(0.02, num(c.dur, 1));
@@ -137,12 +141,11 @@
     return s;
   }
 
-  // 自動再生の割り当て。event は "banner"(予告バナーの代わり) / "freeze" / "gg_start" など副制御イベントの type。
-  // banner のときは rank ("白/青/緑/赤/金") まで一致したシーンが選ばれる。trigger は任意 (lever / stop1..3)
+  // 自動再生の割り当て。event は "banner" / "freeze" / "gg_start" など副制御イベントの type。
+  // trigger は任意で、banner のときだけ意味を持つ (lever / stop1 / stop2 / stop3)
   function normalizeBind(raw) {
     if (!raw || typeof raw !== "object" || !raw.event) return null;
     const b = { event: String(raw.event) };
-    if (raw.rank) b.rank = String(raw.rank);
     if (raw.trigger) b.trigger = String(raw.trigger);
     return b;
   }
@@ -221,7 +224,8 @@
        base   … src の前に付ける URL (既定 "yokoku/authoring/")
        volume … 音量の親玉 (0〜1)。クリップの volume に掛ける
        speed  … 再生速度を返す関数 (オーバーレイのスロー再生 speedFactor をそのまま渡す)
-       silent … true ならスクラブ中 (seek / renderAt) は鳴らさない。再生 (play) 中は鳴る。エディタ用 */
+       silent … true ならスクラブ中 (seek / renderAt) は鳴らさない。再生 (play) 中は鳴る。エディタ用
+       playScene … type:"scene" のクリップが来たときに呼ばれる (id, clip) => any。別の予告を再生する側の担当 */
   function ScenePlayer(root, opts) {
     const o = opts || {};
     this.root = root;
@@ -229,6 +233,8 @@
     this.getVolume = typeof o.volume === "function" ? o.volume : () => num(o.volume, 1);
     this.getSpeed = typeof o.speed === "function" ? o.speed : () => num(o.speed, 1);
     this.silent = !!o.silent;
+    this.playScene = typeof o.playScene === "function" ? o.playScene : null;
+    this.overrides = {};      // 差し替え名 → 素材。副制御の指示で clip.src の代わりに使う
     this.scene = null;
     this.entries = [];        // { clip, el, media }
     this.time = 0;
@@ -267,11 +273,20 @@
     return this.base + s.split("/").map(encodeURIComponent).join("/");
   };
 
-  // シーンを DOM へ組み立てる。再生位置は 0 に戻る
-  ScenePlayer.prototype.load = function (scene) {
+  // クリップが実際に使う素材の URL。副制御から差し替え(slot)の指示が来ていればそちらを使い、
+  // 指示が無ければクリップに設定された既定の素材をそのまま使う
+  ScenePlayer.prototype.srcOf = function (clip) {
+    const over = clip.slot && this.overrides[clip.slot];
+    return this.assetUrl(over ? normalizeAssetRef(over) : clip.src);
+  };
+
+  // シーンを DOM へ組み立てる。再生位置は 0 に戻る。
+  // opts.overrides に { 差し替え名: 素材 } を渡すと、その slot を持つクリップの素材が入れ替わる
+  ScenePlayer.prototype.load = function (scene, opts) {
     this.stopMedia();
     this.stage.textContent = "";
     this.entries = [];
+    this.overrides = (opts && opts.overrides && typeof opts.overrides === "object") ? { ...opts.overrides } : {};
     this.scene = normalizeScene(scene);
     const doc = this.root.ownerDocument;
     for (const clip of this.scene.tracks) {
@@ -284,22 +299,19 @@
       } else if (clip.type === "image") {
         media = doc.createElement("img");
         media.alt = "";
-        if (clip.src) media.src = this.assetUrl(clip.src);
+        const url = this.srcOf(clip);
+        if (url) media.src = url;
         el.appendChild(media);
-      } else if (clip.type === "video") {
-        media = doc.createElement("video");
-        media.playsInline = true;
+      } else if (clip.type === "video" || clip.type === "sound") {
+        media = doc.createElement(clip.type === "video" ? "video" : "audio");
+        if (clip.type === "video") media.playsInline = true;
         media.preload = "auto";
         media.loop = !!clip.loop;
-        if (clip.src) media.src = this.assetUrl(clip.src);
-        el.appendChild(media);
-      } else if (clip.type === "sound") {
-        media = doc.createElement("audio");
-        media.preload = "auto";
-        media.loop = !!clip.loop;
-        if (clip.src) media.src = this.assetUrl(clip.src);
+        const url = this.srcOf(clip);
+        if (url) media.src = url;
         el.appendChild(media);
       }
+      // type:"scene" (別の予告の呼び出し) は絵を持たない。時刻が来たら playScene を呼ぶだけ
       this.stage.appendChild(el);
       this.entries.push({ clip, el, media, fired: false });
       this.applyStatic(this.entries[this.entries.length - 1]);
@@ -331,7 +343,7 @@
       s.background = c.bg || c.color || "#ffffff";
       s.border = c.strokeW > 0 ? `calc(var(--yk-h) * ${c.strokeW / 100}) solid ${c.stroke || "#000"}` : "";
       s.boxShadow = c.shadow > 0 ? `0 0 calc(var(--yk-h) * ${0.02 * c.shadow}) rgba(0,0,0,${0.5 * c.shadow})` : "";
-    } else if (c.type === "sound") {
+    } else if (c.type === "sound" || c.type === "scene") {
       s.display = "none";
     }
     if (entry.media && (c.type === "image" || c.type === "video")) {
@@ -357,6 +369,16 @@
         if (entry.el.style.display !== "none") entry.el.style.display = "none";
         if (entry.media && entry.media.pause && !entry.media.paused) entry.media.pause();
         if (local < 0) entry.fired = false;   // 巻き戻したら次の通過でまた鳴らす
+        continue;
+      }
+      // 別の予告の呼び出し。再生中に時刻を通過した1回だけ発火する (スクラブでは呼ばない)
+      if (c.type === "scene") {
+        if (live && !entry.fired) {
+          entry.fired = true;
+          if (this.playScene) {
+            try { this.playScene(c.src, c); } catch (e) { console.log("[予告オーサリング] 呼び出しに失敗:", e); }
+          }
+        }
         continue;
       }
       const p = propsAt(c, local);
@@ -513,18 +535,40 @@
     for (const s of scenes) {
       const b = s && s.bind;
       if (!b || b.event !== kind) continue;
-      if (b.rank && String(b.rank) !== String(ev.rank || "")) continue;
       if (b.trigger && String(b.trigger) !== String(trigger)) continue;
-      const score = (b.rank ? 2 : 0) + (b.trigger ? 1 : 0);   // 条件が細かいものを優先する
+      const score = b.trigger ? 1 : 0;   // タイミングまで指定したものを優先する
       if (score > bestScore) { best = s; bestScore = score; }
     }
     return best;
   }
 
+  /* 副制御から届いたイベントの「画像差し替え」指定を取り出す。
+       { images: { main:"01.png", sub:"assets/02.png" } }  … 差し替え名ごとに指定
+       { image: "01.png" }                                 … 差し替え名 "main" への指定と同じ
+     指定が無ければ空。クリップは自分の slot が入っていなければ既定の素材のまま再生される。 */
+  function overridesFromEvent(ev) {
+    const out = {};
+    if (!ev || typeof ev !== "object") return out;
+    if (typeof ev.image === "string" && ev.image) out.main = ev.image;
+    if (ev.images && typeof ev.images === "object") {
+      for (const [k, v] of Object.entries(ev.images)) if (typeof v === "string" && v) out[String(k)] = v;
+    }
+    return out;
+  }
+
+  // 素材の指定を assets/ 基準に直す。フォルダ区切りや http/data で始まるものはそのまま
+  function normalizeAssetRef(ref) {
+    const s = String(ref || "");
+    if (!s) return "";
+    if (/^(https?:|data:|blob:|\/)/.test(s) || s.includes("/")) return s;
+    return "assets/" + s;
+  }
+
   root.YokokuAuthoring = {
     VERSION, CLIP_TYPES, EASINGS, ANIM_PROPS, CLIP_DEFAULT, SCENE_DEFAULT,
-    VIDEO_EXT, SOUND_EXT, IMAGE_EXT,
+    VIDEO_EXT, SOUND_EXT, IMAGE_EXT, MEDIA_TYPES,
     ScenePlayer, normalizeScene, normalizeClip, normalizeBind,
     blankScene, blankClip, guessType, matchScene, valueAt, propsAt, newId,
+    overridesFromEvent, normalizeAssetRef,
   };
 })(typeof globalThis !== "undefined" ? globalThis : window);

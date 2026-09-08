@@ -83,7 +83,8 @@ slot_enshutsu_sender/
 scripts\dev.cmd start [-Mode normal|fast|tenjo|manual|none]   # 中継サーバー + 主制御をバックグラウンド起動
 scripts\dev.cmd status                                 # ポート・health・PID を表示 (exit 0 = サーバー稼働中)
 scripts\dev.cmd test                                   # 主制御 2000G / 副制御 300 イベント / JS 構文チェック
-scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","rank":"赤"}}'   # 副制御イベントをオーバーレイへ直送
+scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","trigger":"lever"}}'   # 副制御イベントをオーバーレイへ直送
+scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","images":{"main":"02.png"}}}'   # 画像差し替えつき
 scripts\dev.cmd send reelIn                          # リールユニットを液晶(オーバーレイ)内に入れる (reelOut / reelToggle も可)
 scripts\dev.cmd send ramclear                        # ラムクリア (主制御のRAMを初期化。コンパネの🧹ボタンと同じ)
 scripts\dev.cmd send lever                           # -Mode manual の主制御を1ゲーム進める (レバーON)
@@ -179,7 +180,8 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   編集はそのページで完結し、コンパネ側はシーンの再生 (操作タブ) だけを持つ。
   データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの `assets/`。
   形は `authoring_player.js` の先頭コメントが唯一の定義 (シーン = クリップの配列、クリップ =
-  種類/素材/開始・長さ/位置・大きさ/キーフレーム)。**座標・大きさ・文字サイズはすべてステージ比の %** で持つ
+  種類/素材/開始・長さ/位置・大きさ/キーフレーム)。**ランクの概念は持たない** (割り当ては event と
+  trigger だけ。強弱の出し分けは下の画像差し替えか、シーンを分けて trigger で選ぶ)。**座標・大きさ・文字サイズはすべてステージ比の %** で持つ
   (px 固定にしない。OBS の解像度に依存させないため)。
   - 再生は `ScenePlayer` (`load` → `play` / `seek`)。`renderAt(t)` が「時刻 t の姿」を作る純粋な描画で、
     エディタのスクラブと本番再生は同じ経路を通る。**進行は rAF + 100ms のタイマーの二本立て**。
@@ -192,6 +194,12 @@ npm test / npm run check / npm start                   # 同等の npm scripts
     (`playMedia`)。ブラウザ単体で開いた窓は一度クリックするまで音が出ないことがあるため、
     setup.bat と dev.ps1 は `--autoplay-policy=no-user-gesture-required` を付けて開く。
     音量はクリップの `volume` × 親玉 (オーバーレイは設定の音量、エディタは音量スライダ)。
+  - 画像差し替え: クリップの `slot` (差し替え名) と、イベントの `images:{ slot: 素材 }` / `image:"素材"` (= slot "main") で、
+    そのクリップの素材だけを入れ替えて再生する (`ScenePlayer.srcOf`)。指示が無ければクリップの既定の素材で再生する。
+    素材名にフォルダ区切りが無ければ `assets/` の下として扱う (`normalizeAssetRef`)。
+  - 別の予告の呼び出し: 種類 `scene` のクリップ。再生中にその時刻を通過した1回だけ `playScene(id)` を呼ぶ
+    (スクラブでは呼ばない)。オーバーレイは同じ `#authoring-layer` に重ねて再生し、差し替えの指示も引き継ぐ。
+    互いに呼び合っても止まるよう深さ4段まで。
   - `handleSubEvent` は「届いたイベントに割り当て (`bind`) があればそのシーンを流す」だけ。割り当てが無ければ何も出ない。
     `stop` は `stopTiming1..3` まで待たせ、`freeze`/`gg_start`/`at_end` は直列キューへ積む (重ならないように)。
     設定パネル「オーサリング」タブのチェックを外すと割り当てを無視する (何も出なくなる)。

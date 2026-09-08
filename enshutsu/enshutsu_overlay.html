@@ -253,6 +253,8 @@
         演出はすべて予告オーサリング(enshutsu/authoring_editor.html)で作ったシーンです。ボタンを押すとその場で1回再生します。<br><br>
         シーンに「割り当て」を設定しておくと、副制御からそのイベント(予告バナー・ナビ・フリーズ・GG突入・AT終了など)が
         届いたときに自動で再生されます。上のチェックを外すと、割り当てを無視して何も出さなくなります。<br><br>
+        副制御が <code>images</code>(または <code>image</code>) を付けて送ってきた場合は、その差し替え名を持つクリップの素材が
+        入れ替わります。指示が無ければシーンに設定した既定の素材で再生します。<br><br>
         データは enshutsu/yokoku/authoring/&lt;id&gt;.json、素材は同フォルダの assets/ です。エディタで保存すると自動で読み直します。
       </div>
       <div class="hr"></div>
@@ -568,10 +570,14 @@
   }
   window.reloadAuthoring = loadAuthoringScenes;
 
-  // シーンを1回再生する。重ねて呼ばれても互いを壊さないよう、再生ごとに専用の箱と再生機を作る
-  function playAuthoringScene(scene){
+  /* シーンを1回再生する。重ねて呼ばれても互いを壊さないよう、再生ごとに専用の箱と再生機を作る。
+       overrides … 副制御が指示してきた画像差し替え ({ 差し替え名: 素材 })。指示が無ければ既定の素材で再生する
+       depth     … 「別の予告の呼び出し」で入れ子になった深さ (シーンが互いを呼び合っても止まるように) */
+  const AUTHORING_MAX_DEPTH = 4;
+  function playAuthoringScene(scene, overrides, depth){
     if(!YA || !scene) return Promise.resolve();
     if(authoringPlaying >= AUTHORING_MAX_CONCURRENT) return Promise.resolve();
+    const level = Number(depth) || 0;
     authoringPlaying++;
     const box = document.createElement("div");
     box.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
@@ -580,8 +586,15 @@
       base: AUTHORING_BASE,
       volume: ()=> Number(settings.sfxVolume),
       speed: ()=> speedFactor,
+      // シーンの途中に置いた「予告呼び出し」クリップ。差し替えの指示は呼ばれた先にも引き継ぐ
+      playScene: (id)=>{
+        if(level + 1 > AUTHORING_MAX_DEPTH){ console.log("[予告オーサリング] 呼び出しが深すぎます:", id); return; }
+        const next = findAuthoringScene(id);
+        if(!next){ console.log("[予告オーサリング] 呼び出し先が見つかりません:", id); return; }
+        playAuthoringScene(next, overrides, level + 1);
+      },
     });
-    p.load(scene);
+    p.load(scene, { overrides });
     return p.play(0).then(()=>{
       p.destroy();
       if(box.parentNode) box.parentNode.removeChild(box);
@@ -617,7 +630,7 @@
     for(const sc of authoringScenes){
       const b = document.createElement("button");
       b.className = "action";
-      b.textContent = `▶ ${sc.name}` + (sc.bind ? ` [${sc.bind.rank || sc.bind.event}]` : "");
+      b.textContent = `▶ ${sc.name}` + (sc.bind ? ` [${sc.bind.event}${sc.bind.trigger ? "/" + sc.bind.trigger : ""}]` : "");
       b.addEventListener("click", ()=> playAuthoringScene(sc));
       box.appendChild(b);
     }
@@ -665,7 +678,8 @@
     const scene = boundAuthoringScene({ type:"stop", n, rank: ev.rank, trigger: ev.trigger });
     if(!scene) return;
     const at = leverAt + Number(settings["stopTiming" + n]) * 1000;
-    stopTimers.push(setTimeout(()=> playAuthoringScene(scene), Math.max(0, at - performance.now())));
+    const overrides = YA.overridesFromEvent(ev);
+    stopTimers.push(setTimeout(()=> playAuthoringScene(scene, overrides), Math.max(0, at - performance.now())));
   }
 
   /* 直列キュー。フリーズ・GG突入・AT終了は重ならないよう順番に再生する
@@ -696,10 +710,12 @@
       if(ev.type === "authoring") console.log("[予告オーサリング] シーンが見つかりません:", ev.id);
       return;                          // 割り当てが無ければ何も出さない
     }
+    // 副制御が画像差し替えを指示してきていれば渡す (指示が無ければシーンの既定の素材で再生される)
+    const overrides = YA.overridesFromEvent(ev);
     // 大きい演出は順番待ちにし、それ以外(バナー相当)は即時。
     // 大きい演出の再生中に届いた軽い演出も、被らないよう後ろに並べる
-    if(MAJOR_EVENTS.has(ev.type) || majorPending > 0) enqueueMajor(()=> playAuthoringScene(scene));
-    else playAuthoringScene(scene);
+    if(MAJOR_EVENTS.has(ev.type) || majorPending > 0) enqueueMajor(()=> playAuthoringScene(scene, overrides));
+    else playAuthoringScene(scene, overrides);
   }
   // 外部(コンソールや別スクリプト)からも同じ経路で演出を呼べるようにする
   window.handleSubEvent = handleSubEvent;

@@ -80,7 +80,8 @@
   .tl-row.sel .tl-bar{background:#4a3c1c;border-color:var(--frame);}
   .tl-bar .grip{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.14);}
   .tl-bar .grip.l{left:0;right:auto;}
-  .tl-bar .key{position:absolute;top:50%;width:7px;height:7px;margin:-4px 0 0 -4px;background:var(--frame-bright);transform:rotate(45deg);pointer-events:none;}
+  .tl-bar .key{position:absolute;top:50%;width:9px;height:9px;margin:-5px 0 0 -5px;background:var(--frame-bright);transform:rotate(45deg);cursor:pointer;}
+  .tl-bar .key:hover{background:#fff;box-shadow:0 0 4px var(--frame-bright);}
   .tl-play{position:absolute;top:0;bottom:0;width:1px;background:#ff5252;pointer-events:none;z-index:5;}
   .tl-play::before{content:"";position:absolute;left:-4px;top:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid #ff5252;}
 
@@ -145,11 +146,6 @@
           <option value="gg_start">GG突入</option>
           <option value="at_end">AT終了</option>
         </select>
-        <label for="sc-rank">ランク</label>
-        <select id="sc-rank">
-          <option value="">(すべて)</option>
-          <option>白</option><option>青</option><option>緑</option><option>赤</option><option>金</option>
-        </select>
         <label for="sc-trig">タイミング</label>
         <select id="sc-trig">
           <option value="">(すべて)</option>
@@ -202,6 +198,7 @@
         <button class="sm" data-add="image">画像</button>
         <button class="sm" data-add="video">動画</button>
         <button class="sm" data-add="sound">音</button>
+        <button class="sm" data-add="scene">予告呼出</button>
       </div>
       <div class="tl-body">
         <div class="tl-ruler" id="tl-ruler"></div>
@@ -243,7 +240,9 @@
         </select>
       </div>
       <table class="keys" id="key-table"></table>
-      <div class="note">空欄のプロパティは動かしません (クリップの基本値のまま)。t はクリップ先頭からの秒。</div>
+      <div class="note">空欄のプロパティは動かしません (クリップの基本値のまま)。t はクリップ先頭からの秒。<br>
+        行を選ぶ (どこかにフォーカスする) か、タイムラインの<b>菱形</b>を押すと、そのキーの時刻へ移動してプレビューがその姿になります。
+        その状態で画面上をドラッグすると、そのキーだけを動かせます。</div>
     </div>
   </div>
 </main>
@@ -277,7 +276,36 @@
     base: "yokoku/authoring/",
     silent: true,                                   // スクラブ中は鳴らさない (再生ボタンのときは鳴る)
     volume: ()=> Number(el("volume").value),
+    playScene: (id)=> previewScene(id, 1),          // 「予告呼出」クリップ
   });
+
+  /* 「予告呼出」クリップのプレビュー。呼ばれた先のシーンをプレビューに重ねて再生する。
+     再生されるのは保存済みの内容 (サーバーから読んだもの) なので、呼び出し先を直したら保存してから確かめる。 */
+  const PREVIEW_MAX_DEPTH = 4;
+  const previewPlayers = new Set();
+  function previewScene(id, depth){
+    if(depth > PREVIEW_MAX_DEPTH){ setStatus("予告の呼び出しが深すぎます", "ng"); return; }
+    const target = scenes.find(sc=> sc.id === id);
+    if(!target){ setStatus(`呼び出し先の予告が見つかりません: ${id || "(未指定)"}`, "ng"); return; }
+    const box = document.createElement("div");
+    box.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
+    el("stage").appendChild(box);
+    const p = new YA.ScenePlayer(box, {
+      base: "yokoku/authoring/",
+      volume: ()=> Number(el("volume").value),
+      playScene: (next)=> previewScene(next, depth + 1),
+    });
+    previewPlayers.add(p);
+    p.load(target);
+    p.play(0).then(()=>{
+      previewPlayers.delete(p);
+      p.destroy();
+      if(box.parentNode) box.parentNode.removeChild(box);
+    });
+  }
+  function stopPreviewScenes(){
+    for(const p of [...previewPlayers]) p.stop();   // stop で Promise が解けて後片付けまで走る
+  }
 
   function setStatus(text, cls){
     const s = el("status");
@@ -380,12 +408,11 @@
     el("sc-name").value = on ? scene.name : "";
     el("sc-dur").value = on ? scene.duration : "";
     el("sc-ev").value = on && scene.bind ? scene.bind.event : "";
-    el("sc-rank").value = on && scene.bind ? (scene.bind.rank || "") : "";
     el("sc-trig").value = on && scene.bind ? (scene.bind.trigger || "") : "";
-    for(const id of ["sc-name","sc-dur","sc-ev","sc-rank","sc-trig","btn-save","btn-dup","btn-del","btn-send","btn-play","btn-stop"]) el(id).disabled = !on;
+    for(const id of ["sc-name","sc-dur","sc-ev","sc-trig","btn-save","btn-dup","btn-del","btn-send","btn-play","btn-stop"]) el(id).disabled = !on;
   }
 
-  const TYPE_LABEL = { text:"文字", shape:"図形", image:"画像", video:"動画", sound:"音" };
+  const TYPE_LABEL = { text:"文字", shape:"図形", image:"画像", video:"動画", sound:"音", scene:"予告呼出" };
 
   function renderClipList(){
     const box = el("clip-list");
@@ -433,12 +460,14 @@
       const gl = document.createElement("span"); gl.className = "grip l"; gl.dataset.grip = "l";
       const gr = document.createElement("span"); gr.className = "grip"; gr.dataset.grip = "r";
       bar.appendChild(gl); bar.appendChild(gr);
-      for(const k of c.keys){
+      c.keys.forEach((k, ki)=>{
         const kd = document.createElement("span");
         kd.className = "key";
         kd.style.left = (clamp(k.t / c.dur, 0, 1) * 100) + "%";
+        kd.dataset.key = String(ki);
+        kd.title = `キー ${k.t.toFixed(2)}s (クリックでここへ移動)`;
         bar.appendChild(kd);
-      }
+      });
       row.appendChild(bar);
       rows.appendChild(row);
     }
@@ -451,6 +480,9 @@
     { k:"start", l:"開始(秒)",   t:"num", min:0, max:60, step:0.05, for:"*" },
     { k:"dur",   l:"長さ(秒)",   t:"num", min:0.05, max:60, step:0.05, for:"*" },
     { k:"src",   l:"素材",       t:"asset", for:"image video sound", structural:true },
+    { k:"src",   l:"呼び出す予告", t:"sceneref", for:"scene", structural:true },
+    { k:"slot",  l:"差し替え名",   t:"text", for:"image video sound", structural:true,
+      hint:"副制御が images:{ この名前:\"素材\" } を送ってきたら、その素材に差し替えて再生します (指示が無ければ上の素材のまま)" },
     { k:"text",  l:"文字",       t:"area",  for:"text" },
     { k:"x",     l:"X(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
     { k:"y",     l:"Y(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
@@ -532,6 +564,18 @@
         wrap.appendChild(input); wrap.appendChild(txt);
         box.appendChild(lab); box.appendChild(wrap);
         continue;
+      }else if(f.t === "sceneref"){
+        input = document.createElement("select");
+        const none = document.createElement("option"); none.value = ""; none.textContent = "(なし)"; input.appendChild(none);
+        for(const sc of scenes){
+          if(scene && sc.id === scene.id) continue;   // 自分自身は呼べない
+          const o = document.createElement("option"); o.value = sc.id; o.textContent = `${sc.name} (${sc.id})`; input.appendChild(o);
+        }
+        if(c.src && !scenes.some(sc=> sc.id === c.src)){
+          const o = document.createElement("option"); o.value = c.src; o.textContent = c.src + " (不明)"; input.appendChild(o);
+        }
+        input.value = c.src;
+        input.addEventListener("change", ()=>{ c.src = input.value; markDirty(); apply(c, true); });
       }else if(f.t === "fit"){
         const wrap = document.createElement("span");
         wrap.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
@@ -569,6 +613,7 @@
           else apply(c, false);
         });
       }
+      if(f.hint){ lab.title = f.hint; input.title = f.hint; }
       box.appendChild(lab); box.appendChild(input);
     }
   }
@@ -646,7 +691,31 @@
     renderTimeline();
   }
 
-  /* ---- キーフレーム表 ---- */
+  /* ---- キーフレーム ----
+     キーにフォーカス (またはタイムラインの菱形をクリック) したら、そのキーの時刻へプレイヘッドを移す。
+     プレビューがそのキーの姿になり、画面上のドラッグもそのキーだけを動かすようになる。
+     表を作り直すとフォーカスが外れるので、ここでは表以外だけを描き直す。 */
+  function gotoKey(c, k){
+    if(!scene || !c || !k) return;
+    const t = clamp(round(c.start + k.t, 3), 0, scene.duration);
+    if(Math.abs(t - time) > 0.002){
+      stopPlayback();
+      time = t;
+      player.seek(time);
+      renderTimeline(); renderSel(); renderProps();
+      el("tl-time").textContent = `${time.toFixed(2)} / ${scene.duration.toFixed(2)} 秒`;
+    }
+    markKeyRows(c);
+  }
+  // 現在のプレイヘッド上にあるキーの行を目立たせる (表は作り直さない)
+  function markKeyRows(c){
+    const local = time - c.start;
+    Array.from(el("key-table").querySelectorAll("tr")).slice(1).forEach((tr, i)=>{
+      const k = c.keys[i];
+      tr.classList.toggle("at", !!k && Math.abs(k.t - local) < 0.03);
+    });
+  }
+
   function renderKeys(){
     const table = el("key-table");
     table.textContent = "";
@@ -659,6 +728,9 @@
     c.keys.forEach((k, i)=>{
       const tr = document.createElement("tr");
       if(Math.abs(k.t - local) < 0.03) tr.className = "at";
+      // 行のどこかにフォーカスが入ったら、そのキーを「いま編集中のキー」にする
+      tr.addEventListener("focusin", ()=> gotoKey(c, k));
+      tr.addEventListener("click", (ev)=>{ if(ev.target === tr || ev.target.tagName === "TD") gotoKey(c, k); });
       const cell = (child)=>{ const td = document.createElement("td"); td.appendChild(child); tr.appendChild(td); return td; };
       const tIn = document.createElement("input");
       tIn.type = "number"; tIn.step = "0.05"; tIn.min = "0"; tIn.value = k.t;
@@ -858,6 +930,14 @@
       const c = scene.tracks.find(x=> x.id === bar.dataset.clipId);
       if(!c) return;
       selId = c.id;
+      // 菱形(キーフレーム)を押したときは、バーを動かさずにそのキーへ移動する
+      if(ev.target.dataset.key !== undefined){
+        const k = c.keys[Number(ev.target.dataset.key)];
+        renderAll();
+        gotoKey(c, k);
+        ev.preventDefault();
+        return;
+      }
       const grip = ev.target.dataset.grip;
       drag = { clip: c, mode: grip === "l" ? "l" : (grip === "r" ? "r" : "move"), t0: timeAt(ev, rows), start0: c.start, dur0: c.dur };
       rows.setPointerCapture(ev.pointerId);
@@ -892,6 +972,7 @@
   function stopPlayback(){
     if(uiRaf){ cancelAnimationFrame(uiRaf); uiRaf = 0; }
     if(player.playing) player.stop();
+    stopPreviewScenes();
     el("btn-play").textContent = "▶ 再生";
   }
   function startPlayback(){
@@ -928,10 +1009,10 @@
     scene.duration = Math.max(0.2, Number(el("sc-dur").value) || 0.2);
     markDirty(); refresh(false);
   });
-  for(const id of ["sc-ev","sc-rank","sc-trig"]){
+  for(const id of ["sc-ev","sc-trig"]){
     el(id).addEventListener("change", ()=>{
       const ev = el("sc-ev").value;
-      scene.bind = ev ? YA.normalizeBind({ event: ev, rank: el("sc-rank").value, trigger: el("sc-trig").value }) : null;
+      scene.bind = ev ? YA.normalizeBind({ event: ev, trigger: el("sc-trig").value }) : null;
       markDirty();
     });
   }
@@ -945,6 +1026,7 @@
     if(type === "image"){ c.name = "画像"; c.w = 50; c.h = 50; }
     if(type === "video"){ c.name = "動画"; c.w = 100; c.h = 100; }
     if(type === "sound"){ c.name = "音"; }
+    if(type === "scene"){ c.name = "予告呼出"; c.dur = 0.1; }   // 時刻を指す目印なので短くてよい
     scene.tracks.push(c);
     selId = c.id;
     markDirty();
@@ -1108,6 +1190,9 @@
   /* ===================== その他 ===================== */
   el("dark-bg").addEventListener("change", ()=> stageBox.classList.toggle("dark", el("dark-bg").checked));
   el("volume").value = 0.8;
+  // 右クリックはブラウザの標準メニューを出さない (タイムラインやプレビューの操作を邪魔しないため)
+  document.addEventListener("contextmenu", (ev)=> ev.preventDefault());
+
   document.addEventListener("keydown", (ev)=>{
     const t = ev.target.tagName;
     if(t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
