@@ -27,6 +27,8 @@ node twitch/twitch_bridge.js --chat <channel>   # コメント連動だけなら
 scripts\dev.cmd start -Credit    # 主制御をクレジット制で起動 (メダルが尽きたら待機)
 ```
 
+認証の手順は **`doc/twitch認証の取り方.md`**。コメント連動だけなら認証は不要です (`--chat`)。
+
 `twitch/config.example.json` を `.run/twitch_config.json` にコピーして `clientId` と `channel` を入れ、
 中継サーバーとオーバーレイを開いた状態で起動します。状態確認・キルスイッチ・疑似イベントは
 コンパネの「Twitch 連携」カードから。詳細は `doc/twitch連携設計.md`。

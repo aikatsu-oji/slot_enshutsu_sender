@@ -260,7 +260,9 @@ const SUBSCRIPTIONS = {
 // stream は購読しないと連帯カウンタと初コメ判定のリセット契機が無いので常に取る
 function neededKinds() {
   const kinds = new Set(["stream"]);
-  for (const r of rules.rules) kinds.add(r.when.kind);
+  // enabled:false のルールは購読もしない。使わないイベントのスコープまで
+  // 承認画面に出すと、配信者に余計な権限を求めることになる。
+  for (const r of rules.rules) if (r.enabled !== false) kinds.add(r.when.kind);
   return [...kinds].filter((k) => SUBSCRIPTIONS[k]);
 }
 

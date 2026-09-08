@@ -41,7 +41,8 @@ slot_enshutsu_sender/
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
 │   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
 │   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ
-├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf, twitch連携設計.md)
+├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf,
+│                              twitch連携設計.md, twitch認証の取り方.md)
 ├── scripts/
 │   ├── dev.ps1 / dev.cmd        CLI 用: start / stop / restart / status / test / open / send / logs
 │   ├── ws_send.js               中継サーバーへ JSON を1件送る
@@ -147,6 +148,8 @@ node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿�
   1分あたりの上限に当たったぶんは捨てずに待たせる (視聴者が押したぶんを失わない)。
   `--no-medals` で演出だけの挙動 (段階1) に戻せる。
   clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
+  認証の手順は `doc/twitch認証の取り方.md`。要求スコープはルール表から自動で決まるので、
+  使わないルールを消す (または `"enabled": false` にする) とそのぶんの権限は求められない。
 - `--chat <channel>` は **認証なし** でチャットだけ読む (`chat_irc.js` / justinfan の匿名ログイン)。
   アプリ登録も OAuth も要らないので、コメント連動だけならチャンネル名の指定だけで動く。
   チャンネルポイント・ビッツ・サブスク・レイドは IRC では取れないので EventSub (認証あり) が要る。
