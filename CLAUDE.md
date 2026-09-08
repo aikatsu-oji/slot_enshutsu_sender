@@ -115,6 +115,9 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 ## 編集時の注意
 
+- バッチから `scripts\dev.cmd` を呼んだ直後は **`chcp 932 >nul` を入れてから日本語を表示する**。
+  dev.ps1 が `[Console]::OutputEncoding = UTF8` を設定するため、呼び出したあとの cmd は cp932 のバッチ本文を
+  読めなくなり、以降の `echo` が全部文字化けする (manual.bat が実例。メニューは毎回 chcp してから描く)。
 - `setup.bat` / `run_server.bat` / `manual.bat` / `scripts\dev.cmd` は **Shift-JIS (cp932) + CRLF**。UTF-8 で保存すると
   日本語が文字化けし、`choice` や `echo` が壊れる。編集後は文字コードを必ず確認する。
 - `enshutsu_overlay.html` は自身の URL から素材フォルダ (`enshutsu/yokoku/freeze/...`, `enshutsu/at/sound/` など) を
@@ -158,6 +161,11 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
+- 主制御の副制御ポート (8765) は **排他バインド** (Windows は `SO_EXCLUSIVEADDRUSE`)。二重起動すると2つ目は
+  起動時にエラーを出して落ちる。`SO_REUSEADDR` に戻すと Windows では2つ目が黙ってポートを奪い、2台ぶんの
+  state とコマンドが中継サーバーへ流れて **1回のレバーONでリールが2回回る**。ここは元に戻さないこと。
+- 遊技終了 (0x41) の直後に **0x42 状態通知** で現在の遊技状態を毎ゲーム送る。0x50 状態移行は移行した瞬間しか
+  出ないので、副制御はこの 0x42 で自分が持つ状態の写しを確定させる (演出は出さない)。
 - 主制御 → 副制御は 2 バイトコマンド (単方向)。副制御は主制御の内部状態を直接見ない。この境界を守る
   (仕様は doc/主制御・副制御仕様書.docx)。
 - 中継サーバーはメッセージを「受信したら他の全クライアントへ転送するだけ」。ロジックを足さない。
