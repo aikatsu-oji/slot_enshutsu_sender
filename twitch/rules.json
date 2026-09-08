@@ -4,9 +4,14 @@
     "評価順: 上から順に見て、最初に when が一致したルールの enshutsu を採用する。",
     "        medals / counter / vote / input / force は一致したルールぶんすべて適用する。",
     "ルールに \"enabled\": false を書くとそのルールだけ無効にできる。",
-    "メダルの入口は無料でできることだけ。課金 (cheer/sub/subgift) には medals を持たせない。",
-    "guard.mods にモデレータの login 名を書く。チャンネルポイントにはバッジが付いてこないので、",
-    "  requires:'mod' の判定はこの一覧で行う。",
+    "",
+    "メダルの入口は『チャット連帯カウンタ』と『レイド』の2つだけ。どちらも無料。",
+    "課金 (cheer/sub/subgift) には medals を持たせない。演出だけで報いる。",
+    "チャンネルポイントは使わない (アフィリエイト/パートナー限定の機能で、",
+    "  未到達だと存在しないため)。使いたくなったら kind:'redeem' のルールを足す。",
+    "",
+    "requires:'mod' はチャットのバッジで判定する (チャットには badges が付いてくる)。",
+    "  guard.mods はチャンネルポイントを使う場合の予備 (あちらはバッジが付かないため)。",
     "force (強制フラグ) はブリッジと主制御の両方に --allow-force を付けたときだけ効く。"
   ],
   "enabled": true,
@@ -14,7 +19,7 @@
     "userCooldownSec": 5,
     "maxMedalsPerEvent": 2000,
     "maxMedalsPerMinute": 6000,
-    "chatMedalsPerMinute": 10,
+    "chatMedalsPerMinute": 14,
     "enshutsuMinIntervalMs": 1500,
     "modOnlyInputs": [
       "powerCycle",
@@ -36,31 +41,22 @@
   },
   "rules": [
     {
-      "name": "100回転",
+      "name": "チャット連帯カウンタ",
       "when": {
-        "kind": "redeem",
-        "reward": "100回転"
+        "kind": "chat"
       },
-      "medals": {
-        "fixed": 120
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rank": "青"
-      }
-    },
-    {
-      "name": "10回転",
-      "when": {
-        "kind": "redeem",
-        "reward": "10回転"
-      },
-      "medals": {
-        "fixed": 12
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rank": "白"
+      "counter": {
+        "goal": 30,
+        "medals": 120,
+        "label": "100回転",
+        "minLength": 2,
+        "perUserCooldownSec": 10,
+        "ignore": [
+          "^!",
+          "^[^\\p{L}\\p{N}]+$"
+        ],
+        "resetOn": "stream.online",
+        "overflowTo": "bank"
       }
     },
     {
@@ -79,25 +75,6 @@
       }
     },
     {
-      "name": "チャット連帯カウンタ",
-      "when": {
-        "kind": "chat"
-      },
-      "counter": {
-        "goal": 200,
-        "medals": 120,
-        "label": "100回転",
-        "minLength": 2,
-        "perUserCooldownSec": 10,
-        "ignore": [
-          "^!",
-          "^[^\\p{L}\\p{N}]+$"
-        ],
-        "resetOn": "stream.online",
-        "overflowTo": "bank"
-      }
-    },
-    {
       "name": "初コメ歓迎",
       "when": {
         "kind": "chat",
@@ -106,6 +83,23 @@
       "enshutsu": {
         "type": "banner",
         "rank": "白"
+      }
+    },
+    {
+      "name": "設定変更",
+      "when": {
+        "kind": "chat",
+        "match": "^!設定変更$"
+      },
+      "input": "powerCycle",
+      "requires": "mod",
+      "settingChoices": [
+        1,
+        2
+      ],
+      "enshutsu": {
+        "type": "banner",
+        "rank": "青"
       }
     },
     {
@@ -197,23 +191,6 @@
       "enshutsu": {
         "type": "banner",
         "rank": "赤"
-      }
-    },
-    {
-      "name": "設定変更",
-      "when": {
-        "kind": "redeem",
-        "reward": "設定変更"
-      },
-      "input": "powerCycle",
-      "requires": "mod",
-      "settingChoices": [
-        1,
-        2
-      ],
-      "enshutsu": {
-        "type": "banner",
-        "rank": "青"
       }
     }
   ]

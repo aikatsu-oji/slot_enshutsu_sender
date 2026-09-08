@@ -1438,17 +1438,33 @@
     ["サブスク t3",  () => ({ kind:"sub", tier:3, user:{ login:"sub3", name:"サブ三郎" } })],
     ["サブギフト5",  () => ({ kind:"subgift", tier:1, amount:5, user:{ login:"gifter", name:"ギフト男" } })],
     ["レイド50",     () => ({ kind:"raid", amount:50, user:{ login:"friend", name:"ともだち" } })],
-    ["100回転",      () => ({ kind:"redeem", reward:"100回転", amount:500, user:{ login:"pt1", name:"ポイント子" } })],
-    ["10回転",       () => ({ kind:"redeem", reward:"10回転", amount:50, user:{ login:"pt2", name:"ポイント太" } })],
+    // 連帯カウンタを進めるコメント。毎回ちがう人・ちがう本文にしないと
+    // 「同じ人の連投」「直前と同じ本文」として数えられない (実際の除外ルールと同じ扱い)
+    ["コメント",     () => chatMock()],
+    ["コメント×10",  () => Array.from({ length: 10 }, () => chatMock())],
     // 初コメ判定は login ごとなので、押すたびに別人にする
     ["初コメ",       () => ({ kind:"chat", text:"はじめまして", user:{ login:"newbie" + Date.now(), name:"新規さん" } })],
   ];
+
+  let twMockSeq = 0;
+  function chatMock(){
+    twMockSeq++;
+    return { kind:"chat", text:`テストコメント${twMockSeq}`,
+             user:{ login:`tester${Date.now()}_${twMockSeq}`, name:`テスト視聴者${twMockSeq}` } };
+  }
+
   TW_MOCKS.forEach(([label, make])=>{
     const b = document.createElement("button");
     b.className = "btn btn-sm";
     b.textContent = label;
     b.disabled = true;
-    b.addEventListener("click", ()=> sendRaw({ action:"twitchMock", ev: make() }, `疑似イベント「${label}」`));
+    b.addEventListener("click", ()=>{
+      const made = make();
+      const list = Array.isArray(made) ? made : [made];
+      // まとめて送るときは少し間隔を空ける (中継とブリッジの処理を詰まらせない)
+      list.forEach((ev, i)=> setTimeout(()=> sendRaw({ action:"twitchMock", ev },
+        `疑似イベント「${label}」${list.length > 1 ? ` ${i + 1}/${list.length}` : ""}`), i * 120));
+    });
     twMockEl.appendChild(b);
   });
   twUpdateButtons();

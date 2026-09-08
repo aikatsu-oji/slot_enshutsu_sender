@@ -445,7 +445,11 @@ function createMedalQueue(send) {
   // 投入ランキング。オーバーレイ(OBSブラウザソース)は配信中に再読込されることがあるので、
   // 画面側ではなくここで持つ。stream.online でリセットする。
   const ranking = new Map();
-  let chatTokens = 0, genTokens = 0;
+  // バケツは空ではなく「10分ぶんの残高」から始める。
+  // 空から始めると、配信開始直後やブリッジ再起動直後の最初の1回が必ず待たされる
+  // (120枚 ÷ 14枚/分 = 8.6分)。まだ誰も使っていない allowance が貯まっている、と考える。
+  const INITIAL_MINUTES = 10;
+  let chatTokens = null, genTokens = null;   // null = 初回の tick で初期化する
   let last = Date.now();
   let sentTotal = 0;
 
@@ -455,6 +459,7 @@ function createMedalQueue(send) {
     last = now;
     const chatMax = Math.max(0, rules.guard.chatMedalsPerMinute);
     const genMax = Math.max(0, rules.guard.maxMedalsPerMinute);
+    if (chatTokens === null) { chatTokens = chatMax * INITIAL_MINUTES; genTokens = genMax * INITIAL_MINUTES; }
     // 溜めすぎないよう 60 分ぶんで頭打ちにする (長い無風のあとに一気に出ないように)
     chatTokens = Math.min(chatMax * 60, chatTokens + chatMax * dt);
     genTokens = Math.min(genMax * 60, genTokens + genMax * dt);
@@ -484,9 +489,19 @@ function createMedalQueue(send) {
         log(`[投入] ${src} の ${n}枚 は 1イベント上限 ${cap}枚 に丸めました`);
         n = cap;
       }
-      q.push({ n, src, chat: !!(opts && opts.chat), note: opts && opts.note,
-               id: (opts && opts.id) || `m${Date.now()}` });
+      const item = { n, src, chat: !!(opts && opts.chat), note: opts && opts.note,
+                     id: (opts && opts.id) || `m${Date.now()}` };
+      q.push(item);
       tick();
+      // まだ残っている = 1分あたりの上限に当たって待たされている。
+      // 何も言わないと「達成したのに入らない」と見えるので、待ち時間の目安を出す。
+      if (q.includes(item)) {
+        const perMin = item.chat ? rules.guard.chatMedalsPerMinute : rules.guard.maxMedalsPerMinute;
+        const have = item.chat ? chatTokens : genTokens;
+        const mins = perMin > 0 ? Math.ceil((item.n - (have || 0)) / perMin) : 0;
+        log(`[投入] ${src} ${item.n}枚 は上限 (${perMin}枚/分) に当たって待機中` +
+            `${mins > 0 ? ` — あと約${mins}分で入ります` : ""}`);
+      }
     },
     get waiting() { return q.reduce((a, b) => a + b.n, 0); },
     get sent() { return sentTotal; },
