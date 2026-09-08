@@ -20,7 +20,7 @@
 //   - このアプリを消すと、この ID を使っている全員が動かなくなる
 //   - 要求スコープを増やすと、既存の利用者は承認をやり直す必要がある
 (function (root) {
-  root.SlotTwitchClientId = "";   // 例: "abcdefghijklmnopqrstuvwxyz1234"
+  root.SlotTwitchClientId = "jg021czz1ddfx1mp8mjvd8l6z2vrti";
 })(typeof globalThis !== "undefined" ? globalThis : this);
 
 module.exports = { DEFAULT_CLIENT_ID: globalThis.SlotTwitchClientId || "" };
