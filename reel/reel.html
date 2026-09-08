@@ -153,15 +153,22 @@
     }catch(e){ /* 音は任意。読めなくてもリールは回す */ }
   })();
 
-  // 先に見つかった名前のものを1つ鳴らす。連続で重ねられるよう毎回複製する
-  function playSfx(...keys){
+  // 先に見つかった名前のものを1つ鳴らす。ch(系統)ごとに1音だけ鳴らし、
+  // 同じ ch がまだ鳴っていれば止めてから鳴らす(停止音が停止間隔より長くても重ならない)。
+  // ch が違えば重なる(回転開始音は停止音に消されない)。
+  const sfxPlaying = new Map();   // ch → 再生中の Audio
+  function playSfx(ch, ...keys){
     if(!sfxOn) return false;
     for(const k of keys){
       const base = sfx.get(String(k).toLowerCase());
       if(!base) continue;
       try{
+        const prev = sfxPlaying.get(ch);
+        if(prev){ prev.pause(); prev.currentTime = 0; }
         const a = base.cloneNode();
         a.volume = Math.min(1, Math.max(0, sfxVolume));
+        a.addEventListener("ended", ()=>{ if(sfxPlaying.get(ch) === a) sfxPlaying.delete(ch); });
+        sfxPlaying.set(ch, a);
         const p = a.play();
         if(p && p.catch) p.catch(()=>{});   // 自動再生がブロックされても止めない
       }catch(e){}
@@ -213,7 +220,7 @@
           this.pos = this.target; this.vel = 0; this.state = "stop";
           this.strip.classList.remove("blur");
           this.render(); this.bounce();
-          playSfx("stop" + Math.min(3, ++stopSeq), "stop");   // 第1〜第3停止で鳴らし分け(無ければ共通の stop)
+          playSfx("stop", "stop" + Math.min(3, ++stopSeq), "stop");   // 第1〜第3停止で鳴らし分け(無ければ共通の stop)
           const cb = this.onStop; this.onStop = null;
           if(cb) cb(this);
           return;
@@ -236,7 +243,7 @@
   // 1ゲーム分の回転開始。開始音は3リールぶんではなく1回だけ鳴らす
   function startReels(){
     stopSeq = 0;
-    playSfx("start");
+    playSfx("start", "start");
     reels.forEach(r => r.start());
   }
 
