@@ -531,6 +531,7 @@
         <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
         <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
         <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
+        <button class="btn btn-sm" id="btn-ramclear" disabled>🧹 ラムクリア</button>
       </div>
     </div>
 
@@ -699,6 +700,7 @@
     credit50: document.getElementById("btn-credit50"),
     lever: document.getElementById("btn-lever"),
     manual: document.getElementById("btn-manual"),
+    ramClear: document.getElementById("btn-ramclear"),
   };
 
   let ws = null;
@@ -1065,6 +1067,28 @@
     mbSetCredit(d.credit);
     if(d.note) log(`🎰 主制御 クレジット: ${d.credit}枚（${d.note}）`);
   }
+  // ラムクリア。主制御のRAMが消えたので、ダイジェストと詳細を初期状態へ戻す。
+  function mbRenderRamClear(d){
+    mbAlive(`受信中 / 設定${d.setting ?? "?"}`);
+    mb.stateTile.className = "mb-tile state-normal";
+    mb.state.innerHTML = `通常<small>${d.mode ?? ""}</small>`;
+    mb.gamesLbl.textContent = "G数 / 天井まで";
+    mb.games.innerHTML = `${d.gameCount ?? 0}<small>/ ${d.ceilingLeft ?? "—"}</small>`;
+    mb.diff.textContent = "0";
+    mb.diff.className = "mb-val";
+    mb.stock.textContent = d.stock ?? 0;
+    mb.reels.forEach(el=>{ el.textContent = "—"; el.classList.remove("hit"); });
+    mb.flag.textContent = "—";
+    mb.prize.textContent = "—";
+    mb.navi.textContent = "—";
+    mb.pay.textContent = "—";
+    mbSetCredit(d.credit);
+    mb.total.textContent = `0G / IN 0 / OUT 0`;
+    sbRealMode = d.mode ?? null;
+    sbSyncReal();
+    log("🧹 主制御 ラムクリア: 状態・ストック・クレジット・出玉カウンタを初期化しました");
+  }
+
   function mbSetCredit(credit){
     if(credit == null) return;
     const short = credit < MB_BET;
@@ -1096,6 +1120,7 @@
       case "input": mbRenderInput(d); break;
       case "mode": mbRenderMode(d); break;
       case "credit": mbRenderCredit(d); break;
+      case "ramClear": mbRenderRamClear(d); break;
       case "summary":
         mbAppend(mb.events, `── 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚 ──`, "ev-end", "ev");
         log(`🎰 主制御 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚`);
@@ -1123,6 +1148,12 @@
   // 自動で回っている主制御に送っても何も起きない。
   buttons.lever.addEventListener("click", ()=>
     sendRaw({ action:"panelInject", layer:"lever" }, "レバーON"));
+  // ラムクリア。押し間違いで遊技中の台が飛ぶので、実行前に確認する
+  buttons.ramClear.addEventListener("click", ()=>{
+    if(!confirm("ラムクリアします。遊技状態・ストック・クレジット・出玉カウンタが消えます。よろしいですか？")) return;
+    sendRaw({ action:"panelInject", layer:"ramClear" }, "ラムクリア");
+  });
+
   // クレジット投入信号。最大クレジットは無限なので何度でも足せる
   buttons.credit3.addEventListener("click", ()=>
     sendRaw({ action:"panelInject", layer:"credit", n:3 }, "クレジット投入 +3"));

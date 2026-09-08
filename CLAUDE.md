@@ -74,6 +74,7 @@ scripts\dev.cmd test                                   # 主制御 2000G / 副�
 scripts\dev.cmd send triggerEnshutsu                  # コンパネのボタンと同じメッセージを送る (JSON 直指定も可)
 scripts\dev.cmd send '{"action":"subEvent","event":{"type":"banner","rank":"赤"}}'   # 副制御イベントをオーバーレイへ直送
 scripts\dev.cmd send reelIn                          # リールユニットを液晶(オーバーレイ)内に入れる (reelOut / reelToggle も可)
+scripts\dev.cmd send ramclear                        # ラムクリア (主制御のRAMを初期化。コンパネの🧹ボタンと同じ)
 scripts\dev.cmd send lever                           # -Mode manual の主制御を1ゲーム進める (レバーON)
 scripts\dev.cmd send credit                          # クレジット投入信号 +50枚 (send manual / send auto で進み方の切替)
 scripts\dev.cmd logs                                   # .run\*.log の末尾
@@ -164,6 +165,9 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - 主制御の副制御ポート (8765) は **排他バインド** (Windows は `SO_EXCLUSIVEADDRUSE`)。二重起動すると2つ目は
   起動時にエラーを出して落ちる。`SO_REUSEADDR` に戻すと Windows では2つ目が黙ってポートを奪い、2台ぶんの
   state とコマンドが中継サーバーへ流れて **1回のレバーONでリールが2回回る**。ここは元に戻さないこと。
+- ラムクリア (`MainBoard.ram_clear`) は遊技状態・モード・天井・ストック・AT残G・クレジット・出玉カウンタを消し、
+  電源投入 (0x01) を送り直す。設定は据え置き。副制御は 0x01 で自分の写しを初期化する。注入は
+  `{"layer":"ramClear"}` で、遊技スレッド (drain_inject) から呼ぶので遊技中の処理と競合しない。
 - 遊技終了 (0x41) の直後に **0x42 状態通知** で現在の遊技状態を毎ゲーム送る。0x50 状態移行は移行した瞬間しか
   出ないので、副制御はこの 0x42 で自分が持つ状態の写しを確定させる (演出は出さない)。
 - 主制御 → 副制御は 2 バイトコマンド (単方向)。副制御は主制御の内部状態を直接見ない。この境界を守る

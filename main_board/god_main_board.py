@@ -267,6 +267,34 @@ class MainBoard:
     def power_on(self) -> None:
         self.send(CMD_POWER_ON, self.state)
 
+    # -- [0.1] ラムクリア ----------------------------------------------------
+    def ram_clear(self) -> None:
+        """ラムクリア。実機の設定変更/RAMクリアに相当し、遊技に関わるRAMを全て消す。
+
+        消えるもの：遊技状態・内部モード・天井カウンタ・GG/AT残ゲーム数・ストック・
+        クレジット（貯留）・出玉カウンタ・当該ゲームのワーク。
+        設定は据え置きにする（実機でもラムクリア単独では設定は変わらない）。
+        最後に電源投入コマンド(0x01)を送り直すので、副制御も自分の写しを初期化する。
+        """
+        self.state = ST_NORMAL
+        self.mode, self.mode_left = MODE_LOW, 0
+        self.game_count = 0
+        self.gg_left = 0
+        self.at_left = 0
+        self.stock = 0
+        self.credit = 0
+        self.total_in = self.total_out = self.total_games = 0
+        self.flag = "ハズレ"
+        self.prize = "ハズレ"
+        self.bell_answer = 0
+        self.reel_pos = [0, 0, 0]
+        self.notice = []
+        self.cmd_log.clear()
+        # ウェイトも電源投入直後と同じ扱いに戻す（直前の回転が無かったことにする）
+        self.spin_at = 0.0
+        self.hold_until = 0.0
+        self.power_on()
+
     # -- [0.5] 入力受付状態（ウェイト） --------------------------------------
     #    規則上のウェイトは「前回の回転開始」からの経過で決まる。遊技そのものに
     #    かかった時間（フリーズを含む）がウェイトを食うので、加算ではなく期限で持つ。
@@ -607,7 +635,18 @@ class SubBoard:
         typ, data = cmd >> 8, cmd & 0xFF
         self.rx += 1
 
-        if typ == CMD_GAME_START:
+        if typ == CMD_POWER_ON:
+            # 電源投入・ラムクリア。主制御のRAMが消えたので、こちらの写しも初期化する
+            self.game = 0
+            self.state = data
+            self.at_left = 0
+            self.stock = 0
+            self.heat = 0
+            self.flag = "ハズレ"
+            self.plan = [None] * 4
+            self.stops = 0
+
+        elif typ == CMD_GAME_START:
             self.game += 1
             self.state = data
             self.flag = "ハズレ"
@@ -1047,6 +1086,18 @@ class PanelLink:
                       "canBet": b.credit >= BET, "bet": BET, "note": note,
                       "game": b.total_games})
 
+    def send_ram_clear(self, b: MainBoard) -> None:
+        """ラムクリア。消えたあとのレジスタを送り、コンパネの表示を初期状態へ戻す。"""
+        self.ws.send({"action": "mainBoard", "type": "ramClear",
+                      "setting": b.setting, "game": 0,
+                      "state": STATE_NAME[b.state],
+                      "mode": ["低確", "高確", "超高確"][b.mode],
+                      "gameCount": b.game_count,
+                      "ceilingLeft": CEILING - b.game_count,
+                      "diff": 0, "totalIn": 0, "totalOut": 0,
+                      "stock": b.stock, "credit": b.credit,
+                      "canBet": b.credit >= BET, "bet": BET})
+
     def send_mode(self, b: MainBoard, manual: bool, waiting: bool) -> None:
         """遊技の進み方。manual なら主制御は自分から回さず、レバーON入力を待つ。
 
@@ -1290,6 +1341,7 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer",
     lever    … レバーON（--manual のときだけ意味を持つ）。games で複数ゲーム分。
     credit   … クレジット投入信号。{"layer":"credit","n":50}（既定1枚・上限なし）
     mode     … 自動/手動の切り替え。{"layer":"mode","manual":true|false}
+    ramClear … ラムクリア。主制御のRAMを初期化し、電源投入コマンドを送り直す。
     """
     if board.panel is None:
         return
@@ -1313,6 +1365,11 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer",
                 inp.put("credit", msg.get("n", 1))
             elif layer == "mode" and inp is not None:
                 inp.put("mode", msg.get("manual", True))
+            elif layer == "ramClear":
+                # 遊技スレッドから呼ぶので、遊技中の処理と競合しない
+                board.ram_clear()
+                board.panel.send_ram_clear(board)
+                print("ラムクリア: 主制御のRAMを初期化しました", file=sys.stderr)
         except (TypeError, ValueError):
             pass
 

@@ -17,6 +17,7 @@
                                            send lever   … -Mode manual の主制御を1ゲーム進める(レバーON)
                                            send credit  … クレジット投入信号 +50枚
                                            send manual / send auto … 進み方を切り替える
+                                           send ramclear … ラムクリア(主制御のRAMを初期化)
   logs    [-Tail 40]                       .run\ 配下のログ末尾を表示
   help
 
@@ -257,6 +258,7 @@ function Do-Send($json) {
     "lever"  { $json = '{"action":"panelInject","layer":"lever"}' }
     "credit" { $json = '{"action":"panelInject","layer":"credit","n":50}' }
     "manual" { $json = '{"action":"panelInject","layer":"mode","manual":true}' }
+    "ramclear" { $json = '{"action":"panelInject","layer":"ramClear"}' }
     "auto"   { $json = '{"action":"panelInject","layer":"mode","manual":false}' }
   }
   if ($json -notmatch '^\s*\{') { $json = '{"action":"' + $json + '"}' }
