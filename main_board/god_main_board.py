@@ -570,9 +570,6 @@ STATE_NAME = {ST_NORMAL: "通常", ST_GG: "GG", ST_AT: "AT"}
 # 6. 副制御（演出制御基板）
 # ---------------------------------------------------------------------------
 
-BANNER_RANK = ["白", "青", "緑", "赤", "金"]
-
-
 class SubBoard:
     """
     副制御基板。主制御から届く2バイトコマンドだけで動作する。
@@ -590,11 +587,11 @@ class SubBoard:
         第1停止   … 0x31/0x32/0x33 のうち1つ目に届いた停止コマンド
         第2停止   … 同2つ目
         第3停止   … 同3つ目
-    lever は毎ゲーム出す（オーバーレイが停止演出の時刻を測る起点になる）。stop は
-    プランにランクがある停止だけ出す。
-    予告プランは [レバーON, 第1停止, 第2停止, 第3停止] の各時点で出すバナーのランク
-    （白/青/緑/赤/金、None=何も出さない）。最終ランクへ向けて段階的に上がる
-    （ステップアップ予告）か、どこか1点だけで出す。
+    lever は毎ゲーム出す（オーバーレイが停止演出の時刻を測る起点になる）。この時点で予告を
+    出すかどうかは yokoku=True/False で伝える。stop はプランに入っている停止だけ出す。
+    予告プランは [レバーON, 第1停止, 第2停止, 第3停止] の各時点で予告を出すか（True/False）。
+    連続する何点で出すか（段階数）だけを決め、**強弱（ランク）の概念は持たない**。
+    どんな絵を出すかはオーサリング側（シーンの割り当てと画像差し替え）の担当。
     GG突入・ストック・上乗せ・AT終了は遊技状態の通知なので、操作トリガーとは別に
     状態移行コマンドで出す。
 
@@ -616,7 +613,7 @@ class SubBoard:
         self.heat = 0          # 副制御が独自に持つ高確示唆カウンタ
         self.rx = 0            # 受信コマンド数
         self.flag = "ハズレ"   # 今ゲームの内部当選（0x20で受信。演出の決定はレバーONまで保留）
-        self.plan = [None] * 4 # 今ゲームの予告プラン [レバーON, 第1停止, 第2停止, 第3停止] のランク
+        self.plan = [False] * 4  # 今ゲームの予告プラン [レバーON, 第1停止, 第2停止, 第3停止] で出すか
         self.stops = 0         # 今ゲームで受けた停止コマンド数（第n停止の n）
 
     # -- 演出イベント出力 ---------------------------------------------------
@@ -666,8 +663,8 @@ class SubBoard:
         elif typ in (CMD_REEL_STOP_L, CMD_REEL_STOP_C, CMD_REEL_STOP_R):
             self.stops += 1
             if self.stops <= 3 and self.plan[self.stops]:
-                # 第n停止。プランにランクがある時点だけ演出イベントを出す（無い停止は何も出さない）
-                self.emit("stop", n=self.stops, rank=self.plan[self.stops])
+                # 第n停止。プランに入っている時点だけ演出イベントを出す（無い停止は何も出さない）
+                self.emit("stop", n=self.stops)
 
         elif typ == CMD_STATE:
             if data == ST_GG and self.state != ST_GG:
@@ -706,60 +703,51 @@ class SubBoard:
         flag = self.flag
         if flag == "神揃い":
             # レバーONフリーズ。3段階：ロック1（振動）→ロック2（カットイン）→ロック3（暗転）
-            self.plan = [None] * 4
-            self.emit("freeze", seq=["lock1", "lock2", "lock3"], rank="金")
+            self.plan = [False] * 4
+            self.emit("freeze", seq=["lock1", "lock2", "lock3"])
             return
 
-        rank = self._draw_rank(flag)
-        self.plan = self._make_plan(rank)
-        # レバーON時点の演出。plan は試験用モニタ向けの参考情報（オーバーレイは rank だけを見る）
-        self.emit("lever", rank=self.plan[0], plan=list(self.plan), trigger=flag, heat=self.heat)
+        self.plan = self._make_plan(self._draw_steps(flag))
+        # lever は毎ゲーム出す（停止演出の時刻を測る起点）。この時点で予告を出すかは yokoku で伝える。
+        # plan は試験用モニタ向けの参考情報。
+        self.emit("lever", yokoku=self.plan[0], plan=list(self.plan), trigger=flag, heat=self.heat)
         if self.state == ST_NORMAL and flag in RARE:
             self.heat = min(self.heat + 3, 9)
 
-    def _draw_rank(self, flag: str):
-        """今ゲームの予告の最終ランクを決める。None は予告なし。"""
+    # 段階数の重み [0段(予告なし), 1段, 2段, 3段, 4段]。レア役の強さ × 自前ヒートで選ぶ。
+    # 段階が多いほど長く引っ張るステップアップ予告になる（強弱そのものはオーサリング側で表現する）。
+    STEP_COUNT_WEIGHTS = [
+        [40, 35, 15, 8, 2],     # レベル1: スイカ
+        [25, 35, 22, 13, 5],    # レベル2: チャンス目 / スイカ + ヒート
+        [15, 30, 27, 20, 8],    # レベル3: チャンス目 + ヒート
+    ]
+    # 「最後に出す時点」の重み [レバーON, 第1停止, 第2停止, 第3停止]。段階数ぶん手前から連続で出す。
+    REVEAL_END_WEIGHTS = [30, 20, 20, 30]
+
+    def _draw_steps(self, flag: str) -> int:
+        """今ゲームの予告を何段階（何点）出すか決める。0 は予告なし。"""
         if self.state != ST_NORMAL:
-            return None                     # AT/GG中は予告バナーを出さない（ナビが主役）
+            return 0                        # AT/GG中は予告を出さない（ナビが主役）
         if flag not in RARE:
-            return "白" if self.rng.random() < 0.04 else None   # 非レア役はたまにガセ
-        # レア役の強さ × 自前ヒートで予告ランクを決める
+            return 1 if self.rng.random() < 0.04 else 0   # 非レア役はたまにガセ
         base = {"スイカ": 1, "チャンス目": 2}[flag]
         level = base + (1 if self.heat >= 3 else 0)
-        weights = [
-            [40, 30, 20, 8, 2],
-            [20, 30, 30, 16, 4],
-            [8, 22, 32, 30, 8],
-            [3, 12, 25, 45, 15],
-        ][min(level, 3)]
-        return self.rng.choices(BANNER_RANK, weights=weights)[0]
+        weights = self.STEP_COUNT_WEIGHTS[min(level, 3) - 1]
+        return self.rng.choices(range(5), weights=weights)[0]
 
-    # 最終ランクごとの「最後に出す時点」の重み [レバーON, 第1停止, 第2停止, 第3停止]。
-    # 高ランクほど遅い時点まで引っ張り、ステップアップさせやすい。
-    REVEAL_STEP_WEIGHTS = {
-        "白": [70, 15, 10, 5],
-        "青": [45, 20, 20, 15],
-        "緑": [25, 20, 25, 30],
-        "赤": [15, 15, 25, 45],
-        "金": [10, 10, 20, 60],
-    }
-    STAGE_COUNT_WEIGHTS = [50, 30, 15, 5]   # 段階数 1,2,3,4 の重み（可能な範囲で切り詰める）
+    def _make_plan(self, steps: int) -> list:
+        """段階数から [レバーON, 第1停止, 第2停止, 第3停止] の予告プランを作る。
 
-    def _make_plan(self, rank) -> list:
-        """最終ランクから [レバーON, 第1停止, 第2停止, 第3停止] の予告プランを作る。
-
-        最後に出す時点 f と段階数 k を抽選し、f を終点に k 段階で最終ランクへ上げる。
-        例: 赤・f=第3停止・k=3 → [None, 青, 緑, 赤]
+        最後に出す時点 f を抽選し、そこから手前へ steps 点ぶん連続で出す。
+        例: steps=3・f=第3停止 → [False, True, True, True]
         """
-        plan = [None] * 4
-        if rank is None:
+        plan = [False] * 4
+        if steps <= 0:
             return plan
-        t = BANNER_RANK.index(rank)
-        f = self.rng.choices(range(4), weights=self.REVEAL_STEP_WEIGHTS[rank])[0]
-        kmax = min(f + 1, t + 1)
-        k = self.rng.choices(range(1, kmax + 1), weights=self.STAGE_COUNT_WEIGHTS[:kmax])[0]
-        for j in range(k):
-            plan[f - (k - 1) + j] = BANNER_RANK[t - (k - 1) + j]
+        steps = min(steps, 4)
+        f = self.rng.choices(range(steps - 1, 4), weights=self.REVEAL_END_WEIGHTS[steps - 1:])[0]
+        for j in range(steps):
+            plan[f - j] = True
         return plan
 
 

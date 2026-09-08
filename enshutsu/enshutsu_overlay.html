@@ -647,7 +647,7 @@
   const subLogEl = el("sub-log");
   const subLogLines = [];
   function subLog(ev){
-    if(ev.type === "lever" && !ev.rank) return;   // 演出なしのレバーONは毎ゲーム届くのでログには残さない
+    if(ev.type === "lever" && ev.yokoku === false) return;   // 予告なしのレバーONは毎ゲーム届くのでログには残さない
     const detail = Object.keys(ev)
       .filter(k=> k !== "type" && k !== "g")
       .map(k=> `${k}=${typeof ev[k] === "object" ? JSON.stringify(ev[k]) : ev[k]}`)
@@ -702,6 +702,9 @@
     if(ev.type === "lever"){          // レバーON。ここを起点に停止演出の時刻を決める
       leverAt = performance.now();
       clearStopTimers();
+      // レバーONは毎ゲーム届く。予告を出さないゲームは時刻の起点にするだけで何も再生しない
+      // (yokoku を持たない手動送信は「出す」とみなす)
+      if(ev.yokoku === false) return;
     }
     if(ev.type === "stop"){ scheduleStop(ev); return; }   // 第n停止は上のタイミングまで待たせる
     // シーンを名指しで再生する {type:"authoring", id:"..."}

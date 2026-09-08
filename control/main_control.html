@@ -1309,10 +1309,10 @@
     0x53:{name:"上乗せ",       args:null, def:30},
   };
   const INJ_EVT = {
-    freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
-    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", heat:0}],
-    stop:      ["停止予告",       {type:"stop", n:3, rank:"赤"}],
-    banner:    ["バナー予告(旧)", {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
+    freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"]}],
+    lever:     ["レバーON予告",   {type:"lever", yokoku:true, plan:[true,false,false,false], trigger:"スイカ", heat:0}],
+    stop:      ["停止予告",       {type:"stop", n:3}],
+    banner:    ["バナー予告(画像差し替え)", {type:"banner", images:{main:"01.png"}}],
     navi:      ["押し順ナビ",     {type:"navi", order:0}],
     gg_start:  ["GG開始",         {type:"gg_start"}],
     stock_up:  ["ストック加算",   {type:"stock_up", stock:2, gain:1}],
@@ -1574,7 +1574,7 @@
       for(const sc of scenes){
         const o = document.createElement("option");
         o.value = sc.id;
-        o.textContent = (sc.name || sc.id) + (sc.bind ? ` [${sc.bind.rank || sc.bind.event}]` : "");
+        o.textContent = (sc.name || sc.id) + (sc.bind ? ` [${sc.bind.event}${sc.bind.trigger ? "/" + sc.bind.trigger : ""}]` : "");
         authSelect.appendChild(o);
       }
       if(scenes.some(sc=> sc.id === keep)) authSelect.value = keep;
