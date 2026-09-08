@@ -249,7 +249,10 @@ function Do-Open($Target) {
     $pages = @(@("$BaseUrl/enshutsu/authoring_editor.html", "1400,900", "0,0"))
   }
   foreach ($pg in $pages) {
-    if ($browser) { Start-Process $browser -ArgumentList @("--new-window", "--app=$($pg[0])", "--window-size=$($pg[1])", "--window-position=$($pg[2])") }
+    # --autoplay-policy: 音付きの自動再生を許可する。これが無いと、開いた直後(クリック前)の
+    # ウィンドウでは動画の音が鳴らない (OBS のブラウザソースでは元から許可されている)。
+    # ※ Chrome がすでに起動している場合、この指定は無視される (起動済みプロセスに相乗りするため)
+    if ($browser) { Start-Process $browser -ArgumentList @("--new-window", "--autoplay-policy=no-user-gesture-required", "--app=$($pg[0])", "--window-size=$($pg[1])", "--window-position=$($pg[2])") }
     else { Start-Process $pg[0] }
   }
   Ok "ウィンドウを開きました"

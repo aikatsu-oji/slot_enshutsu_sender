@@ -126,7 +126,7 @@ if not defined BROWSER_PATH if exist "%ProgramFiles%\Microsoft\Edge\Application\
 if not defined BROWSER_PATH goto NO_BROWSER
 
 if not defined CONTROL_URL goto SKIP_MAIN_CONTROL
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/%CONTROL_URL%" --window-size=480,900 --window-position=0,0
+start "" "%BROWSER_PATH%" --new-window --autoplay-policy=no-user-gesture-required --app="%BASEURL%/%CONTROL_URL%" --window-size=480,900 --window-position=0,0
 goto CHECK_ENSHUTSU
 
 :SKIP_MAIN_CONTROL
@@ -135,7 +135,7 @@ echo [警告] control\main_control.html が見つかりません。
 :CHECK_ENSHUTSU
 if not exist "enshutsu\enshutsu_overlay.html" goto SKIP_ENSHUTSU
 rem 筐体ビューを別ウィンドウで開かなくなった分、オーバーレイを大きめに開く。
-start "" "%BROWSER_PATH%" --new-window --app="%BASEURL%/enshutsu/enshutsu_overlay.html" --window-size=1280,720 --window-position=520,0
+start "" "%BROWSER_PATH%" --new-window --autoplay-policy=no-user-gesture-required --app="%BASEURL%/enshutsu/enshutsu_overlay.html" --window-size=1280,720 --window-position=520,0
 goto MAIN_BOARD
 
 :SKIP_ENSHUTSU

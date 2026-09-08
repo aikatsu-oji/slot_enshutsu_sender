@@ -411,6 +411,8 @@
     pr.catch(() => {
       if (m.muted) return;
       m.muted = true;
+      if (root.noteAudioBlocked) root.noteAudioBlocked();   // オーバーレイに乗っているときは一度だけ知らせる
+      else console.log("[予告オーサリング] 音付きの自動再生が拒否されたため無音で再生します");
       const retry = m.play();
       if (retry && retry.catch) retry.catch(() => {});
     });

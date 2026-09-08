@@ -990,6 +990,15 @@
      戻り値は再生終了(ended)で解決する Promise。loop=true のときは stopVideo されるまで解決しない。
      自動再生ポリシーで音付き再生が拒否された場合は、無音にして再生だけは続ける。 */
   function clampRate(){ return Math.min(4, Math.max(0.25, speedFactor)); }
+  // 音付きの自動再生がブラウザに拒否されたことを一度だけ知らせる。
+  // (単体のブラウザウィンドウで起きる。一度ウィンドウ内をクリックすれば以降は鳴る。OBS では起きない)
+  let audioBlockedNoted = false;
+  function noteAudioBlocked(){
+    if(audioBlockedNoted) return;
+    audioBlockedNoted = true;
+    console.log("[音声] 音付きの自動再生がブラウザに拒否されたため無音で再生しました。ウィンドウ内を一度クリックすると以降は音が出ます (OBS のブラウザソースでは起きません)");
+  }
+  window.noteAudioBlocked = noteAudioBlocked;
   function startVideo(v, url, opts){
     const { loop = false, muted = false } = opts || {};
     return new Promise(resolve=>{
@@ -1016,6 +1025,7 @@
               if(done) return;
               if(v.muted){ finish("error"); return; }
               v.muted = true;   // 音付き自動再生が拒否された → 無音で再生を続ける
+              noteAudioBlocked();
               const p2 = v.play();
               if(p2 && p2.catch) p2.catch(()=> finish("error"));
             });
