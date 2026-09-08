@@ -46,6 +46,7 @@ import socket
 import sys
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -64,6 +65,12 @@ KOMA = int(_REEL_DATA["koma"])   # 1リールのコマ数
 assert all(len(t) == KOMA for t in REELS), "reels.json: コマ数が一致しません"
 MAX_SLIP = 4       # 最大滑りコマ数（法定：190ms以内 = 4コマ）
 BET = 3            # 規定投入枚数
+
+# クレジット制（--credit）で使う筐体側の受け皿。既定では使わない。
+CREDIT_MAX = 50      # クレジット上限（実機準拠）
+RESERVE_MAX = 3000   # 下皿上限。超えた分は貯金(bank)へ回して次回配信へ持ち越す
+                     #   ≒ 2,560G ≒ 実機ウェイトで約3時間 = 1配信ぶん。
+                     #   これが無いとATを1回引いた時点で以後の投入が全部無意味になる。
 
 # ---------------------------------------------------------------------------
 # 2. 役（条件装置）と払出枚数
@@ -204,6 +211,19 @@ class MainBoard:
     prize: str = "ハズレ"
     notice: list = field(default_factory=list)
 
+    # クレジット制（--credit のときだけ有効）。既定 False では従来どおり無条件に回る。
+    #   遊技者がメダルを入れ、3枚あるときだけ1ゲーム回す。払出はクレジットに戻る。
+    #   主制御は「メダルが入った」ことしか知らない。Twitch のことは何も知らない。
+    credit_mode: bool = False
+    credit: int = 0            # クレジット（上限 CREDIT_MAX）
+    reserve: int = 0           # 下皿（上限 RESERVE_MAX）
+    bank: int = 0              # 下皿から溢れた分。次回配信へ持ち越す
+    paused: bool = False       # 外部からの一時停止
+    # 「いま消化しているメダルは誰が入れたか」。表示用の付帯情報でしかなく、
+    # 抽選にも状態遷移にも一切関与しない。2バイトコマンド（副制御）には出さない。
+    credit_src: deque = field(default_factory=deque)   # [[出所, 残り枚数], ...]
+    last_src: str = "自力"
+
     # 副制御ポート（単方向送信専用）
     sub: "SubBoard | None" = None
     cmd_log: list = field(default_factory=list)
@@ -225,12 +245,88 @@ class MainBoard:
     def power_on(self) -> None:
         self.send(CMD_POWER_ON, self.state)
 
+    # -- クレジット（--credit のときだけ動く受け皿） ------------------------
+    def _store(self, n: int, src: str) -> dict:
+        """メダルを クレジット → 下皿 → 貯金 の順に積む。積んだ内訳を返す。"""
+        n = max(0, int(n))
+        to_credit = min(n, CREDIT_MAX - self.credit)
+        self.credit += to_credit
+        rest = n - to_credit
+        to_reserve = min(rest, RESERVE_MAX - self.reserve)
+        self.reserve += to_reserve
+        to_bank = rest - to_reserve
+        self.bank += to_bank
+        held = to_credit + to_reserve
+        if held > 0:
+            # 出所は消費順（FIFO）に並べる。同じ出所が続くならまとめる。
+            if self.credit_src and self.credit_src[-1][0] == src:
+                self.credit_src[-1][1] += held
+            else:
+                self.credit_src.append([src, held])
+        return {"credit": to_credit, "reserve": to_reserve, "bank": to_bank}
+
+    def insert_medal(self, n: int, src: str | None = None) -> dict:
+        """遊技者がメダルを入れる。主制御にとっては投入口が増えただけで、
+        誰が入れたか（src）は表示用のラベルにすぎない。"""
+        return self._store(n, src or "視聴者")
+
+    def _consume_src(self, n: int) -> None:
+        """消費したメダルの出所を先頭から減らし、いま消化中の出所を控える。"""
+        while n > 0 and self.credit_src:
+            head = self.credit_src[0]
+            self.last_src = head[0]
+            take = min(n, head[1])
+            head[1] -= take
+            n -= take
+            if head[1] <= 0:
+                self.credit_src.popleft()
+        if n > 0:
+            self.last_src = "自力"     # 払出由来のメダル。誰のものでもない
+
+    def _refill(self) -> None:
+        """クレジットが規定投入枚数に足りなければ下皿から補充する（実機と同じ）。
+        下皿も尽きたら貯金（前回配信からの持ち越し）から下皿へ移す。"""
+        if self.credit >= BET:
+            return
+        if self.reserve <= 0 and self.bank > 0:
+            take = min(RESERVE_MAX, self.bank)
+            self.bank -= take
+            self._store(take, "貯金")
+        if self.credit < BET and self.reserve > 0:
+            take = min(BET - self.credit, self.reserve)
+            self.credit += take
+            self.reserve -= take
+
+    def can_bet(self) -> bool:
+        if not self.credit_mode:
+            return True
+        self._refill()
+        return self.credit >= BET
+
+    def power_cycle(self, setting: int | None = None) -> None:
+        """電源OFF → 設定変更 → ON を再現する。設定変更はRAMクリア（実機同様）。
+        クレジットと下皿は筐体に残っているメダルなので消さない。"""
+        if setting is not None and 1 <= int(setting) <= 6:
+            self.setting = int(setting)
+        self.state, self.mode, self.mode_left = ST_NORMAL, MODE_LOW, 0
+        self.game_count = self.gg_left = self.at_left = self.stock = 0
+        self.notice = []
+        self.power_on()
+
     # -- [1] メダル投入 ----------------------------------------------------
-    def bet(self) -> None:
+    def bet(self) -> bool:
+        """規定枚数を投入する。クレジット制で足りなければ False（待機）。"""
+        if self.credit_mode:
+            self._refill()
+            if self.credit < BET:
+                return False
+            self.credit -= BET
+            self._consume_src(BET)
         self.total_in += BET
         self.total_games += 1
         self.send(CMD_MEDAL_IN, BET)
         self.send(CMD_GAME_START, self.state)
+        return True
 
     # -- [2] 乱数取得 ------------------------------------------------------
     def get_random(self) -> int:
@@ -320,6 +416,8 @@ class MainBoard:
     def payout(self) -> int:
         p = PAYOUT.get(self.prize, 0)
         self.total_out += p
+        if self.credit_mode and p > 0:
+            self._store(p, "自力")     # 払い出しは誰のものでもない
         self.send(CMD_PAYOUT, p)
         return p
 
@@ -412,8 +510,9 @@ class MainBoard:
         self.send(CMD_STOCK, self.stock)
 
     # -- 1ゲームの主制御シーケンス ------------------------------------------
-    def play(self) -> dict:
-        self.bet()
+    def play(self) -> dict | None:
+        if not self.bet():
+            return None            # クレジット不足。ゲームを始めない（待機）
         self.lottery()
         push = self.spin_start()
         # AT中は押し順ナビ（主制御が正解を指示）、通常時は遊技者のランダム押し
@@ -822,7 +921,11 @@ class PanelLink:
         self._sub_last: dict | None = None
 
     def _on_message(self, msg) -> None:
-        if isinstance(msg, dict) and msg.get("action") == "panelInject":
+        # panelInject … 試験用の注入（コンパネの「信号注入」カード）
+        # playerInput … 遊技者の操作そのもの（メダル投入・押し順・電源）。
+        #               Twitch ブリッジもコンパネもこの口を使う。主制御にとっては
+        #               「投入口とボタンが増えた」だけで、送り元が誰かは関知しない。
+        if isinstance(msg, dict) and msg.get("action") in ("panelInject", "playerInput"):
             self.inject_q.put(msg)
 
     def tap_cmd(self, cmd: int) -> None:
@@ -861,6 +964,11 @@ class PanelLink:
             "stock": b.stock,
             "ggLeft": b.gg_left if b.state == ST_GG else None,
             "atLeft": b.at_left if b.state == ST_AT else None,
+            # クレジット制のときだけ意味がある値。表示用で、抽選には関与しない。
+            "credit": b.credit if b.credit_mode else None,
+            "reserve": b.reserve if b.credit_mode else None,
+            "bank": b.bank if b.credit_mode else None,
+            "by": b.last_src if b.credit_mode else None,
         })
         for note in r["notice"]:
             ev = next((e for key, e in PANEL_EVENT if note.startswith(key)), "info")
@@ -893,6 +1001,24 @@ class PanelLink:
     def sub_event(self, ev: dict) -> None:
         self.ws.send({"action": "subBoard", "type": "event", "event": ev})
 
+    def player_event(self, b: MainBoard, kind: str, text: str, **kw) -> None:
+        """遊技者の操作をコンパネへ知らせる（表示用。副制御へは出さない）。"""
+        self.ws.send({"action": "mainBoard", "type": "player", "event": kind, "text": text,
+                      "credit": b.credit, "reserve": b.reserve, "bank": b.bank, **kw})
+
+    def send_idle(self, b: MainBoard) -> None:
+        """クレジット待ちで止まっているときの状態。1秒ごとに送り、
+        コンパネとオーバーレイに「メダル募集中」を出させる。"""
+        self.ws.send({
+            "action": "mainBoard", "type": "idle",
+            "game": b.total_games, "setting": b.setting,
+            "state": STATE_NAME[b.state],
+            "credit": b.credit, "reserve": b.reserve, "bank": b.bank,
+            "paused": b.paused,
+            "need": max(0, BET - b.credit - b.reserve),
+            "diff": b.total_out - b.total_in,
+        })
+
     def send_summary(self, b: MainBoard) -> None:
         self.ws.send({"action": "mainBoard", "type": "summary", "setting": b.setting,
                       "games": b.total_games, "diff": b.total_out - b.total_in,
@@ -913,6 +1039,8 @@ def run_trace(board: MainBoard, games: int, interval: float = 0.0) -> None:
     try:
         for _ in range(games):
             r = board.play()
+            if r is None:
+                break          # クレジット制で投入が尽きた
             note = " / ".join(r["notice"])
             print(f"{r['game']:>5} {STATE_NAME[r['state']]:<4} {r['flag']:<8} "
                   f"{r['prize']:<8} {r['pay']:>4} {r['diff']:>+7}  {note}")
@@ -955,12 +1083,39 @@ def run_events(board: MainBoard, games: int, seed: int | None = None) -> None:
         pass
 
 
+BANK_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                         ".run", "twitch_bank.json")
+
+
+def load_bank() -> int:
+    """前回配信で下皿から溢れた分（貯金）を読む。無ければ 0。"""
+    try:
+        with open(BANK_PATH, encoding="utf-8") as f:
+            return max(0, int(json.load(f).get("bank", 0)))
+    except (OSError, ValueError, TypeError, KeyError):
+        return 0
+
+
+def save_bank(n: int) -> None:
+    """貯金を次回配信へ持ち越す。書けなくても遊技には影響しないので黙って諦める。"""
+    try:
+        os.makedirs(os.path.dirname(BANK_PATH), exist_ok=True)
+        with open(BANK_PATH, "w", encoding="utf-8") as f:
+            json.dump({"bank": max(0, int(n)),
+                       "savedAt": time.strftime("%Y-%m-%dT%H:%M:%S")}, f, ensure_ascii=False)
+    except OSError:
+        pass
+
+
 def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
     """コンパネから届いた注入フレームを遊技スレッド側で流し込む。
 
     main2sub … 主制御の送信口をそのまま使う。副制御は正規の受信と区別できず、
                コマンド生ログにも同じ形で残る。副制御のロジック検証用。
     enshutsu … 副制御の判断を飛ばしてオーバーレイへ直送する。表示確認用。
+
+    playerInput は「遊技者の操作」。メダル投入・一時停止・電源。
+    抽選には一切触らない（触れる口をそもそも作らない）。
     """
     if board.panel is None:
         return
@@ -969,8 +1124,11 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
             msg = board.panel.inject_q.get_nowait()
         except queue.Empty:
             return
-        layer = msg.get("layer")
         try:
+            if msg.get("action") == "playerInput":
+                _apply_player_input(board, msg)
+                continue
+            layer = msg.get("layer")
             if layer == "main2sub":
                 board.send(int(msg.get("type", 0)), int(msg.get("data", 0)))
             elif layer == "enshutsu":
@@ -982,18 +1140,78 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
             pass
 
 
+def _apply_player_input(board: MainBoard, msg: dict) -> None:
+    """遊技者の操作を適用する。遊技スレッドから呼ばれる（受信スレッドでは触らない）。"""
+    inp = msg.get("input")
+    if inp == "insertMedal":
+        n = int(msg.get("medals", 0))
+        if n <= 0:
+            return
+        got = board.insert_medal(n, msg.get("src"))
+        src = msg.get("src") or "視聴者"
+        note = f"{src} が {n}枚 投入"
+        if got["bank"]:
+            note += f"（下皿が一杯のため {got['bank']}枚 は貯金へ）"
+        print(f"[投入] {note} / クレジット {board.credit} 下皿 {board.reserve} 貯金 {board.bank}",
+              file=sys.stderr, flush=True)
+        if board.panel is not None:
+            board.panel.player_event(board, "insertMedal", note, src=src, medals=n, **got)
+    elif inp == "pause":
+        board.paused = True
+        print("[停止] 遊技を一時停止しました", file=sys.stderr, flush=True)
+    elif inp == "resume":
+        board.paused = False
+        print("[再開] 遊技を再開しました", file=sys.stderr, flush=True)
+    elif inp == "powerCycle":
+        setting = msg.get("setting")
+        board.power_cycle(int(setting) if setting is not None else None)
+        print(f"[電源] 設定{board.setting} で打ち直しました（RAMクリア）", file=sys.stderr, flush=True)
+        if board.panel is not None:
+            board.panel.player_event(board, "powerCycle", f"設定{board.setting} で打ち直し")
+
+
 def run_live(board: MainBoard, games: int, host: str, port: int,
              interval: float, seed: int | None = None) -> None:
     """演出イベントをWebSocketで配信しながら稼働させる。"""
+    # kill / dev.cmd stop でも finally を通して貯金を書き出す
+    try:
+        import signal
+        signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
+    except (ImportError, ValueError, AttributeError, OSError):
+        pass    # Windows など、扱えない環境では諦める（定期保存があるので致命ではない）
     srv = EnshutsuServer(host, port)
     srv.start()
     print(f"演出配信中: ws://{host}:{port}  （Ctrl+Cで停止）", file=sys.stderr)
     board.sub = SubBoard(rng=random.Random(seed), on_event=srv.broadcast,
                          panel=board.panel)
     board.power_on()
+    if board.credit_mode:
+        print(f"クレジット制: クレジット {board.credit} / 下皿 {board.reserve} / 貯金 {board.bank}",
+              file=sys.stderr)
+    played = 0
+    last_idle = 0.0
+    last_save = time.monotonic()
     try:
-        for _ in range(games):
-            board.play()
+        # games == 0 は無制限（配信中は止めない）
+        while games == 0 or played < games:
+            drain_inject(board, srv)
+            # クレジット待ち・一時停止中はゲームを始めず、1秒ごとに待機状態を送る
+            if board.paused or not board.can_bet():
+                now = time.monotonic()
+                if now - last_idle >= 1.0:
+                    last_idle = now
+                    if board.panel is not None:
+                        board.panel.send_idle(board)
+                time.sleep(0.2)
+                continue
+            if board.play() is None:
+                continue           # 直前に投入が尽きた（次の周回で待機に入る）
+            played += 1
+            # 貯金は定期的に書き出す。Windows の Stop-Process のように
+            # 後始末が走らない止め方をされても、視聴者のメダルを失わないため。
+            if board.credit_mode and time.monotonic() - last_save >= 10.0:
+                last_save = time.monotonic()
+                save_bank(board.bank + board.reserve + board.credit)
             # ウェイト中も注入を拾えるよう、細かく刻んで待つ
             deadline = time.monotonic() + max(interval, 0.0)
             while True:
@@ -1007,12 +1225,19 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
         srv.close()
         d = board.total_out - board.total_in
         print(f"停止: {board.total_games:,}G / 差枚 {d:+,}枚", file=sys.stderr)
+        if board.credit_mode:
+            # 下皿に残っているぶんも次回へ持ち越す（配信をまたいでも消えない）
+            carry = board.bank + board.reserve + board.credit
+            save_bank(carry)
+            print(f"貯金 {carry:,}枚 を次回へ持ち越しました", file=sys.stderr)
 
 
 def run_single(board: MainBoard, games: int) -> None:
     at_games = gg_hit = god_hit = 0
     for _ in range(games):
         r = board.play()
+        if r is None:
+            break              # クレジット制で投入が尽きた
         if r["state"] != ST_NORMAL:
             at_games += 1
         for n in r["notice"]:
@@ -1068,12 +1293,28 @@ def main() -> None:
     ap.add_argument("--no-panel", action="store_true", help="コンパネへの送信を行わない")
     ap.add_argument("--panel-cmds", action="store_true",
                     help="主→副の2バイトコマンド生ログもコンパネへ送る")
+    ap.add_argument("--credit", action="store_true",
+                    help="クレジット制で動く（メダルが3枚以上あるときだけ回す）。既定は無条件に回る")
+    ap.add_argument("--credit-init", type=int, default=500,
+                    help="配信開始時のクレジット（既定500枚 ≒ 427回転 ≒ 29分ぶん）")
+    ap.add_argument("--no-bank", action="store_true",
+                    help="前回配信からの貯金（.run/twitch_bank.json）を引き継がない")
     a = ap.parse_args()
 
     if a.sim:
         run_sim(a.setting, a.sim, a.games)
         return
     board = MainBoard(setting=a.setting, rng=random.Random(a.seed))
+    if a.credit:
+        # クレジット制。主制御は「メダルが入った」ことしか知らない（Twitch を知らない）。
+        board.credit_mode = True
+        if not a.no_bank:
+            board.bank = load_bank()
+        # スタートクレジットは「積み増し」ではなく「最低これだけは入れておく」。
+        # 前回の持ち越しが十分あるなら足さない（毎配信で膨らんでいかないように）。
+        short = a.credit_init - board.bank
+        if short > 0:
+            board.insert_medal(short, "スタート")
     # --serve / --trace のときだけコンパネへ送る（集計モードでは送らない）
     if not a.no_panel and (a.serve or a.trace):
         board.panel = PanelLink(a.panel, raw_cmds=a.panel_cmds)

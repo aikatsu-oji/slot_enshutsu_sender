@@ -21,8 +21,9 @@ scripts\dev.cmd stop
 **Twitch 連携 (段階1: 演出のみ)**:
 
 ```
-npm run twitch:mock              # Twitch に繋がず擬似イベントで演出を確認
+npm run twitch:mock              # Twitch に繋がず擬似イベントで演出とメダル投入を確認
 npm run twitch                   # 本番 (初回は .run/twitch_config.json の用意と認証が必要)
+scripts\dev.cmd start -Credit    # 主制御をクレジット制で起動 (メダルが尽きたら待機)
 ```
 
 `twitch/config.example.json` を `.run/twitch_config.json` にコピーして `clientId` と `channel` を入れ、

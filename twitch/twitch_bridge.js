@@ -9,9 +9,9 @@
 //   node twitch/twitch_bridge.js --ws-url ws://127.0.0.1:8080/ws --no-subscribe
 //                                                    Twitch CLI のモック EventSub サーバーに繋ぐ
 //
-// 段階1 でやること / やらないこと:
-//   やる     … 演出 (予告バナー) をオーバーレイへ直接流す。主制御には一切触らない。
-//   やらない … メダルの投入 (medals / counter / vote)。段階3で --medals を既定にする。
+// 段階3 でやること:
+//   演出 (予告バナー) をオーバーレイへ直接流し、無料アクションぶんのメダルを主制御へ投入する。
+//   抽選には一切触らない (触れる口をそもそも作らない)。--no-medals で段階1 の挙動に戻せる。
 //
 // 演出の送り先に subEvent を使う理由:
 //   {"action":"subEvent","event":{...}} はオーバーレイが 8787 で直接受ける。
@@ -38,7 +38,7 @@ function parseArgs(argv) {
     apiUrl: null,
     mock: null,
     speed: 1,
-    medals: false,
+    medals: true,
     subscribe: true,
     dryRun: false,
   };
@@ -52,6 +52,7 @@ function parseArgs(argv) {
     else if (v === "--mock") a.mock = next();
     else if (v === "--speed") a.speed = Math.max(0.1, Number(next()) || 1);
     else if (v === "--medals") a.medals = true;
+    else if (v === "--no-medals") a.medals = false;
     else if (v === "--no-subscribe") a.subscribe = false;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--help" || v === "-h") { printHelp(); process.exit(0); }
@@ -69,7 +70,7 @@ function printHelp() {
   --api-url <url>   Helix の接続先        (Twitch CLI のモックを使うときだけ)
   --mock <file>     擬似イベント JSONL を流す (Twitch に繋がない)
   --speed <n>       --mock の再生倍率     (既定 1 = 1.5 秒に 1 件)
-  --medals          medals/counter/vote を有効にする (段階3以降)
+  --no-medals       メダルの投入をしない (段階1 の演出だけの挙動に戻す)
   --no-subscribe    購読登録をしない      (モックサーバー向け)
   --dry-run         中継へ送らずログだけ出す`);
 }
@@ -405,7 +406,117 @@ function resolveEnshutsu(spec, ev) {
   return out;
 }
 
-let skippedMedalNotice = false;
+// ---------------------------------------------------------------------------
+// メダルの送出
+//   主制御へ送るのは {action:"playerInput", input:"insertMedal"} だけ。抽選には触らない。
+//
+//   1分あたりの上限はトークンバケットで持つ。上限に当たったぶんは捨てずに待たせる。
+//   「コメントしたのに何も起きなかった」「ビッツが消えた」を作らないため、
+//   ここでイベントを落とすことは絶対にしない。
+//   チャット由来 (連帯カウンタ) だけ別バケツにするのは、原資が「タイピング」で
+//   いくらでも増やせるから。チャンネルポイントは視聴時間ぶんしか貯まらないので緩い。
+// ---------------------------------------------------------------------------
+function createMedalQueue(send) {
+  const q = [];                      // [{ n, src, chat }]
+  let chatTokens = 0, genTokens = 0;
+  let last = Date.now();
+  let sentTotal = 0;
+
+  function tick() {
+    const now = Date.now();
+    const dt = Math.max(0, now - last) / 60000;   // 分
+    last = now;
+    const chatMax = Math.max(0, rules.guard.chatMedalsPerMinute);
+    const genMax = Math.max(0, rules.guard.maxMedalsPerMinute);
+    // 溜めすぎないよう 60 分ぶんで頭打ちにする (長い無風のあとに一気に出ないように)
+    chatTokens = Math.min(chatMax * 60, chatTokens + chatMax * dt);
+    genTokens = Math.min(genMax * 60, genTokens + genMax * dt);
+
+    // 先頭から順に、まるごと出せるものだけ出す (分割すると「100回転」が細切れになる)
+    for (let i = 0; i < q.length; i++) {
+      const it = q[i];
+      const tokens = it.chat ? chatTokens : genTokens;
+      if (tokens < it.n) continue;
+      if (it.chat) chatTokens -= it.n; else genTokens -= it.n;
+      q.splice(i, 1);
+      i--;
+      sentTotal += it.n;
+      send({ action: "playerInput", input: "insertMedal", medals: it.n, src: it.src, reqId: it.id });
+      log(`[投入] ${it.src} ${it.n}枚${it.note ? ` (${it.note})` : ""}`);
+    }
+  }
+
+  setInterval(tick, 1000);
+  return {
+    push(n, src, opts) {
+      n = Math.floor(Number(n) || 0);
+      if (n <= 0) return;
+      const cap = Math.max(1, rules.guard.maxMedalsPerEvent);
+      if (n > cap) {
+        log(`[投入] ${src} の ${n}枚 は 1イベント上限 ${cap}枚 に丸めました`);
+        n = cap;
+      }
+      q.push({ n, src, chat: !!(opts && opts.chat), note: opts && opts.note,
+               id: (opts && opts.id) || `m${Date.now()}` });
+      tick();
+    },
+    get waiting() { return q.reduce((a, b) => a + b.n, 0); },
+    get sent() { return sentTotal; },
+  };
+}
+
+// medals 指定を枚数に変換する。
+//   { fixed: 120 }                          … 固定
+//   { of:"amount", unit:20, max:1000 }      … amount 1 につき unit 枚
+//   { of:"amount", per:10 }                 … amount per につき 1 枚
+//   { byTier:{ "1":500 } }                  … ティア別 (無料設計では使わない)
+function resolveMedals(spec, ev) {
+  if (!spec || typeof spec !== "object") return 0;
+  let n = 0;
+  if (spec.fixed != null) {
+    n = Number(spec.fixed) || 0;
+  } else if (spec.byTier) {
+    n = Number(spec.byTier[String(ev.tier || 1)]) || 0;
+  } else if (spec.of) {
+    const base = Number(ev[spec.of]) || 0;
+    if (spec.unit != null) n = base * (Number(spec.unit) || 0);
+    else if (spec.per != null) n = base / (Number(spec.per) || 1);
+    else n = base;
+  }
+  n = Math.floor(n);
+  if (spec.max != null) n = Math.min(n, Number(spec.max) || 0);
+  return Math.max(0, n);
+}
+
+// ---------------------------------------------------------------------------
+// チャット連帯カウンタ
+//   個人にではなくチャンネル全体に貯める。1人が200回書いても200人が1回ずつでも同じなので、
+//   連投しても得しない = スパム対策が構造で効く。
+// ---------------------------------------------------------------------------
+const chatCounter = { count: 0, goal: 0, lastByUser: new Map(), lastText: "" };
+
+function countChat(rule, ev, ctx) {
+  const c = rule.counter;
+  chatCounter.goal = Number(c.goal) || 200;
+  const text = ev.text || "";
+  if (text.length < (Number(c.minLength) || 0)) return;
+  if (Array.isArray(c.ignore) && c.ignore.some((p) => new RegExp(p).test(text))) return;
+  if (text === chatCounter.lastText) return;                 // 直前と同じ本文は数えない
+  const cd = (Number(c.perUserCooldownSec) || 0) * 1000;
+  const login = ev.user && ev.user.login;
+  if (login && cd) {
+    const until = chatCounter.lastByUser.get(login) || 0;
+    if (Date.now() < until) return;                          // 同じ人の連投は数えない
+    chatCounter.lastByUser.set(login, Date.now() + cd);
+  }
+  chatCounter.lastText = text;
+  chatCounter.count++;
+  if (chatCounter.count < chatCounter.goal) return;
+  chatCounter.count = 0;
+  const medals = Number(c.medals) || 0;
+  ctx.medals.push(medals, "チャット", { chat: true, note: `${chatCounter.goal}コメント達成` });
+  log(`[チャット] ${chatCounter.goal}コメント達成 → ${medals}枚 (${c.label || ""})`);
+}
 
 function handleEvent(ev, ctx) {
   if (!rules.enabled) return;
@@ -416,7 +527,10 @@ function handleEvent(ev, ctx) {
     if (ev.text === "online") {
       seenChatters.clear();
       chatHits.length = 0;
-      log("[Twitch] 配信開始を検知。初コメ判定をリセットしました");
+      chatCounter.count = 0;
+      chatCounter.lastByUser.clear();
+      chatCounter.lastText = "";
+      log("[Twitch] 配信開始を検知。初コメ判定と連帯カウンタをリセットしました");
     }
     ctx.relay.send({ action: "twitchEvent", ev });
     return;
@@ -449,11 +563,17 @@ function handleEvent(ev, ctx) {
     }
   }
 
-  // メダルを動かすルールは段階3から。ここでは一度だけ知らせて何もしない。
-  if (!args.medals && hit.some((r) => r.medals || r.counter || r.vote)) {
-    if (!skippedMedalNotice) {
-      skippedMedalNotice = true;
-      log("[ルール] medals / counter / vote は段階1では無効です (--medals で有効化)");
+  // メダル。--no-medals なら何もしない (段階1 の挙動)。
+  if (args.medals) {
+    for (const r of hit) {
+      if (r.medals) {
+        const n = resolveMedals(r.medals, ev);
+        if (n > 0) {
+          ctx.medals.push(n, ev.user && ev.user.name ? ev.user.name : "視聴者",
+                          { note: r.name, id: ev.id });
+        }
+      }
+      if (r.counter && ev.kind === "chat") countChat(r, ev, ctx);
     }
   }
 
@@ -495,8 +615,11 @@ async function main() {
     }
   });
   const queue = createEnshutsuQueue((m) => relay.send(m));
+  const medals = createMedalQueue((m) => relay.send(m));
   ctx.relay = relay;
   ctx.queue = queue;
+  ctx.medals = medals;
+  log(args.medals ? "[起動] メダル投入: 有効" : "[起動] メダル投入: 無効 (--no-medals)");
 
   // 生存と状態を 1 秒周期で流す。コンパネのランプとオーバーレイ HUD がこれを見る。
   let esConnected = false;
@@ -508,6 +631,8 @@ async function main() {
       connected: esConnected, enabled: rules.enabled, subs: subCount,
       queue: queue.size, pending: relay.pending, lastAt,
       stage: args.medals ? "medals" : "tier1",
+      chatCount: chatCounter.count, chatGoal: chatCounter.goal,
+      medalsWaiting: medals.waiting, medalsSent: medals.sent,
     });
   }, 1000);
 

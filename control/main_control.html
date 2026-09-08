@@ -293,6 +293,14 @@
   }
   .mb-roles span{flex:1;background:#0d0b14;border:1px solid #3a3348;border-radius:8px;padding:7px 10px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
+  /* クレジット制 (--credit) のときだけ出る行 */
+  .mb-credit{display:flex;gap:8px;margin-top:8px;font-size:12px;color:#9a92a8;flex-wrap:wrap;}
+  .mb-credit span{flex:1;min-width:110px;background:#0d0b14;border:1px solid #3a3348;border-radius:8px;padding:7px 10px;}
+  .mb-credit b{color:var(--gold-bright);font-weight:600;}
+  .mb-idle{
+    margin-top:8px;padding:9px 12px;border-radius:8px;font-size:12.5px;font-weight:600;
+    background:rgba(255,154,138,.12);border:1px solid rgba(255,154,138,.45);color:#ff9a8a;
+  }
   .mb-events{
     margin-top:10px;
     background:#08070c;border:1px solid #3a3348;border-radius:8px;
@@ -510,6 +518,13 @@
       <span>ナビ <b id="mb-navi">—</b></span>
       <span>払出 <b id="mb-pay">—</b></span>
     </div>
+    <div class="mb-credit" id="mb-credit" hidden>
+      <span>クレジット <b id="mb-credit-n">—</b></span>
+      <span>下皿 <b id="mb-reserve">—</b></span>
+      <span>貯金 <b id="mb-bank">—</b></span>
+      <span>いま回しているのは <b id="mb-by">—</b> のメダル</span>
+    </div>
+    <div class="mb-idle" id="mb-idle" hidden>メダル募集中</div>
     <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
     <div class="mb-opts">
       <label><input type="checkbox" id="mb-show-cmds" checked> 主→副コマンド生ログを表示</label>
@@ -871,6 +886,12 @@
     diff: document.getElementById("mb-diff"),
     stock: document.getElementById("mb-stock"),
     reels: [0,1,2].map(i => document.getElementById(`mb-reel-${i}`)),
+    credit: document.getElementById("mb-credit"),
+    creditN: document.getElementById("mb-credit-n"),
+    reserve: document.getElementById("mb-reserve"),
+    bank: document.getElementById("mb-bank"),
+    by: document.getElementById("mb-by"),
+    idle: document.getElementById("mb-idle"),
     flag: document.getElementById("mb-flag"),
     prize: document.getElementById("mb-prize"),
     navi: document.getElementById("mb-navi"),
@@ -924,8 +945,35 @@
     el.scrollTop = el.scrollHeight;
   }
 
+  // クレジット制のときだけ出す行。--credit を付けていなければ credit は null で来る。
+  function mbRenderCredit(d){
+    if(d.credit == null){ mb.credit.hidden = true; return; }
+    mb.credit.hidden = false;
+    mb.creditN.textContent = d.credit;
+    mb.reserve.textContent = (d.reserve ?? 0).toLocaleString();
+    mb.bank.textContent = (d.bank ?? 0).toLocaleString();
+    if(d.by != null) mb.by.textContent = d.by;
+  }
+
+  function mbRenderIdle(d){
+    mbAlive(`待機中 / 設定${d.setting ?? "?"}`);
+    mbRenderCredit(d);
+    mb.idle.hidden = false;
+    mb.idle.textContent = d.paused
+      ? "一時停止中"
+      : `メダル募集中（あと ${d.need ?? "—"} 枚で 1 ゲーム）`;
+  }
+
+  function mbRenderPlayer(d){
+    mbRenderCredit(d);
+    mbAppend(mb.events, `▲ ${d.text ?? ""}`, "ev-at", "ev");
+    log(`🪙 ${d.text ?? ""}`);
+  }
+
   function mbRenderState(d){
     mbAlive(`受信中 / 設定${d.setting ?? "?"}`);
+    mb.idle.hidden = true;
+    mbRenderCredit(d);
     const st = d.state || "—";
     mb.stateTile.className = "mb-tile " + (MB_STATE_CLASS[st] || "state-normal");
     if(st === "通常"){
@@ -986,6 +1034,8 @@
   function handleMainBoard(d){
     switch(d.type){
       case "state": mbRenderState(d); break;
+      case "idle": mbRenderIdle(d); break;
+      case "player": mbRenderPlayer(d); break;
       case "event": mbRenderEvent(d); break;
       case "cmd": mbRenderCmd(d); break;
       case "summary":

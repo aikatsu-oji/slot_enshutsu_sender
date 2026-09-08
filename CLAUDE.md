@@ -33,8 +33,8 @@ slot_enshutsu_sender/
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, blackout.mp3 ...)。GIF/画像に加え動画 (mp4/webm/mov) 可
 │       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
-├── twitch/                    Twitch 連携 (段階1: 演出のみ。主制御には触らない)
-│   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 中継サーバーへ。単体で node twitch/twitch_bridge.js
+├── twitch/                    Twitch 連携 (段階3: 演出 + 無料アクションぶんのメダル投入)
+│   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
 │   ├── eventsub.js              EventSub WebSocket の接続・再接続・keepalive 監視・重複排除だけの薄い層
 │   ├── auth.js                  Device Code Grant とトークン更新。設定/トークンは .run/ 配下 (git 管理外)
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
@@ -70,7 +70,8 @@ slot_enshutsu_sender/
 ## コマンド (Claude Code から実行してよいもの)
 
 ```
-scripts\dev.cmd start [-Mode normal|fast|tenjo|none]   # 中継サーバー + 主制御をバックグラウンド起動
+scripts\dev.cmd start [-Mode normal|fast|tenjo|none] [-Credit]   # 中継サーバー + 主制御をバックグラウンド起動
+                                                       # -Credit でクレジット制 (メダルが尽きたら待機)
 scripts\dev.cmd status                                 # ポート・health・PID を表示 (exit 0 = サーバー稼働中)
 scripts\dev.cmd test                                   # 主制御 2000G / 副制御 300 イベント / JS 構文チェック
 scripts\dev.cmd send triggerEnshutsu                  # コンパネのボタンと同じメッセージを送る (JSON 直指定も可)
@@ -92,6 +93,8 @@ npm run twitch                                         # 本番。初回は Devi
   (主制御連動中の筐体ビューは自動再読込)。
 - 主制御単体の挙動確認: `py -3 main_board\god_main_board.py --games 2000 --seed 1 --no-panel` (通信なし、集計のみ)。
   `--trace N` で 1G ごとのログ、`--events N` で副制御イベントを JSON 出力。
+- クレジット制の確認: `py -3 main_board\god_main_board.py --credit --credit-init 30 --no-bank --games 200 --no-panel --seed 1`
+  (投入 → 消化 → 尽きたら終了)。`--serve` と併せると待機状態がコンパネに出る。
 
 ## 編集時の注意
 
@@ -124,12 +127,19 @@ npm run twitch                                         # 本番。初回は Devi
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
-- Twitch 連携 (`twitch/`) は中継サーバーに 1 クライアントとして繋ぐだけ。中継サーバーと主制御は改造しない。
+- Twitch 連携 (`twitch/`) は中継サーバーに 1 クライアントとして繋ぐだけ。中継サーバーは改造しない。
   演出は `{"action":"subEvent","event":{...}}` で送る (オーバーレイが 8787 で直接受ける)。
   `panelInject(layer:"enshutsu")` は主制御を経由するので、主制御が起動していないと届かない。
-  段階1 は「中継サーバー + オーバーレイ」だけで動くことが要件なので `subEvent` を使う。
-  メダルを動かすルール (`medals` / `counter` / `vote`) は段階3までは `--medals` を付けない限り無視される。
+  メダルは `{"action":"playerInput","input":"insertMedal","medals":N,"src":"..."}` で送る。
+  **抽選に触る口は作らない。** ブリッジが送れるのは投入・一時停止・電源だけ。
+  1分あたりの上限に当たったぶんは捨てずに待たせる (視聴者が押したぶんを失わない)。
+  `--no-medals` で演出だけの挙動 (段階1) に戻せる。
   clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
+- クレジット制 (`--credit`) は主制御の既定では OFF。付けたときだけ「メダルが 3 枚以上あるときだけ回る」。
+  `credit`(上限50) → `reserve`(下皿・上限3000) → `bank`(貯金) の 3 段で、溢れた分は
+  `.run/twitch_bank.json` に書いて次回配信へ持ち越す (10秒ごとに保存するので強制終了でも残る)。
+  「誰のメダルで回っているか」は `credit_src` の FIFO で追うが、**表示用の付帯情報でしかない**。
+  8787 のモニタ端子にだけ出し、2バイトコマンド (8765) には絶対に乗せない。
 - 主制御 → 副制御は 2 バイトコマンド (単方向)。副制御は主制御の内部状態を直接見ない。この境界を守る
   (仕様は doc/主制御・副制御仕様書.docx)。
 - 中継サーバーはメッセージを「受信したら他の全クライアントへ転送するだけ」。ロジックを足さない。

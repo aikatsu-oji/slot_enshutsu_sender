@@ -7,7 +7,9 @@
   scripts\dev.cmd <command> [options]      (cmd / Git Bash から)
   powershell -ExecutionPolicy Bypass -File scripts\dev.ps1 <command> [options]
 
-  start   [-Mode normal|fast|tenjo|none]   中継サーバーと主制御をバックグラウンド起動(ログは .run\ 配下)
+  start   [-Mode normal|fast|tenjo|none] [-Credit]
+                                           中継サーバーと主制御をバックグラウンド起動(ログは .run\ 配下)
+                                           -Credit を付けるとクレジット制(視聴者のメダルが尽きたら待機)
   stop                                     start で起動したプロセスを停止(PIDファイル → ポート の順で探す)
   restart [-Mode ...]                      stop → start
   status                                   ポート/ヘルスチェック/PIDの状態を表示
@@ -28,6 +30,7 @@ param(
   [Parameter(Position = 0)] [string]$Command = "help",
   [Parameter(Position = 1, ValueFromRemainingArguments = $true)] [string[]]$Rest,
   [ValidateSet("normal", "fast", "tenjo", "none")] [string]$Mode = "normal",
+  [switch]$Credit,
   [int]$Tail = 40
 )
 
@@ -118,12 +121,20 @@ function Ensure-Deps {
 }
 
 function Board-Args($m) {
-  switch ($m) {
-    "normal" { return @("--serve", "--setting", "1", "--games", "100000") }
-    "fast"   { return @("--serve", "--setting", "6", "--interval", "0.5", "--games", "100000") }
-    "tenjo"  { return @("--serve", "--setting", "1", "--interval", "0.2", "--games", "3000", "--seed", "6") }
-    default  { return $null }
+  $base = switch ($m) {
+    "normal" { @("--serve", "--setting", "1") }
+    "fast"   { @("--serve", "--setting", "6", "--interval", "0.5") }
+    "tenjo"  { @("--serve", "--setting", "1", "--interval", "0.2", "--seed", "6") }
+    default  { $null }
   }
+  if (-not $base) { return $null }
+  if ($Credit) {
+    # クレジット制: 視聴者のメダルが尽きたら待機する。配信中は止めないので無制限(--games 0)。
+    # 設定3以上は機械割が100%を超えて下皿が増え続けるため、-Mode fast との併用は向かない。
+    return $base + @("--credit", "--games", "0")
+  }
+  $games = if ($m -eq "tenjo") { "3000" } else { "100000" }
+  return $base + @("--games", $games)
 }
 
 function Start-Server {
