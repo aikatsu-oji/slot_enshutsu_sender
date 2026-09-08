@@ -174,6 +174,7 @@ CMD_REEL_STOP_R = 0x33
 CMD_ALL_STOP = 0x34     # 全停止       data: 表示役番号
 CMD_PAYOUT = 0x40       # 払出         data: 払出枚数
 CMD_GAME_END = 0x41     # 遊技終了     data: 通常時ゲーム数(下位8bit)
+CMD_STATE_NOTIFY = 0x42 # 状態通知     data: 遊技状態。遊技終了後に毎ゲーム送る（移行の有無によらない）
 CMD_STATE = 0x50        # 状態移行     data: 遊技状態
 CMD_STOCK = 0x51        # ストック数   data: 個数
 CMD_AT_GAMES = 0x52     # AT残ゲーム数 data: 残G(下位8bit)
@@ -184,7 +185,8 @@ CMD_NAME = {
     CMD_FLAG: "内部当選", CMD_NAVI: "押し順ナビ", CMD_REEL_START: "リール回転",
     CMD_REEL_STOP_L: "左リール停止", CMD_REEL_STOP_C: "中リール停止",
     CMD_REEL_STOP_R: "右リール停止", CMD_ALL_STOP: "全停止", CMD_PAYOUT: "払出",
-    CMD_GAME_END: "遊技終了", CMD_STATE: "状態移行", CMD_STOCK: "ストック数",
+    CMD_GAME_END: "遊技終了", CMD_STATE_NOTIFY: "状態通知",
+    CMD_STATE: "状態移行", CMD_STOCK: "ストック数",
     CMD_AT_GAMES: "AT残G", CMD_ADD_GAMES: "上乗せ",
 }
 
@@ -516,6 +518,9 @@ class MainBoard:
         state_before = self.state
         self.update_state()
         self.send(CMD_GAME_END, self.game_count & 0xFF)
+        # 遊技終了後に現在の遊技状態を伝える。0x50 は移行した瞬間しか出ないので、
+        # 副制御は毎ゲームの終わりにこれを見て自分の写しを確定できる。
+        self.send(CMD_STATE_NOTIFY, self.state)
         result = {
             "game": self.total_games,
             "state": state_before,
@@ -564,6 +569,9 @@ class SubBoard:
     （ステップアップ予告）か、どこか1点だけで出す。
     GG突入・ストック・上乗せ・AT終了は遊技状態の通知なので、操作トリガーとは別に
     状態移行コマンドで出す。
+
+    遊技終了後には 0x42 状態通知が届く。移行の有無によらず毎ゲーム来るので、
+    副制御はこれで自分が持つ遊技状態の写しを確定させる（演出は出さない）。
     """
 
     def __init__(self, rng: random.Random | None = None, on_event=None, panel=None):
@@ -645,10 +653,14 @@ class SubBoard:
             if self.heat > 0:
                 self.heat -= 1
 
+        elif typ == CMD_STATE_NOTIFY:
+            # 遊技終了後の状態通知。移行の演出は 0x50 が出したあとなので、ここでは写しを合わせるだけ。
+            self.state = data
+
         if self.panel is not None:
-            # 遊技終了は1ゲームに必ず1回来る。ここだけは無変化でも送り、
+            # 状態通知は1ゲームに必ず1回、遊技終了の直後に来る。ここだけは無変化でも送り、
             # 主制御モニタと同じ1ゲーム周期の生存確認を保つ。
-            self.panel.sub_state(self, force=(typ == CMD_GAME_END))
+            self.panel.sub_state(self, force=(typ == CMD_STATE_NOTIFY))
 
     # -- レバーON: 予告プランの決定 --------------------------------------------
     def _on_lever(self) -> None:
@@ -733,9 +745,32 @@ class EnshutsuServer:
         self.running = False
 
     def start(self) -> None:
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.sock.bind((self.host, self.port))
+        """副制御ポートを排他で確保する。すでに使われていれば OSError を投げる。
+
+        Windows の SO_REUSEADDR は「使用中のポートにも bind できてしまう」ため、
+        これを付けると主制御の二重起動を止められない。2つ目が黙ってポートを奪い、
+        両方が中継サーバーへ流すので、1回のレバーONでリールが2回回る。
+        排他バインド（Windows は SO_EXCLUSIVEADDRUSE）にして二重起動を弾く。
+        直前に落とした主制御のクライアント接続が TIME_WAIT で残っていることがあるので、
+        数百ミリ秒だけ待ち直す（本当の二重起動なら空かないので、そのまま失敗する）。
+        """
+        deadline = time.monotonic() + 2.0
+        while True:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):      # Windows
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+            else:                                            # POSIX は TIME_WAIT の再利用のみ
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((self.host, self.port))
+            except OSError:
+                sock.close()
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(0.2)
+                continue
+            break
+        self.sock = sock
         self.sock.listen(8)
         self.running = True
         threading.Thread(target=self._accept_loop, daemon=True).start()
@@ -988,7 +1023,7 @@ class PanelLink:
         note = ""
         if typ in (CMD_FLAG, CMD_ALL_STOP):
             note = ID_FLAG.get(data, "")
-        elif typ in (CMD_GAME_START, CMD_STATE, CMD_POWER_ON):
+        elif typ in (CMD_GAME_START, CMD_STATE, CMD_STATE_NOTIFY, CMD_POWER_ON):
             note = STATE_NAME.get(data, "")
         elif typ == CMD_NAVI:
             note = "ナビなし" if data == 0xFF else f"押し順{data + 1}"
@@ -1133,7 +1168,7 @@ def run_commands(board: MainBoard, games: int) -> None:
         note = ""
         if typ in (CMD_FLAG, CMD_ALL_STOP):
             note = ID_FLAG.get(data, "")
-        elif typ in (CMD_GAME_START, CMD_STATE):
+        elif typ in (CMD_GAME_START, CMD_STATE, CMD_STATE_NOTIFY):
             note = STATE_NAME.get(data, "")
         elif typ == CMD_NAVI:
             note = "ナビなし" if data == 0xFF else f"押し順{data + 1}"
@@ -1302,7 +1337,15 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
     メダルが無限にある台として扱い、不足ぶんは投入したことにして回し続ける。
     """
     srv = EnshutsuServer(host, port)
-    srv.start()
+    try:
+        srv.start()
+    except OSError as e:
+        # 二重起動。ここで止めないと2台ぶんの演出とレジスタが中継サーバーへ流れ、
+        # 1回のレバーONでリールが2回回るなど、実機ではありえない動きになる。
+        print(f"[エラー] 副制御ポート {host}:{port} を確保できません: {e}", file=sys.stderr)
+        print("        主制御がすでに起動しています（二重起動）。"
+              "先に scripts\\dev.cmd stop で止めてから起動してください。", file=sys.stderr)
+        return
     print(f"演出配信中: ws://{host}:{port}  （Ctrl+Cで停止）", file=sys.stderr)
     board.wait_time = max(interval, 0.0)
     board.sub = SubBoard(rng=random.Random(seed), on_event=srv.broadcast,
