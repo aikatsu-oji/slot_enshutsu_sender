@@ -31,6 +31,11 @@
   }
   .navi span.on{background:var(--frame-bright);color:var(--frame-shadow);border-color:#fff3c8;box-shadow:0 0 14px var(--frame-bright);}
   .navi.hidden{display:none;}
+  /* ウェイト(レバーON無効時間)の表示。残り時間ぶんだけ伸びた帯が消えていく */
+  .wait{height:calc(100vw / 240);margin:calc(100vw / 300) 2% 0;background:rgba(255,255,255,.06);border-radius:99px;overflow:hidden;}
+  .wait .fill{height:100%;width:0;background:linear-gradient(90deg,var(--frame-dim),var(--frame));border-radius:99px;}
+  .wait.deny .fill{background:var(--red);}     /* 無効中にレバーを叩いたとき */
+  .wait.hidden{visibility:hidden;}
   .window{
     display:grid;grid-template-columns:repeat(3,1fr);gap:var(--frame-gap,6px);padding:var(--frame-pad,6px);
     background:var(--window-bg,linear-gradient(180deg,var(--frame-dim),var(--frame) 20%,var(--frame-bright) 50%,var(--frame) 80%,var(--frame-dim)));box-shadow:var(--window-shadow,0 6px 0 var(--frame-shadow));border-radius:var(--frame-radius,0);   /* 図柄設定で変わる */
@@ -84,6 +89,8 @@
   <div class="st" id="ws-st">未接続</div>
   <label><input type="checkbox" id="auto-stop"> 停止を自動で行う（ローカル）</label>
   <label><input type="checkbox" id="show-navi" checked> ナビランプを表示</label>
+  <label><input type="checkbox" id="sound-on" checked> 効果音を鳴らす（enshutsu/real/）</label>
+  <div class="st" id="wait-st">ウェイト: —</div>
   <div class="keys">Space/Enter = レバー　停止 = ← ↓ → / J K L / リールをクリック</div>
 </div>
 
@@ -94,6 +101,7 @@
     <div class="reel" id="reel-1"><div class="strip" id="strip-1"></div><div class="line"></div></div>
     <div class="reel" id="reel-2"><div class="strip" id="strip-2"></div><div class="line"></div></div>
   </div>
+  <div class="wait hidden" id="wait"><div class="fill" id="wait-fill"></div></div>
 </div>
 
 <script src="symbol_images.js"></script>
@@ -114,6 +122,60 @@
   const REELS = DATA.reels;
   const KOMA = DATA.koma, MAX_SLIP = 4;
   SlotSymbols.install(document);
+
+  // ---------------------------------------------------------------
+  // 効果音 (enshutsu/real/)
+  //   start … リール回転開始(レバーオン)、stop … リール停止。
+  //   stop1 / stop2 / stop3 があれば停止順(第1〜第3停止)に応じてそちらを優先する。
+  //   8787 経由で開いたときだけ /api/list で探す。ファイルが無ければ無音のまま。
+  // ---------------------------------------------------------------
+  const SOUND_DIR = "../enshutsu/real";                    // このHTMLからの相対パス
+  const SOUND_EXT = [".mp3", ".wav", ".ogg", ".m4a"];
+  const sfx = new Map();                                   // 名前(拡張子なし・小文字) → 読み込み済み Audio
+  let sfxOn = true, sfxVolume = 0.8, stopSeq = 0;
+
+  (async function loadSfx(){
+    if(location.protocol !== "http:" && location.protocol !== "https:") return;   // file:// では探さない
+    const dir = new URL(SOUND_DIR + "/", location.href).pathname;                 // 例: /enshutsu/real/
+    try{
+      const res = await fetch(`/api/list?dir=${encodeURIComponent(dir)}`, {cache:"no-store"});
+      if(!res.ok) return;
+      const data = await res.json();
+      (data.files || []).forEach(name=>{
+        const lower = name.toLowerCase();
+        if(!SOUND_EXT.some(ext=> lower.endsWith(ext))) return;
+        const key = lower.replace(/\.[^.]+$/, "");
+        if(sfx.has(key)) return;
+        const a = new Audio(`${SOUND_DIR}/${encodeURIComponent(name)}`);
+        a.preload = "auto";                                // 初回再生の遅れを避けるため先に読ませる
+        sfx.set(key, a);
+      });
+    }catch(e){ /* 音は任意。読めなくてもリールは回す */ }
+  })();
+
+  // 先に見つかった名前のものを1つ鳴らす。ch(系統)ごとに1音だけ鳴らし、
+  // 同じ ch がまだ鳴っていれば止めてから鳴らす(停止音が停止間隔より長くても重ならない)。
+  // ch が違えば重なる(回転開始音は停止音に消されない)。
+  const sfxPlaying = new Map();   // ch → 再生中の Audio
+  function playSfx(ch, ...keys){
+    if(!sfxOn) return false;
+    for(const k of keys){
+      const base = sfx.get(String(k).toLowerCase());
+      if(!base) continue;
+      try{
+        const prev = sfxPlaying.get(ch);
+        if(prev){ prev.pause(); prev.currentTime = 0; }
+        const a = base.cloneNode();
+        a.volume = Math.min(1, Math.max(0, sfxVolume));
+        a.addEventListener("ended", ()=>{ if(sfxPlaying.get(ch) === a) sfxPlaying.delete(ch); });
+        sfxPlaying.set(ch, a);
+        const p = a.play();
+        if(p && p.catch) p.catch(()=>{});   // 自動再生がブロックされても止めない
+      }catch(e){}
+      return true;
+    }
+    return false;
+  }
 
   // ---------------------------------------------------------------
   // リール物理
@@ -158,6 +220,7 @@
           this.pos = this.target; this.vel = 0; this.state = "stop";
           this.strip.classList.remove("blur");
           this.render(); this.bounce();
+          playSfx("stop", "stop" + Math.min(3, ++stopSeq), "stop");   // 第1〜第3停止で鳴らし分け(無ければ共通の stop)
           const cb = this.onStop; this.onStop = null;
           if(cb) cb(this);
           return;
@@ -176,6 +239,14 @@
   }
 
   const reels = [0,1,2].map(i => new Reel(i));
+
+  // 1ゲーム分の回転開始。開始音は3リールぶんではなく1回だけ鳴らす
+  function startReels(){
+    stopSeq = 0;
+    playSfx("start", "start");
+    reels.forEach(r => r.start());
+  }
+
   let last = performance.now();
   (function loop(now){
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -232,7 +303,7 @@
     const flag = lottery();
     game = { flag, answer: Math.floor(Math.random() * 6) + 1, order: [], target: TARGET[flag] || null, miss: false };
     stopped = 0;
-    reels.forEach(r => r.start());
+    startReels();
     if($("auto-stop").checked) [0,1,2].forEach((i,k)=> setTimeout(()=> stopReel(i), 900 + k * 420));
   }
 
@@ -280,7 +351,7 @@
     const T = fast ? [0.45, 0.65, 0.85] : [1.15, 1.6, 2.05];
     wsSt.textContent = `受信中 / 設定${d.setting ?? "?"}　${d.game}G ${d.flag}`;
     setNavi(d.navi || null);
-    reels.forEach(r => r.start());
+    startReels();
     const pos = Array.isArray(d.reelPos) ? d.reelPos : null;
     // 停止順: ナビ(押し順番号 1〜6)が出ているときはその順、無ければ左→中→右
     const stopOrder = (d.navi && ORDER[d.navi]) ? ORDER[d.navi] : [0,1,2];
@@ -314,6 +385,14 @@
   }));
   btnConn.addEventListener("click", connect);
   $("show-navi").addEventListener("change", ()=> $("navi").classList.toggle("hidden", !$("show-navi").checked));
+  $("sound-on").addEventListener("change", ()=> sfxOn = $("sound-on").checked);
+  // オーバーレイに iframe で埋め込まれているときは、親の「効果音の音量」に従う
+  window.addEventListener("message", ev=>{
+    const d = ev.data;
+    if(!d || d.type !== "reelSound") return;
+    if(d.volume != null) sfxVolume = Math.min(1, Math.max(0, Number(d.volume) || 0));
+    if(d.on != null){ sfxOn = !!d.on; $("sound-on").checked = sfxOn; }
+  });
   $("toggle-bar").addEventListener("click", ()=> $("bar").classList.toggle("hidden"));
   window.addEventListener("resize", ()=> reels.forEach(r => r.render()));
 
@@ -322,11 +401,15 @@
   //   ws=ws://host:port  中継サーバーのURL
   //   hidebar=1          操作パネルと歯車を隠す(OBS向け)
   //   navi=0             ナビランプを隠す
+  //   sound=0            効果音(開始音・停止音)を鳴らさない
+  //   vol=0.8            効果音の音量(0〜1)
   //   bg=00ff00          背景色(クロマキー用)。未指定なら透過
   const q = new URLSearchParams(location.search);
   if(q.get("ws")) wsUrl.value = q.get("ws");
   if(q.get("hidebar") === "1"){ $("bar").classList.add("hidden"); $("toggle-bar").style.display = "none"; }
   if(q.get("navi") === "0"){ $("show-navi").checked = false; $("navi").classList.add("hidden"); }
+  if(q.get("sound") === "0"){ sfxOn = false; $("sound-on").checked = false; }
+  if(q.get("vol") !== null) sfxVolume = Math.min(1, Math.max(0, Number(q.get("vol")) || 0));
   if(q.get("bg")) document.body.style.background = "#" + q.get("bg").replace(/^#/, "");
   if(q.get("mode") === "link"){ const r = document.querySelector('input[name=mode][value=link]'); r.checked = true; r.dispatchEvent(new Event("change")); }
 })();

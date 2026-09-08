@@ -27,7 +27,8 @@ slot_enshutsu_sender/
 │   └── symbols.html             図柄カタログ。全図柄・リール窓の停止形・配列表の確認と SVG/PNG 書き出し
 ├── enshutsu/
 │   ├── enshutsu_overlay.html    OBS ブラウザソース用オーバーレイ本体
-│   ├── real/                    実機系素材 (start.wav など)
+│   ├── real/                    リールの効果音。start (回転開始) / stop (停止。stop1〜stop3 で停止順別も可)
+│   │                            筐体ビュー reel.html が /api/list で読む (任意。無ければ無音)
 │   ├── at/sound/                AT系演出の効果音 (任意: gg_start / stock_up / add_games / at_end / navi)
 │   └── yokoku/
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, frz.mp4, moe.mp4)。GIF/画像に加え動画 (mp4/webm/mov) 可
@@ -93,6 +94,10 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - オーバーレイの HUD (バナー・ナビ・ポップアップ) の文字サイズは CSS 変数 `--sh` (16:9 ステージの高さ) 比で指定する。
   px 固定にしない (OBS の解像度に依存させない)。スロー再生は `--spd` でトランジション時間にも効く。
 - 設定パネル (歯車) の「予告」「AT」タブに各演出のテストボタンがある。本物のイベントと同じ `handleSubEvent` を通る。
+- リールの効果音は筐体ビュー側 (`reel/reel.html`) が鳴らす。`enshutsu/real/` を `/api/list` で探し、回転開始で
+  `start` を1回、各リール停止で `stop`(停止順に分けるなら `stop1`/`stop2`/`stop3`) を鳴らす。ファイルが無ければ無音。
+  音量は単体なら `?vol=`、オーバーレイ内なら設定の `sfxVolume` を `postMessage({type:"reelSound"})` で渡している。
+  iframe 内で鳴らすため `#reel-frame` の `allow="autoplay"` を外さないこと。
 - 「リール」タブ: 筐体ビュー `reel/reel.html?mode=link&hidebar=1` を iframe (`#reel-frame`) で液晶内に埋め込み、
   `#reel-layer.in` で下からスライドして出し入れする。位置・幅は % 指定 (`reelX/reelY/reelW`)、状態は `reelIn` として保存。
   筐体ビューは自分で 8787 に接続して主制御の state でリールを回すので、オーバーレイ側は表示位置と出し入れだけを持つ。

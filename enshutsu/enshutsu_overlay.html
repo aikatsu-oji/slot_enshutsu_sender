@@ -531,7 +531,7 @@
       <video id="game-screen-video" autoplay muted playsinline></video>
     </div>
     <div id="reel-layer">
-      <iframe id="reel-frame" title="リールユニット" allowtransparency="true"></iframe>
+      <iframe id="reel-frame" title="リールユニット" allowtransparency="true" allow="autoplay"></iframe>
     </div>
     <div id="hud-layer">
       <div id="hud-banner"><div id="hud-banner-text" class="hud-font"></div></div>
@@ -797,6 +797,11 @@
         <input type="checkbox" id="reelNavi">
       </div>
       <div class="note">押し順ナビは既定では HUD 側だけに出します。オンにすると筐体ビュー側のナビランプも表示します(切替時に筐体ビューを読み直します)。</div>
+      <div class="note">
+        リールの回転開始音・停止音は <code>enshutsu/real/</code> に <code>start</code> / <code>stop</code>
+        (停止順に鳴らし分けるなら <code>stop1</code> / <code>stop2</code> / <code>stop3</code>) の名前で置くと鳴ります
+        (拡張子は mp3/wav/ogg/m4a、無ければ無音)。音量は「設定」タブ →「基本設定」の「効果音の音量」に従います。
+      </div>
     </div>
   </div>
 
@@ -2257,8 +2262,16 @@ function hideGameVideo(){
   function reelFrameUrl(){
     const p = new URLSearchParams({ mode:"link", hidebar:"1" });
     if(!settings.reelNavi) p.set("navi", "0");
+    p.set("vol", String(settings.sfxVolume));   // リールの開始音・停止音の音量
     return "../reel/reel.html?" + p.toString();
   }
+  // 筐体ビューの効果音(開始音・停止音)の音量。読み込み完了時と音量変更時に伝える。
+  // 同一オリジンだが file:// では origin が null になるため "*" で送る(ローカル用途のみ)
+  function pushReelVolume(){
+    try{ reelFrame.contentWindow.postMessage({ type:"reelSound", volume: settings.sfxVolume }, "*"); }catch(e){}
+  }
+  reelFrame.addEventListener("load", pushReelVolume);
+  el("sfxVolume").addEventListener("change", pushReelVolume);
   function loadReelFrame(){
     const url = reelFrameUrl();
     if(reelFrame.getAttribute("src") !== url) reelFrame.setAttribute("src", url);
