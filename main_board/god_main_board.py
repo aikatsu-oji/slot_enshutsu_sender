@@ -142,6 +142,10 @@ GG_SEVEN_RATE = 0.185  # GG中1Gあたりの赤7揃い（ストック+1）
 GG_GOD_RATE = 0.005    # GG中1Gあたりの神揃い（ストック+5）
 GOD_STOCK = 5         # 神揃い時の獲得ストック
 
+# ウェイト。規則で遊技間隔は4.1秒以上（前回の「回転開始」から計る）。
+# 主制御はこの間レバーONを受け付けない＝レバーON無効時間。
+WAIT_TIME = 4.1
+
 
 # ---------------------------------------------------------------------------
 # 4. 主制御 → 副制御 コマンド（単方向シリアル・2バイト）
@@ -227,6 +231,13 @@ class MainBoard:
     # 内部モードを含む全レジスタを出す。遊技には一切影響しない（送信失敗は無視）。
     panel: "PanelLink | None" = None
 
+    # ウェイト（レバーON無効時間）。実時間で動かす --serve のときだけ使う。
+    # 集計モード（--games / --ladder）は 0 のままにして時計を一切見ない
+    # （5,000,000G×6設定を回すので、1ゲームあたりの time.monotonic() でも効く）。
+    wait_time: float = 0.0     # 回転開始から次のレバーONを受け付けるまでの秒数
+    spin_at: float = 0.0       # 直近の回転開始時刻（time.monotonic）
+    hold_until: float = 0.0    # フリーズ等で回転開始をさらに止めている期限
+
     # -- [0] 主制御 → 副制御 送信 ------------------------------------------
     def send(self, cmd_type: int, data: int = 0) -> None:
         """2バイトコマンドを副制御へ送出する。戻り値は受け取らない（単方向）。"""
@@ -240,6 +251,27 @@ class MainBoard:
 
     def power_on(self) -> None:
         self.send(CMD_POWER_ON, self.state)
+
+    # -- [0.5] 入力受付状態（ウェイト） --------------------------------------
+    #    規則上のウェイトは「前回の回転開始」からの経過で決まる。遊技そのものに
+    #    かかった時間（フリーズを含む）がウェイトを食うので、加算ではなく期限で持つ。
+    def accept_at(self) -> float:
+        """次にレバーONを受け付ける時刻（time.monotonic 基準）。"""
+        return max(self.spin_at + self.wait_time, self.hold_until)
+
+    def wait_left(self, now: float | None = None) -> float:
+        """レバーON無効時間の残り秒数。0 なら受付可。"""
+        if self.wait_time <= 0.0 and self.hold_until <= 0.0:
+            return 0.0
+        return max(0.0, self.accept_at() - (time.monotonic() if now is None else now))
+
+    def accepts_lever(self, now: float | None = None) -> bool:
+        return self.wait_left(now) <= 0.0
+
+    def hold_lever(self, sec: float) -> None:
+        """フリーズなど、回転開始（＝レバーON受付）をさらに sec 秒止める。"""
+        if sec > 0.0:
+            self.hold_until = max(self.hold_until, time.monotonic() + sec)
 
     # -- [1] メダル投入 ----------------------------------------------------
     def bet(self) -> None:
@@ -275,6 +307,8 @@ class MainBoard:
     # -- [4] リール回転 ----------------------------------------------------
     def spin_start(self) -> list:
         """各リールの目押し位置（=遊技者の停止操作位置）を決める。"""
+        if self.wait_time > 0.0:
+            self.spin_at = time.monotonic()   # ウェイトの起点は回転開始
         self.send(CMD_REEL_START)
         return [self.get_random() % KOMA for _ in range(3)]
 
@@ -579,7 +613,6 @@ class SubBoard:
 # ---------------------------------------------------------------------------
 
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-WAIT_TIME = 4.1     # 主制御のウェイト。遊技間隔は4.1秒以上（規則）
 
 
 class EnshutsuServer:
@@ -855,6 +888,16 @@ class PanelLink:
         self.ws.send({"action": "mainBoard", "type": "cmd", "cmd": f"0x{cmd:04X}",
                       "name": CMD_NAME.get(typ, "?"), "data": data, "note": note})
 
+    def send_input(self, b: MainBoard, accept: bool, reason: str = "") -> None:
+        """レバーONの受付状態。無効化した瞬間と明けた瞬間の2回だけ送る。
+
+        残り時間を毎フレーム流すと中継サーバーのログが埋まるので、無効化のときに
+        長さ(waitMs)を渡し、カウントダウンは受け側に任せる。"""
+        self.ws.send({"action": "mainBoard", "type": "input",
+                      "accept": accept,
+                      "waitMs": 0 if accept else round(b.wait_left() * 1000),
+                      "reason": reason, "game": b.total_games})
+
     def send_game(self, b: MainBoard, r: dict) -> None:
         normal = b.state == ST_NORMAL
         self.ws.send({
@@ -999,24 +1042,40 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer") -> None:
 
 
 def run_live(board: MainBoard, games: int, host: str, port: int,
-             interval: float, seed: int | None = None) -> None:
-    """演出イベントをWebSocketで配信しながら稼働させる。"""
+             interval: float, seed: int | None = None,
+             freeze_hold: float = 0.0) -> None:
+    """演出イベントをWebSocketで配信しながら稼働させる。
+
+    遊技の周期はウェイトが決める。前回の回転開始から interval 秒たつまでは
+    レバーONを受け付けず、明けてから play()（=回転開始）に入る。したがって
+    周期は max(interval, 実際の遊技時間) になり、固定スリープの加算にはならない。
+    """
     srv = EnshutsuServer(host, port)
     srv.start()
     print(f"演出配信中: ws://{host}:{port}  （Ctrl+Cで停止）", file=sys.stderr)
+    board.wait_time = max(interval, 0.0)
     board.sub = SubBoard(rng=random.Random(seed), on_event=srv.broadcast,
                          panel=board.panel)
     board.power_on()
+
+    def notify(accept: bool, reason: str = "") -> None:
+        if board.panel is not None:
+            board.panel.send_input(board, accept, reason)
+
     try:
         for _ in range(games):
-            board.play()
-            # ウェイト中も注入を拾えるよう、細かく刻んで待つ
-            deadline = time.monotonic() + max(interval, 0.0)
-            while True:
-                drain_inject(board, srv)
-                if time.monotonic() >= deadline:
-                    break
-                time.sleep(0.05)
+            # レバーON無効時間。明けるまで遊技を始めない（注入はこの間も拾う）
+            if not board.accepts_lever():
+                notify(False, "フリーズ" if board.hold_until > board.spin_at + board.wait_time
+                              else "ウェイト")
+                while not board.accepts_lever():
+                    drain_inject(board, srv)
+                    time.sleep(0.05)
+                notify(True)
+            drain_inject(board, srv)
+            r = board.play()
+            if freeze_hold > 0.0 and "神揃い" in r["notice"]:
+                board.hold_lever(freeze_hold)   # フリーズぶん回転開始を止める
     except KeyboardInterrupt:
         pass
     finally:
@@ -1144,7 +1203,10 @@ def main() -> None:
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8765)
     ap.add_argument("--interval", type=float, default=WAIT_TIME,
-                    help=f"1ゲームの間隔（秒）。既定はウェイト{WAIT_TIME}秒")
+                    help=f"ウェイト＝レバーON無効時間（秒）。回転開始から計る。"
+                         f"既定は実機ウェイトの{WAIT_TIME}秒")
+    ap.add_argument("--freeze-hold", type=float, default=0.0,
+                    help="神揃いフリーズの間、回転開始をさらに止める秒数（既定0＝止めない）")
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--panel", default=PANEL_URL,
                     help=f"コンパネ中継サーバー(trigger_relay_server.js)のURL。既定 {PANEL_URL}")
@@ -1166,7 +1228,8 @@ def main() -> None:
         board.panel = PanelLink(a.panel, raw_cmds=a.panel_cmds)
     try:
         if a.serve:
-            run_live(board, games, a.host, a.port, a.interval, a.seed)
+            run_live(board, games, a.host, a.port, a.interval, a.seed,
+                     freeze_hold=a.freeze_hold)
         elif a.commands:
             run_commands(board, a.commands)
         elif a.events:

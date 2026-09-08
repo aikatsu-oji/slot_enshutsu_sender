@@ -494,6 +494,7 @@
       <span>表示役 <b id="mb-prize">—</b></span>
       <span>ナビ <b id="mb-navi">—</b></span>
       <span>払出 <b id="mb-pay">—</b></span>
+      <span>レバー <b id="mb-accept">—</b></span>
     </div>
     <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
     <div class="mb-opts">
@@ -814,6 +815,7 @@
     prize: document.getElementById("mb-prize"),
     navi: document.getElementById("mb-navi"),
     pay: document.getElementById("mb-pay"),
+    accept: document.getElementById("mb-accept"),
     events: document.getElementById("mb-events"),
     cmds: document.getElementById("mb-cmds"),
     showCmds: document.getElementById("mb-show-cmds"),
@@ -913,6 +915,33 @@
     }
   }
 
+  // 主制御のレバーON受付状態。無効化のときだけ長さ(waitMs)が来るので、
+  // 残り時間はここで数える(主制御は無効化と復帰の2点しか送らない)。
+  let mbAcceptTimer = null;
+  function mbRenderInput(d){
+    if(mbAcceptTimer){ clearInterval(mbAcceptTimer); mbAcceptTimer = null; }
+    if(d.accept){
+      mb.accept.textContent = "受付中";
+      mb.accept.style.color = "#7cf2a8";
+      return;
+    }
+    const until = Date.now() + (Number(d.waitMs) || 0);
+    const reason = d.reason || "ウェイト";
+    mb.accept.style.color = "#ff9a8a";
+    const tick = ()=>{
+      const left = (until - Date.now()) / 1000;
+      if(left <= 0){
+        clearInterval(mbAcceptTimer); mbAcceptTimer = null;
+        mb.accept.textContent = "受付中";
+        mb.accept.style.color = "#7cf2a8";
+        return;
+      }
+      mb.accept.textContent = `無効 ${left.toFixed(1)}s（${reason}）`;
+    };
+    tick();
+    mbAcceptTimer = setInterval(tick, 100);
+  }
+
   function mbRenderCmd(d){
     const html = `${escapeHtml(d.cmd || "")}  ${escapeHtml((d.name || "").padEnd(6, "　"))} ${String(d.data ?? "").padStart(3)}  ${escapeHtml(d.note || "")}`;
     mbAppend(mb.cmds, html, "", "cmd");
@@ -927,12 +956,16 @@
       case "state": mbRenderState(d); break;
       case "event": mbRenderEvent(d); break;
       case "cmd": mbRenderCmd(d); break;
+      case "input": mbRenderInput(d); break;
       case "summary":
         mbAppend(mb.events, `── 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚 ──`, "ev-end", "ev");
         log(`🎰 主制御 停止: ${(d.games ?? 0).toLocaleString()}G / 差枚 ${d.diff > 0 ? "+" : ""}${(d.diff ?? 0).toLocaleString()}枚`);
         mb.pill.classList.remove("on","pending");
         mb.pillText.textContent = "停止";
         if(mbTimer){ clearTimeout(mbTimer); mbTimer = null; }
+        if(mbAcceptTimer){ clearInterval(mbAcceptTimer); mbAcceptTimer = null; }
+        mb.accept.textContent = "—";
+        mb.accept.style.color = "";
         break;
     }
   }
