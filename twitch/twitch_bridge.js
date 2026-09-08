@@ -648,6 +648,16 @@ async function checkRewards(helix, broadcasterId) {
   if (!wanted.length) return;
 
   const res = await helix.get(`/channel_points/custom_rewards?broadcaster_id=${broadcasterId}`);
+  if (res.status === 403) {
+    // チャンネルポイントは アフィリエイト / パートナー だけの機能。
+    // 到達していないチャンネルでは報酬そのものが存在せず、この API は 403 を返す。
+    // 購読登録は通ってしまう (通知が永久に来ないだけ) ので、ここで気づけるようにする。
+    log("[報酬] チャンネルポイントを使えません (403)");
+    log("       チャンネルポイントは アフィリエイト / パートナー だけの機能です。");
+    log("       未到達の場合、メダルの入口は「チャット連帯カウンタ」と「レイド」だけになります。");
+    log("       rules.json の counter.goal を下げると、コメントだけでも回しやすくなります。");
+    return;
+  }
   if (res.status !== 200 || !res.body || !Array.isArray(res.body.data)) {
     log(`[報酬] 一覧を取得できませんでした (${res.status})。名前の照合は省略します`);
     return;
