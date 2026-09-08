@@ -23,6 +23,7 @@ scripts\dev.cmd stop
 ```
 npm run twitch:mock              # Twitch に繋がず擬似イベントで演出とメダル投入を確認
 npm run twitch                   # 本番 (初回は .run/twitch_config.json の用意と認証が必要)
+node twitch/twitch_bridge.js --chat <channel>   # コメント連動だけなら認証不要 (チャンネル名だけ)
 scripts\dev.cmd start -Credit    # 主制御をクレジット制で起動 (メダルが尽きたら待機)
 ```
 

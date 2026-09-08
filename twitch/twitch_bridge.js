@@ -25,6 +25,7 @@ const path = require("path");
 const WebSocket = require("ws");
 
 const { createEventSub, DEFAULT_URL } = require("./eventsub");
+const { createChatIrc, DEFAULT_CHAT_URL } = require("./chat_irc");
 
 const ROOT = path.resolve(__dirname, "..");
 const RANKS = ["白", "青", "緑", "赤", "金"];
@@ -44,6 +45,8 @@ function parseArgs(argv) {
     subscribe: true,
     dryRun: false,
     allowForce: false,
+    chat: null,          // チャンネル名。指定すると匿名IRCでチャットだけ読む (認証不要)
+    chatUrl: DEFAULT_CHAT_URL,
   };
   for (let i = 2; i < argv.length; i++) {
     const v = argv[i];
@@ -57,6 +60,8 @@ function parseArgs(argv) {
     else if (v === "--medals") a.medals = true;
     else if (v === "--no-medals") a.medals = false;
     else if (v === "--allow-force") a.allowForce = true;
+    else if (v === "--chat") a.chat = String(next() || "").replace(/^#/, "");
+    else if (v === "--chat-url") a.chatUrl = next();
     else if (v === "--no-subscribe") a.subscribe = false;
     else if (v === "--dry-run") a.dryRun = true;
     else if (v === "--help" || v === "-h") { printHelp(); process.exit(0); }
@@ -72,6 +77,9 @@ function printHelp() {
   --rules <file>    ルール表              (既定 twitch/rules.json)
   --ws-url <url>    EventSub の接続先     (既定 ${DEFAULT_URL})
   --api-url <url>   Helix の接続先        (Twitch CLI のモックを使うときだけ)
+  --chat <channel>  そのチャンネルのチャットだけ匿名で読む (認証不要・準備はこれだけ)
+                    チャンネルポイント/ビッツ/サブスク/レイドは取れない (EventSub が要る)
+  --chat-url <url>  チャットの接続先 (既定 ${DEFAULT_CHAT_URL})
   --mock <file>     擬似イベント JSONL を流す (Twitch に繋がない)
   --speed <n>       --mock の再生倍率     (既定 1 = 1.5 秒に 1 件)
   --no-medals       メダルの投入をしない (段階1 の演出だけの挙動に戻す)
@@ -134,8 +142,12 @@ function loadRules(file) {
     if (!r.when || typeof r.when.kind !== "string") {
       throw new Error(`rules[${i}] (${r.name || "?"}): when.kind がありません`);
     }
-    if (r.when.match) new RegExp(r.when.match);        // 壊れた正規表現はここで弾く
-    if (r.counter && Array.isArray(r.counter.ignore)) r.counter.ignore.forEach((p) => new RegExp(p));
+    // 正規表現は必ず u フラグで組む。u が無いと \p{L} などが使えないうえ、
+    // \W が日本語を「単語でない文字」とみなすので、日本語のコメントが全部除外されてしまう。
+    if (r.when.match) new RegExp(r.when.match, "u");   // 壊れた正規表現はここで弾く
+    if (r.counter && Array.isArray(r.counter.ignore)) {
+      r.counter.ignore.forEach((p) => new RegExp(p, "u"));
+    }
   });
   const guard = { ...DEFAULT_GUARD, ...(raw.guard || {}) };
   guard.chatHype = { ...DEFAULT_GUARD.chatHype, ...(raw.guard && raw.guard.chatHype) };
@@ -394,7 +406,7 @@ function matches(when, ev) {
   if (when.kind !== ev.kind) return false;
   if (when.reward != null && when.reward !== ev.reward) return false;
   if (when.first === true && !ev._first) return false;
-  if (when.match && !new RegExp(when.match).test(ev.text || "")) return false;
+  if (when.match && !new RegExp(when.match, "u").test(ev.text || "")) return false;
   if (when.minTier != null && (ev.tier || 0) < when.minTier) return false;
   return true;
 }
@@ -519,7 +531,7 @@ function countChat(rule, ev, ctx) {
   chatCounter.goal = Number(c.goal) || 200;
   const text = ev.text || "";
   if (text.length < (Number(c.minLength) || 0)) return;
-  if (Array.isArray(c.ignore) && c.ignore.some((p) => new RegExp(p).test(text))) return;
+  if (Array.isArray(c.ignore) && c.ignore.some((p) => new RegExp(p, "u").test(text))) return;
   if (text === chatCounter.lastText) return;                 // 直前と同じ本文は数えない
   const cd = (Number(c.perUserCooldownSec) || 0) * 1000;
   const login = ev.user && ev.user.login;
@@ -554,7 +566,7 @@ const FIRST_REEL_ORDER = { "左": 0, "中": 2, "右": 4 };
 const vote = { open: false, tally: new Map(), voters: new Set(), timer: null };
 
 function castVote(rule, ev, ctx) {
-  const m = new RegExp(rule.when.match).exec(ev.text || "");
+  const m = new RegExp(rule.when.match, "u").exec(ev.text || "");
   const key = m && m[1];
   if (!key || FIRST_REEL_ORDER[key] == null) return;
   const sec = Number(rule.vote.windowSec) || 3;
@@ -761,6 +773,23 @@ async function main() {
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+
+  // --- チャットだけ匿名で読むモード (認証不要) ---
+  if (args.chat) {
+    log(`[起動] チャット連動モード: #${args.chat} (匿名・認証不要)`);
+    log("       チャンネルポイント/ビッツ/サブスク/レイドは取れません (EventSub が要ります)");
+    ctx.es = createChatIrc({
+      channel: args.chat,
+      url: args.chatUrl,
+      log,
+      onStatus: (ok, text) => { esConnected = ok; log(`[チャット] ${text}`); },
+      onMessage: (ev) => onEvent("channel.chat.message", ev, {
+        message_id: ev.message_id, message_timestamp: new Date().toISOString(),
+      }),
+    });
+    ctx.es.start();
+    return;
+  }
 
   // --- 擬似イベントモード (Twitch に繋がない) ---
   if (args.mock) {

@@ -11,7 +11,7 @@
     "dev:status": "npm run dev -- status",
     "dev:open": "npm run dev -- open",
     "test": "npm run dev -- test",
-    "check": "node --check server/trigger_relay_server.js && node --check scripts/ws_send.js && node --check twitch/twitch_bridge.js && node --check twitch/eventsub.js && node --check twitch/auth.js && node -e \"JSON.parse(require('fs').readFileSync('twitch/rules.json'))\"",
+    "check": "node --check server/trigger_relay_server.js && node --check scripts/ws_send.js && node --check twitch/twitch_bridge.js && node --check twitch/eventsub.js && node --check twitch/auth.js && node --check twitch/chat_irc.js && node -e \"JSON.parse(require('fs').readFileSync('twitch/rules.json'))\"",
     "twitch": "node twitch/twitch_bridge.js",
     "twitch:mock": "node twitch/twitch_bridge.js --mock twitch/mock_events.jsonl --speed 5"
   },

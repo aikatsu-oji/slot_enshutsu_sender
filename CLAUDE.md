@@ -36,6 +36,7 @@ slot_enshutsu_sender/
 ├── twitch/                    Twitch 連携 (段階3: 演出 + 無料アクションぶんのメダル投入)
 │   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
 │   ├── eventsub.js              EventSub WebSocket の接続・再接続・keepalive 監視・重複排除だけの薄い層
+│   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。--chat <channel> で使う。認証不要
 │   ├── auth.js                  Device Code Grant とトークン更新。設定/トークンは .run/ 配下 (git 管理外)
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
 │   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
@@ -82,6 +83,7 @@ scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
 npm run twitch:mock                                    # Twitch に繋がず擬似イベントで演出を確認 (中継サーバーが要る)
 npm run twitch                                         # 本番。初回は Device Code Grant の認証が走る
+node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿名で読む。認証もアプリ登録も不要
 ```
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
@@ -145,6 +147,12 @@ npm run twitch                                         # 本番。初回は Devi
   1分あたりの上限に当たったぶんは捨てずに待たせる (視聴者が押したぶんを失わない)。
   `--no-medals` で演出だけの挙動 (段階1) に戻せる。
   clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
+- `--chat <channel>` は **認証なし** でチャットだけ読む (`chat_irc.js` / justinfan の匿名ログイン)。
+  アプリ登録も OAuth も要らないので、コメント連動だけならチャンネル名の指定だけで動く。
+  チャンネルポイント・ビッツ・サブスク・レイドは IRC では取れないので EventSub (認証あり) が要る。
+- **ルール表の正規表現は必ず `u` フラグで組む。** `u` が無いと `\p{L}` が使えないうえ、
+  `\W` が日本語を「単語でない文字」とみなすため、日本語のコメントが全部除外されてしまう
+  (連帯カウンタが一度も溜まらなくなる。実際に踏んだ)。
 - クレジット制 (`--credit`) は主制御の既定では OFF。付けたときだけ「メダルが 3 枚以上あるときだけ回る」。
   `credit`(上限50) → `reserve`(下皿・上限3000) → `bank`(貯金) の 3 段で、溢れた分は
   `.run/twitch_bank.json` に書いて次回配信へ持ち越す (10秒ごとに保存するので強制終了でも残る)。

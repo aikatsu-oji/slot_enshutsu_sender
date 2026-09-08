@@ -91,7 +91,7 @@
         "perUserCooldownSec": 10,
         "ignore": [
           "^!",
-          "^\\W+$"
+          "^[^\\p{L}\\p{N}]+$"
         ],
         "resetOn": "stream.online",
         "overflowTo": "bank"
