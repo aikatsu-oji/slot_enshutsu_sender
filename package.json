@@ -11,7 +11,7 @@
     "dev:status": "npm run dev -- status",
     "dev:open": "npm run dev -- open",
     "test": "npm run dev -- test",
-    "check": "node --check server/trigger_relay_server.js && node --check scripts/ws_send.js"
+    "check": "node --check server/trigger_relay_server.js && node --check scripts/ws_send.js && node --check enshutsu/authoring_player.js"
   },
   "dependencies": {
     "ws": "^8.21.3"

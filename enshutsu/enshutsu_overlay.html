@@ -111,6 +111,15 @@
     padding: 0 10%;
   }
 
+  /* ---------- 予告オーサリング(authoring_editor.html で作ったシーン)の再生レイヤー ----------
+     HUD とリールの上、萌えカットイン/暗転より下。再生1回ごとに子の箱を作って重ねる。 */
+  #authoring-layer{
+    position:absolute; inset:0;
+    overflow:hidden;
+    z-index:1;
+    pointer-events:none;
+  }
+
   /* ---------- 暗転レイヤー(白背景の上から黒がフェードインする) ---------- */
   #blackout-layer{
     position:absolute; inset:0;
@@ -539,6 +548,7 @@
       <div id="hud-popup"><div id="hud-popup-main" class="hud-font"></div><div id="hud-popup-sub"></div></div>
       <div id="hud-end"><div class="main hud-font">AT END</div></div>
     </div>
+    <div id="authoring-layer"></div>
     <div id="illustration-layer">
       <div id="illustration-white-bg"></div>
       <div id="illustration-placeholder">萌えカットイン画像未読込<br>「画像指定」タブでフォルダを選択してください</div>
@@ -627,6 +637,7 @@
         <button class="subtab-btn" data-subtab="yokoku-freeze">フリーズ</button>
         <button class="subtab-btn" data-subtab="yokoku-banner">バナー</button>
         <button class="subtab-btn" data-subtab="yokoku-navi">ナビ</button>
+        <button class="subtab-btn" data-subtab="yokoku-authoring">オーサリング</button>
       </div>
 
       <div class="subtab-content" id="subtab-yokoku-cutin">
@@ -748,6 +759,25 @@
           効果音は enshutsu/at/sound/navi.mp3 を置くと鳴ります。
         </div>
       </div>
+
+      <div class="subtab-content" id="subtab-yokoku-authoring" hidden>
+        <div class="field-row">
+          <label for="authoringEnabled">割り当てたシーンを自動再生する</label>
+          <input type="checkbox" id="authoringEnabled">
+        </div>
+        <div class="btn-row">
+          <button class="action" id="authoring-reload">🔄 シーンを再読込</button>
+          <button class="action" id="authoring-open">🎬 予告オーサリングを開く</button>
+        </div>
+        <div id="authoring-status" class="note">未読込</div>
+        <div class="btn-row wrap" id="authoring-list"></div>
+        <div class="note">
+          予告オーサリング(enshutsu/authoring_editor.html)で作ったシーンの一覧です。ボタンを押すとその場で1回再生します。<br><br>
+          シーンに「割り当て」を設定しておくと、副制御からそのイベント(予告バナー・ナビ・GG突入など)が届いたときに、
+          既定の演出の代わりにシーンが再生されます。上のチェックを外すと割り当てを無視して既定の演出に戻ります。<br><br>
+          データは enshutsu/yokoku/authoring/&lt;id&gt;.json、素材は同フォルダの assets/ です。エディタで保存すると自動で読み直します。
+        </div>
+      </div>
     </div>
 
     <div class="tab-content" id="tab-at" hidden>
@@ -822,6 +852,8 @@
     </div>
   </div>
 
+<!-- 予告オーサリングの再生エンジン(エディタ authoring_editor.html と共通のもの) -->
+<script src="authoring_player.js"></script>
 <script>
 (function(){
   "use strict";
@@ -875,6 +907,8 @@
     endDuration: 2.5,
     sfxVolume: 0.8,
     subWsUrl: "ws://127.0.0.1:8765",
+    // 予告オーサリング(authoring_editor.html で作ったシーン)
+    authoringEnabled: true,   // 割り当て済みのシーンを、既定のバナー等の代わりに自動再生する
     // リールユニット(reel.html)の出し入れ
     reelIn: false,
     reelX: 50,
@@ -1083,6 +1117,7 @@
     el("reelW").value = settings.reelW;
     el("reelAnim").value = settings.reelAnim;
     el("reelNavi").checked = !!settings.reelNavi;
+    el("authoringEnabled").checked = !!settings.authoringEnabled;
     applyHudLayout();
   }
   // HUD・リールの位置設定をCSSへ反映する(数値設定の変更時・起動時・設定インポート時)
@@ -2125,6 +2160,94 @@ function hideGameVideo(){
     return false;
   }
 
+  /* ===================== 予告オーサリング =====================
+     authoring_editor.html で作ったシーン (enshutsu/yokoku/authoring/<id>.json) を再生する。
+     再生の実体は authoring_player.js (エディタと同じもの) なので、エディタで見た姿がそのまま出る。
+     ここが持つのは「一覧を取ってきて、副制御イベントに割り当てられたものを流す」ところまで。 */
+  const YA = globalThis.YokokuAuthoring;
+  const AUTHORING_BASE = "yokoku/authoring/";       // このHTMLからの相対パス
+  const AUTHORING_MAX_CONCURRENT = 6;               // 同時再生の上限(暴走防止)
+  const authoringLayer = el("authoring-layer");
+  let authoringScenes = [];
+  let authoringPlaying = 0;
+
+  async function loadAuthoringScenes(){
+    if(!SERVER_MODE || !YA) return;
+    try{
+      const res = await fetch("/api/authoring", { cache:"no-store" });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      authoringScenes = (data.scenes || []).map(YA.normalizeScene);
+      console.log("[予告オーサリング] " + authoringScenes.length + " シーンを読み込みました");
+    }catch(err){
+      console.log("[予告オーサリング] 一覧の取得に失敗:", err.message);
+    }
+    renderAuthoringList();
+  }
+  window.reloadAuthoring = loadAuthoringScenes;
+
+  // シーンを1回再生する。重ねて呼ばれても互いを壊さないよう、再生ごとに専用の箱と再生機を作る
+  function playAuthoringScene(scene){
+    if(!YA || !scene) return Promise.resolve();
+    if(authoringPlaying >= AUTHORING_MAX_CONCURRENT) return Promise.resolve();
+    authoringPlaying++;
+    const box = document.createElement("div");
+    box.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
+    authoringLayer.appendChild(box);
+    const p = new YA.ScenePlayer(box, {
+      base: AUTHORING_BASE,
+      volume: ()=> Number(settings.sfxVolume),
+      speed: ()=> speedFactor,
+    });
+    p.load(scene);
+    return p.play(0).then(()=>{
+      p.destroy();
+      if(box.parentNode) box.parentNode.removeChild(box);
+      authoringPlaying--;
+    });
+  }
+
+  function findAuthoringScene(id){
+    return authoringScenes.find(s=> s.id === String(id)) || null;
+  }
+  // 割り当て(bind)が一致するシーンを探す。設定でオフにしていれば常に無し(既定の演出に戻る)
+  function boundAuthoringScene(ev){
+    if(!YA || !settings.authoringEnabled) return null;
+    return YA.matchScene(authoringScenes, ev);
+  }
+  // 外部(コンパネ・エディタ・dev.cmd send)からの名指し再生
+  window.playAuthoring = (id)=>{
+    const s = findAuthoringScene(id);
+    if(!s){ console.log("[予告オーサリング] シーンが見つかりません:", id); return; }
+    playAuthoringScene(s);
+  };
+
+  function renderAuthoringList(){
+    const box = el("authoring-list"), status = el("authoring-status");
+    box.textContent = "";
+    if(!SERVER_MODE){
+      status.textContent = "http:// 経由で開いたときだけ使えます(file:// では読み込めません)";
+      return;
+    }
+    status.textContent = authoringScenes.length
+      ? `${authoringScenes.length} シーン (enshutsu/yokoku/authoring/)`
+      : "シーンがありません。「予告オーサリングを開く」で作成してください";
+    for(const sc of authoringScenes){
+      const b = document.createElement("button");
+      b.className = "action";
+      b.textContent = `▶ ${sc.name}` + (sc.bind ? ` [${sc.bind.rank || sc.bind.event}]` : "");
+      b.addEventListener("click", ()=> playAuthoringScene(sc));
+      box.appendChild(b);
+    }
+  }
+  el("authoring-reload").addEventListener("click", loadAuthoringScenes);
+  el("authoring-open").addEventListener("click", ()=> window.open("authoring_editor.html", "yokokuAuthoring"));
+  el("authoringEnabled").addEventListener("change", e=>{
+    settings.authoringEnabled = !!e.target.checked;
+    saveSettings();
+  });
+  loadAuthoringScenes();
+
   /* --- 受信ログ(設定パネルのATタブに最新8件) --- */
   const subLogLines = [];
   function subLog(ev){
@@ -2142,6 +2265,9 @@ function hideGameVideo(){
   /* --- 予告バナー --- */
   let bannerTimer = null;
   function playBanner(ev){
+    // 予告オーサリングのシーンが割り当てられていれば、既定のバナーの代わりにそれを再生する
+    const scene = boundAuthoringScene(ev);
+    if(scene){ playAuthoringScene(scene); return; }
     const st = BANNER_STYLE[ev.rank] || BANNER_STYLE["白"];
     clearTimeout(bannerTimer);
     hudBanner.className = "";
@@ -2229,7 +2355,7 @@ function hideGameVideo(){
     if(!ev.rank) return;                                   // ランク無しの停止は通知だけ(演出なし)
     const at = leverAt + Number(settings["stopTiming" + n]) * 1000;
     const delay = Math.max(0, at - performance.now());
-    stopTimers.push(setTimeout(()=>{ playBanner({ rank: ev.rank, trigger: ev.trigger }); }, delay));
+    stopTimers.push(setTimeout(()=>{ playBanner({ type:"stop", n, rank: ev.rank, trigger: ev.trigger }); }, delay));
   }
 
   function clearHud(){
@@ -2273,6 +2399,15 @@ function hideGameVideo(){
         fn();
       }
     };
+    // 予告オーサリングの割り当て。バナー系(lever / stop / banner)は playBanner の中で差し替える
+    if(ev.type !== "lever" && ev.type !== "stop" && ev.type !== "banner"){
+      const scene = boundAuthoringScene(ev);
+      if(scene){
+        if(ev.type === "freeze" || ev.type === "gg_start" || ev.type === "at_end") enqueueMajor(()=> playAuthoringScene(scene));
+        else minor(()=> playAuthoringScene(scene), scene.duration);
+        return;
+      }
+    }
     switch(ev.type){
       case "freeze":    enqueueMajor(()=> playFreezeEvent(ev)); break;
       case "gg_start":  enqueueMajor(playGgStart); break;
@@ -2287,6 +2422,12 @@ function hideGameVideo(){
       case "navi":      playNavi(ev); break;   // ナビは即時性が命なので待たせない
       case "stock_up":  minor(()=> { playSfx("stock_up"); playPopup(`STOCK +${ev.gain ?? 1}`, `ストック ×${ev.stock ?? "?"}`, "stock"); }, settings.popupDuration); break;
       case "add_games": minor(()=> { playSfx("add_games"); playPopup(`+${ev.games ?? 0}G`, "上乗せ", "add"); }, settings.popupDuration); break;
+      case "authoring": {   // オーサリングのシーンを名指しで再生する {type:"authoring", id:"..."}
+        const scene = findAuthoringScene(ev.id);
+        if(!scene){ console.log("[予告オーサリング] シーンが見つかりません:", ev.id); break; }
+        minor(()=> playAuthoringScene(scene), scene.duration);
+        break;
+      }
       default: console.log("[副制御] 未対応のイベント:", ev.type); break;
     }
   }
@@ -2442,6 +2583,14 @@ function hideGameVideo(){
       // 副制御の演出イベントを中継サーバー経由で直接流し込む(scripts\dev.cmd send での確認用)。
       //   例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
       subEvent: (ev, msg) => { if(window.handleSubEvent) window.handleSubEvent(ev || (msg && msg.event)); },
+      // 予告オーサリングのシーンを名指しで再生する
+      //   例: {"action":"playAuthoring","id":"akatsu"}
+      playAuthoring: (data, msg) => {
+        const id = (msg && msg.id) || (data && (data.id || data));
+        if(window.playAuthoring) window.playAuthoring(id);
+      },
+      // エディタが保存/削除したら一覧を読み直す(中継サーバーが流す)
+      authoringUpdated: () => { if(window.reloadAuthoring) window.reloadAuthoring(); },
       // リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切り替える
       reelIn: () => { if(window.reelIn) window.reelIn(); },
       reelOut: () => { if(window.reelOut) window.reelOut(); },

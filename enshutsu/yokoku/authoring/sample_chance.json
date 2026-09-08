@@ -1,0 +1,55 @@
+{
+  "id": "sample_chance",
+  "name": "チャンス (サンプル)",
+  "version": 1,
+  "duration": 1.8,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "c_pill",
+      "name": "帯",
+      "type": "shape",
+      "start": 0,
+      "dur": 1.8,
+      "x": 50, "y": 62, "w": 46, "h": 11,
+      "bg": "#123a6b",
+      "stroke": "#7fc4ff",
+      "strokeW": 0.25,
+      "radius": 40,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        { "t": 0, "x": -10, "opacity": 0, "ease": "linear" },
+        { "t": 0.3, "x": 50, "opacity": 0.9, "ease": "outCubic" },
+        { "t": 1.4, "x": 50, "opacity": 0.9, "ease": "linear" },
+        { "t": 1.8, "x": 110, "opacity": 0, "ease": "inCubic" }
+      ]
+    },
+    {
+      "id": "c_label",
+      "name": "文字",
+      "type": "text",
+      "text": "チャンス",
+      "start": 0.1,
+      "dur": 1.7,
+      "x": 50, "y": 62, "w": 44, "h": 10,
+      "color": "#eaf6ff",
+      "stroke": "#04203f",
+      "strokeW": 0.35,
+      "fontSize": 7,
+      "fontWeight": 800,
+      "letter": 0.16,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        { "t": 0, "x": -10, "opacity": 0, "ease": "linear" },
+        { "t": 0.25, "x": 50, "opacity": 1, "ease": "outCubic" },
+        { "t": 0.6, "scale": 1, "ease": "linear" },
+        { "t": 0.75, "scale": 1.08, "ease": "inOut" },
+        { "t": 0.9, "scale": 1, "ease": "inOut" },
+        { "t": 1.3, "x": 50, "opacity": 1, "ease": "linear" },
+        { "t": 1.7, "x": 110, "opacity": 0, "ease": "inCubic" }
+      ]
+    }
+  ]
+}

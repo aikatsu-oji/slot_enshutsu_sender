@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>予告オーサリング</title>
+<!--
+  予告オーサリング (オーサリングデータの作成)。
+    - 16:9 のプレビュー上でクリップ (文字・図形・画像・動画・音) を置き、タイムラインで開始と長さを決め、
+      キーフレームで動かす。作ったものは中継サーバーの POST /api/authoring が
+      enshutsu/yokoku/authoring/<id>.json へ書き出す
+    - 素材のドロップは POST /api/authoring/asset → enshutsu/yokoku/authoring/assets/<name>
+    - 保存すると WebSocket に authoringUpdated が流れ、オーバーレイがシーンを読み直す
+    - 再生の実体は authoring_player.js (オーバーレイと同じもの)。ここでの見た目はそのまま本番の見た目になる
+  http://localhost:8787/enshutsu/authoring_editor.html で開くこと (file:// では保存できない)
+-->
+<style>
+  :root{
+    --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --bg:#0b1226;
+    --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d; --ok:#6cc47f; --ng:#ff7f74;
+    --font-ui:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13px;display:flex;flex-direction:column;}
+
+  header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:#0e1428;flex-wrap:wrap;}
+  header h1{font-size:15px;letter-spacing:3px;color:var(--frame-bright);margin:0 12px 0 0;white-space:nowrap;}
+  header .spacer{margin-left:auto;}
+
+  button{background:#1b2340;border:1px solid var(--frame-dim);color:var(--text);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-family:inherit;}
+  button:hover:not(:disabled){border-color:var(--frame);}
+  button:disabled{opacity:.4;cursor:default;}
+  button.primary{background:var(--frame);color:#14213d;font-weight:700;border-color:var(--frame-bright);}
+  button.ng{border-color:#7a3030;color:#ffb4ac;}
+  button.sm{padding:3px 7px;font-size:11px;}
+  input,select,textarea{background:#08060a;border:1px solid #3a3348;color:var(--text);padding:4px 6px;border-radius:5px;font-size:12px;font-family:inherit;}
+  input[type=number]{width:74px;}
+  input[type=color]{width:38px;height:24px;padding:0;}
+  input[type=range]{accent-color:var(--frame);width:100%;}
+  textarea{width:100%;resize:vertical;min-height:52px;}
+  select{max-width:100%;}
+  .note{color:var(--sub);font-size:11px;line-height:1.6;}
+
+  /* ---- 3カラム (素材 / プレビュー+タイムライン / プロパティ) ---- */
+  main{flex:1;display:grid;grid-template-columns:220px minmax(420px,1fr) 300px;gap:10px;padding:10px;overflow:hidden;min-height:0;}
+  .col{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;}
+  .card h2{margin:0;font-size:12px;letter-spacing:2px;color:var(--frame);font-weight:700;}
+  .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .grid2{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;align-items:center;}
+  .grid2 label{color:var(--sub);font-size:11px;white-space:nowrap;}
+  .grid2 input[type=number]{width:100%;}
+
+  /* ---- プレビュー ---- */
+  #stage-box{position:relative;width:100%;aspect-ratio:16/9;background:
+      linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%),
+      linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%) ;
+    background-color:#232323;background-size:24px 24px;background-position:0 0,12px 12px;
+    border:1px solid var(--line);border-radius:6px;overflow:hidden;}
+  #stage-box.dark{background:#000;}
+  #edit-layer{position:absolute;inset:0;cursor:default;}
+  #sel-box{position:absolute;border:1px solid var(--frame-bright);box-shadow:0 0 0 1px rgba(0,0,0,.6);display:none;cursor:move;}
+  #sel-box .h{position:absolute;width:10px;height:10px;background:var(--frame-bright);border:1px solid #14213d;border-radius:2px;}
+  #sel-box .h.br{right:-5px;bottom:-5px;cursor:nwse-resize;}
+  #sel-box .lbl{position:absolute;left:0;top:-17px;font-size:10px;color:#14213d;background:var(--frame-bright);padding:0 4px;border-radius:3px;white-space:nowrap;}
+
+  /* ---- タイムライン ---- */
+  #timeline{user-select:none;}
+  .tl-head{display:flex;align-items:center;gap:8px;}
+  .tl-time{font-variant-numeric:tabular-nums;color:var(--frame-bright);min-width:96px;text-align:right;}
+  .tl-body{position:relative;border:1px solid var(--line);border-radius:6px;background:#0a1020;overflow:hidden;}
+  .tl-ruler{position:relative;height:20px;border-bottom:1px solid var(--line);cursor:pointer;background:#0d1428;}
+  .tl-ruler .tick{position:absolute;top:0;bottom:0;border-left:1px solid rgba(157,151,173,.25);font-size:9px;color:var(--sub);padding-left:3px;}
+  .tl-rows{position:relative;max-height:210px;overflow-y:auto;}
+  .tl-row{position:relative;height:26px;border-bottom:1px solid rgba(38,48,77,.6);}
+  .tl-row.sel{background:rgba(201,162,74,.10);}
+  .tl-bar{position:absolute;top:3px;height:20px;background:#2b3a63;border:1px solid #4a5c8f;border-radius:4px;display:flex;align-items:center;
+    padding:0 6px;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;cursor:grab;min-width:8px;}
+  .tl-row.sel .tl-bar{background:#4a3c1c;border-color:var(--frame);}
+  .tl-bar .grip{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.14);}
+  .tl-bar .grip.l{left:0;right:auto;}
+  .tl-bar .key{position:absolute;top:50%;width:7px;height:7px;margin:-4px 0 0 -4px;background:var(--frame-bright);transform:rotate(45deg);pointer-events:none;}
+  .tl-play{position:absolute;top:0;bottom:0;width:1px;background:#ff5252;pointer-events:none;z-index:5;}
+  .tl-play::before{content:"";position:absolute;left:-4px;top:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid #ff5252;}
+
+  /* ---- 素材一覧 ---- */
+  #drop{border:1px dashed #3a4666;border-radius:6px;padding:14px 8px;text-align:center;color:var(--sub);font-size:11px;cursor:pointer;}
+  #drop.over{border-color:var(--frame);color:var(--text);background:rgba(201,162,74,.08);}
+  .asset{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer;font-size:11px;}
+  .asset:hover{background:rgba(201,162,74,.10);}
+  .asset .th{width:34px;height:24px;flex:0 0 auto;object-fit:cover;background:#000;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--sub);}
+  .asset .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ---- クリップ一覧 ---- */
+  .clip-item{display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;cursor:pointer;font-size:11px;}
+  .clip-item:hover{background:rgba(201,162,74,.08);}
+  .clip-item.sel{background:rgba(201,162,74,.18);}
+  .clip-item .k{color:var(--frame);width:2.6em;flex:0 0 auto;}
+  .clip-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  /* ---- キーフレーム表 ---- */
+  table.keys{width:100%;border-collapse:collapse;font-size:11px;}
+  table.keys th{color:var(--sub);font-weight:400;font-size:10px;padding:1px 2px;}
+  table.keys td{padding:1px 2px;}
+  table.keys input{width:100%;padding:2px 3px;font-size:11px;}
+  table.keys select{width:100%;padding:2px;font-size:10px;}
+  table.keys tr.at td{background:rgba(255,82,82,.12);}
+
+  footer{display:flex;align-items:center;gap:12px;padding:6px 14px;border-top:1px solid var(--line);background:#0e1428;font-size:12px;}
+  .st{color:var(--sub);} .st.ok{color:var(--ok);} .st.ng{color:var(--ng);}
+  @media (max-width:1100px){ main{grid-template-columns:1fr;overflow:auto;} .col{overflow:visible;} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>予告オーサリング</h1>
+  <label class="note">シーン</label>
+  <select id="scene-select" style="min-width:180px"></select>
+  <button id="btn-new">＋ 新規</button>
+  <button id="btn-dup">複製</button>
+  <button id="btn-del" class="ng">削除</button>
+  <span class="spacer"></span>
+  <button id="btn-send">📡 オーバーレイで再生</button>
+  <button id="btn-save" class="primary">💾 保存</button>
+</header>
+
+<main>
+  <!-- 左: シーン設定 + 素材 -->
+  <div class="col">
+    <div class="card">
+      <h2>シーン設定</h2>
+      <div class="grid2">
+        <label for="sc-name">名前</label><input type="text" id="sc-name">
+        <label for="sc-dur">長さ(秒)</label><input type="number" id="sc-dur" min="0.2" max="60" step="0.1">
+        <label for="sc-ev">割り当て</label>
+        <select id="sc-ev">
+          <option value="">(手動再生のみ)</option>
+          <option value="banner">予告バナーの代わり</option>
+          <option value="navi">押し順ナビ</option>
+          <option value="stock_up">ストック獲得</option>
+          <option value="add_games">ゲーム数上乗せ</option>
+          <option value="freeze">神揃いフリーズ</option>
+          <option value="gg_start">GG突入</option>
+          <option value="at_end">AT終了</option>
+        </select>
+        <label for="sc-rank">ランク</label>
+        <select id="sc-rank">
+          <option value="">(すべて)</option>
+          <option>白</option><option>青</option><option>緑</option><option>赤</option><option>金</option>
+        </select>
+        <label for="sc-trig">タイミング</label>
+        <select id="sc-trig">
+          <option value="">(すべて)</option>
+          <option value="lever">レバーON</option>
+          <option value="stop1">第1停止</option>
+          <option value="stop2">第2停止</option>
+          <option value="stop3">第3停止</option>
+        </select>
+      </div>
+      <div class="note">割り当てを決めると、副制御からそのイベントが来たときにオーバーレイがこのシーンを自動で再生します (バナーの代わりに出ます)。</div>
+    </div>
+
+    <div class="card">
+      <h2>素材</h2>
+      <div id="drop">画像 / 動画 / 音声をここへドロップ<br>(クリックでファイル選択)
+        <input type="file" id="file-input" multiple hidden accept="image/*,video/*,audio/*">
+      </div>
+      <div id="asset-list" class="note">読み込み中...</div>
+      <div class="note">クリックすると、その素材のクリップを追加します。</div>
+    </div>
+  </div>
+
+  <!-- 中央: プレビューとタイムライン -->
+  <div class="col">
+    <div class="card">
+      <div class="row">
+        <h2 style="flex:1">プレビュー</h2>
+        <label class="note"><input type="checkbox" id="dark-bg"> 黒背景</label>
+        <label class="note">音量</label><input type="range" id="volume" min="0" max="1" step="0.05" style="width:80px">
+      </div>
+      <div id="stage-box">
+        <div id="stage"></div>
+        <div id="edit-layer">
+          <div id="sel-box"><span class="lbl"></span><span class="h br"></span></div>
+        </div>
+      </div>
+      <div class="note">プレビュー上でクリップをドラッグすると動かせます (右下でサイズ変更)。プレイヘッドの位置にキーフレームがあるときは、そのキーだけを動かします。</div>
+    </div>
+
+    <div class="card" id="timeline">
+      <div class="tl-head">
+        <button id="btn-play">▶ 再生</button>
+        <button id="btn-stop">■ 停止</button>
+        <span class="tl-time" id="tl-time">0.00 / 0.00 秒</span>
+        <span class="spacer" style="flex:1"></span>
+        <span class="note">クリップ追加:</span>
+        <button class="sm" data-add="text">文字</button>
+        <button class="sm" data-add="shape">図形</button>
+        <button class="sm" data-add="image">画像</button>
+        <button class="sm" data-add="video">動画</button>
+        <button class="sm" data-add="sound">音</button>
+      </div>
+      <div class="tl-body">
+        <div class="tl-ruler" id="tl-ruler"></div>
+        <div class="tl-rows" id="tl-rows"></div>
+        <div class="tl-play" id="tl-playhead" style="left:0"></div>
+      </div>
+      <div class="row">
+        <span class="note">クリップ</span>
+        <span class="spacer" style="flex:1"></span>
+        <button class="sm" id="btn-clip-up">▲ 前へ</button>
+        <button class="sm" id="btn-clip-down">▼ 後へ</button>
+        <button class="sm" id="btn-clip-dup">複製</button>
+        <button class="sm ng" id="btn-clip-del">削除</button>
+      </div>
+      <div id="clip-list"></div>
+    </div>
+  </div>
+
+  <!-- 右: 選択クリップのプロパティ -->
+  <div class="col">
+    <div class="card">
+      <h2>クリップ設定</h2>
+      <div id="prop-empty" class="note">クリップを選ぶとここに設定が出ます。</div>
+      <div id="prop-fields" class="grid2"></div>
+    </div>
+    <div class="card" id="key-card" hidden>
+      <h2>キーフレーム</h2>
+      <div class="row">
+        <button class="sm" id="btn-key-add">＋ 現在位置にキー</button>
+        <select id="key-preset" class="sm">
+          <option value="">よく使う動き…</option>
+          <option value="fade">フェードイン/アウト</option>
+          <option value="zoom">ズームイン</option>
+          <option value="slideL">左から入る</option>
+          <option value="slideR">右から入る</option>
+          <option value="drop">上から落ちる</option>
+          <option value="pulse">拡大の脈動</option>
+          <option value="flash">点滅</option>
+        </select>
+      </div>
+      <table class="keys" id="key-table"></table>
+      <div class="note">空欄のプロパティは動かしません (クリップの基本値のまま)。t はクリップ先頭からの秒。</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span class="st" id="status">読み込み中...</span>
+  <span class="spacer" style="flex:1"></span>
+  <span class="note" id="path-note"></span>
+</footer>
+
+<script src="authoring_player.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  const YA = globalThis.YokokuAuthoring;
+  const el = (id)=> document.getElementById(id);
+  const round = (v, d)=> Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
+  const clamp = (v, lo, hi)=> Math.min(hi, Math.max(lo, v));
+
+  /* ===================== 状態 ===================== */
+  let scenes = [];        // サーバーにある全シーン
+  let scene = null;       // 編集中のシーン (normalizeScene 済み)
+  let assets = [];        // assets フォルダのファイル名
+  let selId = null;       // 選択中クリップの id
+  let time = 0;           // プレイヘッド(秒)
+  let dirty = false;
+
+  const stageBox = el("stage-box");
+  const player = new YA.ScenePlayer(el("stage"), {
+    base: "yokoku/authoring/",
+    silent: true,                                   // スクラブ中は鳴らさない (再生ボタンのときは鳴る)
+    volume: ()=> Number(el("volume").value),
+  });
+
+  function setStatus(text, cls){
+    const s = el("status");
+    s.textContent = text;
+    s.className = "st" + (cls ? " " + cls : "");
+  }
+  function markDirty(){
+    dirty = true;
+    el("btn-save").textContent = "💾 保存 *";
+  }
+  function clearDirty(){
+    dirty = false;
+    el("btn-save").textContent = "💾 保存";
+  }
+
+  /* ===================== サーバーとのやり取り ===================== */
+  async function api(path, body){
+    const res = await fetch(path, body ? {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+    } : { cache: "no-store" });
+    const data = await res.json().catch(()=> ({}));
+    if(!res.ok) throw new Error(data.error || `${path} (${res.status})`);
+    return data;
+  }
+
+  async function loadScenes(keepId){
+    const data = await api("/api/authoring");
+    scenes = (data.scenes || []).map(YA.normalizeScene);
+    const sel = el("scene-select");
+    sel.textContent = "";
+    for(const s of scenes){
+      const o = document.createElement("option");
+      o.value = s.id;
+      o.textContent = `${s.name} (${s.id})`;
+      sel.appendChild(o);
+    }
+    const want = keepId || (scene && scene.id) || (scenes[0] && scenes[0].id);
+    if(want && scenes.some(s=> s.id === want)){
+      sel.value = want;
+      openScene(want);
+    }else if(!scenes.length){
+      scene = null;
+      renderAll();
+      setStatus("シーンがありません。「＋ 新規」で作ってください", "");
+    }
+  }
+
+  async function loadAssets(){
+    const data = await api("/api/authoring/asset");
+    assets = data.files || [];
+    renderAssets();
+  }
+
+  function openScene(id){
+    const found = scenes.find(s=> s.id === id);
+    if(!found) return;
+    // 一覧の実体をそのまま編集すると保存前の変更が一覧へ混ざるので、複製して開く
+    scene = YA.normalizeScene(JSON.parse(JSON.stringify(found)));
+    selId = scene.tracks.length ? scene.tracks[0].id : null;
+    time = 0;
+    clearDirty();
+    refresh(true);
+    setStatus(`「${scene.name}」を開きました`, "");
+    el("path-note").textContent = `enshutsu/yokoku/authoring/${scene.id}.json`;
+  }
+
+  async function saveScene(){
+    if(!scene) return;
+    try{
+      await api("/api/authoring", { id: scene.id, scene });
+      const i = scenes.findIndex(s=> s.id === scene.id);
+      const copy = YA.normalizeScene(JSON.parse(JSON.stringify(scene)));
+      if(i >= 0) scenes[i] = copy; else { scenes.push(copy); await loadScenes(scene.id); }
+      clearDirty();
+      setStatus(`保存しました (${scene.id}.json)`, "ok");
+    }catch(e){
+      setStatus("保存に失敗: " + e.message, "ng");
+    }
+  }
+
+  /* ===================== 描画 ===================== */
+  function refresh(structural){
+    if(structural) player.load(scene || { tracks: [] });
+    player.seek(clamp(time, 0, scene ? scene.duration : 0));
+    renderAll();
+  }
+
+  function renderAll(){
+    renderSceneFields();
+    renderClipList();
+    renderTimeline();
+    renderProps();
+    renderKeys();
+    renderSel();
+    el("tl-time").textContent = `${time.toFixed(2)} / ${(scene ? scene.duration : 0).toFixed(2)} 秒`;
+  }
+
+  function renderSceneFields(){
+    const on = !!scene;
+    el("sc-name").value = on ? scene.name : "";
+    el("sc-dur").value = on ? scene.duration : "";
+    el("sc-ev").value = on && scene.bind ? scene.bind.event : "";
+    el("sc-rank").value = on && scene.bind ? (scene.bind.rank || "") : "";
+    el("sc-trig").value = on && scene.bind ? (scene.bind.trigger || "") : "";
+    for(const id of ["sc-name","sc-dur","sc-ev","sc-rank","sc-trig","btn-save","btn-dup","btn-del","btn-send","btn-play","btn-stop"]) el(id).disabled = !on;
+  }
+
+  const TYPE_LABEL = { text:"文字", shape:"図形", image:"画像", video:"動画", sound:"音" };
+
+  function renderClipList(){
+    const box = el("clip-list");
+    box.textContent = "";
+    if(!scene || !scene.tracks.length){
+      box.innerHTML = '<div class="note">クリップがありません。上のボタンで追加してください。</div>';
+      return;
+    }
+    // 表示は「手前が上」。配列は後ろほど手前なので逆順に並べる
+    for(let i = scene.tracks.length - 1; i >= 0; i--){
+      const c = scene.tracks[i];
+      const d = document.createElement("div");
+      d.className = "clip-item" + (c.id === selId ? " sel" : "");
+      d.innerHTML = `<span class="k">${TYPE_LABEL[c.type] || c.type}</span><span class="nm"></span><span class="note">${c.start.toFixed(2)}〜${(c.start + c.dur).toFixed(2)}s</span>`;
+      d.querySelector(".nm").textContent = c.name || c.text || c.src || "(無題)";
+      d.addEventListener("click", ()=>{ selId = c.id; renderAll(); });
+      box.appendChild(d);
+    }
+  }
+
+  function renderTimeline(){
+    const ruler = el("tl-ruler"), rows = el("tl-rows");
+    ruler.textContent = ""; rows.textContent = "";
+    if(!scene) return;
+    const dur = scene.duration;
+    // 目盛り: 0.5 秒刻み (長いシーンでは 1 秒刻み)
+    const step = dur > 8 ? 1 : 0.5;
+    for(let t = 0; t <= dur + 1e-6; t += step){
+      const tick = document.createElement("div");
+      tick.className = "tick";
+      tick.style.left = (t / dur * 100) + "%";
+      tick.textContent = t.toFixed(step < 1 ? 1 : 0);
+      ruler.appendChild(tick);
+    }
+    for(let i = scene.tracks.length - 1; i >= 0; i--){
+      const c = scene.tracks[i];
+      const row = document.createElement("div");
+      row.className = "tl-row" + (c.id === selId ? " sel" : "");
+      const bar = document.createElement("div");
+      bar.className = "tl-bar";
+      bar.style.left = (c.start / dur * 100) + "%";
+      bar.style.width = Math.max(0.6, c.dur / dur * 100) + "%";
+      bar.dataset.clipId = c.id;
+      bar.textContent = c.name || c.text || c.src || TYPE_LABEL[c.type];
+      const gl = document.createElement("span"); gl.className = "grip l"; gl.dataset.grip = "l";
+      const gr = document.createElement("span"); gr.className = "grip"; gr.dataset.grip = "r";
+      bar.appendChild(gl); bar.appendChild(gr);
+      for(const k of c.keys){
+        const kd = document.createElement("span");
+        kd.className = "key";
+        kd.style.left = (clamp(k.t / c.dur, 0, 1) * 100) + "%";
+        bar.appendChild(kd);
+      }
+      row.appendChild(bar);
+      rows.appendChild(row);
+    }
+    el("tl-playhead").style.left = (clamp(time / dur, 0, 1) * 100) + "%";
+  }
+
+  /* ---- プロパティ欄 (種類ごとに出す項目を変える) ---- */
+  const FIELDS = [
+    { k:"name",  l:"名前",       t:"text",  for:"*" },
+    { k:"start", l:"開始(秒)",   t:"num", min:0, max:60, step:0.05, for:"*" },
+    { k:"dur",   l:"長さ(秒)",   t:"num", min:0.05, max:60, step:0.05, for:"*" },
+    { k:"src",   l:"素材",       t:"asset", for:"image video sound", structural:true },
+    { k:"text",  l:"文字",       t:"area",  for:"text" },
+    { k:"x",     l:"X(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
+    { k:"y",     l:"Y(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
+    { k:"w",     l:"幅(%)",      t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
+    { k:"h",     l:"高さ(%)",    t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
+    { k:"opacity", l:"不透明度", t:"range", min:0, max:1, step:0.02, for:"text shape image video" },
+    { k:"scale", l:"拡大",       t:"num", min:0, max:10, step:0.05, for:"text shape image video" },
+    { k:"rot",   l:"回転(度)",   t:"num", min:-360, max:360, step:1, for:"text shape image video" },
+    { k:"color", l:"文字色",     t:"color", for:"text" },
+    { k:"stroke",l:"縁の色",     t:"color", for:"text shape" },
+    { k:"strokeW",l:"縁の太さ(%)",t:"num", min:0, max:5, step:0.05, for:"text shape" },
+    { k:"fontSize",l:"文字サイズ(%)",t:"num", min:0.5, max:60, step:0.5, for:"text" },
+    { k:"fontWeight",l:"文字の太さ",t:"num", min:100, max:900, step:100, for:"text" },
+    { k:"letter",l:"字間(em)",   t:"num", min:-0.3, max:1, step:0.01, for:"text" },
+    { k:"bg",    l:"背景/塗り",  t:"color", for:"text shape" },
+    { k:"radius",l:"角丸(%)",    t:"num", min:0, max:50, step:1, for:"text shape image video" },
+    { k:"shadow",l:"影",         t:"range", min:0, max:3, step:0.1, for:"text shape" },
+    { k:"fit",   l:"入れ方",     t:"select", opts:[["contain","収める"],["cover","埋める"],["fill","引き伸ばす"]], for:"image video" },
+    { k:"blend", l:"重ね方",     t:"select", opts:[["normal","通常"],["screen","スクリーン(発光)"],["multiply","乗算"],["overlay","オーバーレイ"],["lighten","比較(明)"]], for:"text shape image video" },
+    { k:"loop",  l:"繰り返し",   t:"check", for:"video sound" },
+    { k:"muted", l:"消音",       t:"check", for:"video" },
+    { k:"volume",l:"音量",       t:"range", min:0, max:1, step:0.05, for:"video sound" },
+  ];
+
+  function selectedClip(){
+    return scene ? scene.tracks.find(c=> c.id === selId) || null : null;
+  }
+
+  function renderProps(){
+    const box = el("prop-fields");
+    box.textContent = "";
+    const c = selectedClip();
+    el("prop-empty").hidden = !!c;
+    el("key-card").hidden = !c;
+    if(!c) return;
+    // 種類 (先頭に固定で置く)
+    const tl = document.createElement("label"); tl.textContent = "種類";
+    const ts = document.createElement("select");
+    for(const t of YA.CLIP_TYPES){
+      const o = document.createElement("option"); o.value = t; o.textContent = TYPE_LABEL[t] || t; ts.appendChild(o);
+    }
+    ts.value = c.type;
+    ts.addEventListener("change", ()=>{ c.type = ts.value; markDirty(); refresh(true); });
+    box.appendChild(tl); box.appendChild(ts);
+
+    for(const f of FIELDS){
+      if(f.for !== "*" && !f.for.split(" ").includes(c.type)) continue;
+      const lab = document.createElement("label");
+      lab.textContent = f.l;
+      let input;
+      if(f.t === "area"){
+        input = document.createElement("textarea");
+        input.value = c[f.k];
+        input.addEventListener("input", ()=>{ c[f.k] = input.value; markDirty(); apply(c, true); });
+      }else if(f.t === "asset"){
+        input = document.createElement("select");
+        const none = document.createElement("option"); none.value = ""; none.textContent = "(なし)"; input.appendChild(none);
+        for(const a of assets){
+          const o = document.createElement("option"); o.value = "assets/" + a; o.textContent = a; input.appendChild(o);
+        }
+        if(c.src && !assets.some(a=> "assets/" + a === c.src)){
+          const o = document.createElement("option"); o.value = c.src; o.textContent = c.src + " (不明)"; input.appendChild(o);
+        }
+        input.value = c.src;
+        input.addEventListener("change", ()=>{ c.src = input.value; markDirty(); apply(c, true); });
+      }else if(f.t === "check"){
+        input = document.createElement("input"); input.type = "checkbox"; input.checked = !!c[f.k];
+        input.addEventListener("change", ()=>{ c[f.k] = input.checked; markDirty(); apply(c, true); });
+      }else if(f.t === "color"){
+        const wrap = document.createElement("span");
+        wrap.style.cssText = "display:flex;gap:4px;align-items:center;";
+        input = document.createElement("input"); input.type = "color";
+        input.value = /^#[0-9a-fA-F]{6}$/.test(c[f.k]) ? c[f.k] : "#ffffff";
+        const txt = document.createElement("input"); txt.type = "text"; txt.value = c[f.k] || ""; txt.style.flex = "1"; txt.placeholder = "例: #ff0000 / 空欄で無し";
+        const set = (v)=>{ c[f.k] = v; markDirty(); apply(c, false); };
+        input.addEventListener("input", ()=>{ txt.value = input.value; set(input.value); });
+        txt.addEventListener("input", ()=> set(txt.value));
+        wrap.appendChild(input); wrap.appendChild(txt);
+        box.appendChild(lab); box.appendChild(wrap);
+        continue;
+      }else if(f.t === "select"){
+        input = document.createElement("select");
+        for(const [v, t] of f.opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
+        input.value = c[f.k];
+        input.addEventListener("change", ()=>{ c[f.k] = input.value; markDirty(); apply(c, false); });
+      }else{
+        input = document.createElement("input");
+        input.type = f.t === "range" ? "range" : (f.t === "num" ? "number" : "text");
+        if(f.min != null) input.min = f.min;
+        if(f.max != null) input.max = f.max;
+        if(f.step != null) input.step = f.step;
+        input.value = c[f.k];
+        input.addEventListener("input", ()=>{
+          c[f.k] = f.t === "text" ? input.value : Number(input.value);
+          markDirty();
+          if(f.k === "start" || f.k === "dur") { refresh(false); }
+          else apply(c, false);
+        });
+      }
+      box.appendChild(lab); box.appendChild(input);
+    }
+  }
+
+  // クリップ1件の変更を再生機へ反映する。structural=true のときだけ DOM を作り直す
+  function apply(clip, structural){
+    if(structural){ refresh(true); return; }
+    const entry = player.entries.find(e=> e.clip.id === clip.id);
+    if(!entry){ refresh(true); return; }
+    Object.assign(entry.clip, YA.normalizeClip(clip));
+    player.applyStatic(entry);
+    player.seek(time);
+    renderSel();
+    renderClipList();
+    renderTimeline();
+  }
+
+  /* ---- キーフレーム表 ---- */
+  function renderKeys(){
+    const table = el("key-table");
+    table.textContent = "";
+    const c = selectedClip();
+    if(!c) return;
+    const head = document.createElement("tr");
+    head.innerHTML = "<th>t</th><th>X</th><th>Y</th><th>幅</th><th>高</th><th>透</th><th>拡</th><th>回</th><th>補間</th><th></th>";
+    table.appendChild(head);
+    const local = time - c.start;
+    c.keys.forEach((k, i)=>{
+      const tr = document.createElement("tr");
+      if(Math.abs(k.t - local) < 0.03) tr.className = "at";
+      const cell = (child)=>{ const td = document.createElement("td"); td.appendChild(child); tr.appendChild(td); return td; };
+      const tIn = document.createElement("input");
+      tIn.type = "number"; tIn.step = "0.05"; tIn.min = "0"; tIn.value = k.t;
+      tIn.addEventListener("input", ()=>{
+        k.t = Math.max(0, Number(tIn.value) || 0);
+        c.keys.sort((a, b)=> a.t - b.t);
+        markDirty(); apply(c, false);
+      });
+      cell(tIn);
+      for(const p of YA.ANIM_PROPS){
+        const inp = document.createElement("input");
+        inp.type = "number"; inp.step = p === "opacity" || p === "scale" ? "0.05" : "0.5";
+        inp.value = k[p] != null ? k[p] : "";
+        inp.placeholder = "–";
+        inp.addEventListener("input", ()=>{
+          if(inp.value === "") delete k[p]; else k[p] = Number(inp.value);
+          markDirty(); apply(c, false);
+        });
+        cell(inp);
+      }
+      const es = document.createElement("select");
+      for(const name of Object.keys(YA.EASINGS)){
+        const o = document.createElement("option"); o.value = name; o.textContent = name; es.appendChild(o);
+      }
+      es.value = k.ease;
+      es.addEventListener("change", ()=>{ k.ease = es.value; markDirty(); apply(c, false); });
+      cell(es);
+      const del = document.createElement("button");
+      del.className = "sm ng"; del.textContent = "×";
+      del.addEventListener("click", ()=>{ c.keys.splice(i, 1); markDirty(); apply(c, false); renderKeys(); });
+      cell(del);
+      table.appendChild(tr);
+    });
+  }
+
+  el("btn-key-add").addEventListener("click", ()=>{
+    const c = selectedClip();
+    if(!c) return;
+    const local = clamp(round(time - c.start, 2), 0, c.dur);
+    const p = YA.propsAt(c, local);
+    const k = { t: local, ease: "inOut" };
+    for(const prop of YA.ANIM_PROPS) k[prop] = round(p[prop], 3);
+    c.keys.push(k);
+    c.keys.sort((a, b)=> a.t - b.t);
+    markDirty(); apply(c, false); renderKeys();
+  });
+
+  // よく使う動きのひな形。今のクリップの基本値を起点に、始点と終点のキーを置く
+  el("key-preset").addEventListener("change", ()=>{
+    const c = selectedClip();
+    const kind = el("key-preset").value;
+    el("key-preset").value = "";
+    if(!c || !kind) return;
+    const d = c.dur, half = d / 2;
+    const K = {
+      fade:   [{ t:0, opacity:0 }, { t:Math.min(0.3, half), opacity:1, ease:"out" }, { t:Math.max(0, d - 0.3), opacity:1, ease:"linear" }, { t:d, opacity:0, ease:"in" }],
+      zoom:   [{ t:0, scale:0.4, opacity:0 }, { t:Math.min(0.4, half), scale:1, opacity:1, ease:"outBack" }, { t:d, scale:1.05, opacity:1, ease:"linear" }],
+      slideL: [{ t:0, x:c.x - 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
+      slideR: [{ t:0, x:c.x + 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
+      drop:   [{ t:0, y:c.y - 60, opacity:0 }, { t:Math.min(0.45, half), y:c.y, opacity:1, ease:"outBounce" }, { t:d, y:c.y, opacity:1, ease:"linear" }],
+      pulse:  [{ t:0, scale:1 }, { t:half, scale:1.18, ease:"inOut" }, { t:d, scale:1, ease:"inOut" }],
+      flash:  [{ t:0, opacity:1, ease:"step" }, { t:d * 0.25, opacity:0, ease:"step" }, { t:d * 0.5, opacity:1, ease:"step" }, { t:d * 0.75, opacity:0, ease:"step" }, { t:d, opacity:1, ease:"step" }],
+    }[kind];
+    c.keys = K.map(k=> ({ ease:"inOut", ...k, t: round(k.t, 2) }));
+    markDirty(); apply(c, false); renderKeys();
+  });
+
+  /* ===================== プレビュー上の選択と操作 ===================== */
+  const selBox = el("sel-box");
+
+  function clipRect(c){
+    const local = time - c.start;
+    if(local < 0 || local > c.dur) return null;
+    const p = YA.propsAt(c, local);
+    return { l: p.x - p.w / 2, t: p.y - p.h / 2, w: p.w, h: p.h, p };
+  }
+
+  function renderSel(){
+    const c = selectedClip();
+    const r = c && c.type !== "sound" ? clipRect(c) : null;
+    if(!r){ selBox.style.display = "none"; return; }
+    selBox.style.display = "block";
+    selBox.style.left = r.l + "%";
+    selBox.style.top = r.t + "%";
+    selBox.style.width = r.w + "%";
+    selBox.style.height = r.h + "%";
+    selBox.querySelector(".lbl").textContent = c.name || TYPE_LABEL[c.type];
+  }
+
+  // ドラッグでクリップを動かす。プレイヘッドの位置にキーがあればそのキーを、無ければ基本値と全キーをまとめて動かす
+  function nudge(c, dx, dy, resize){
+    const local = time - c.start;
+    const k = c.keys.find(k=> Math.abs(k.t - local) < 0.03);
+    const p = YA.propsAt(c, local);
+    if(k){
+      if(resize){ k.w = round(Math.max(0.5, p.w + dx), 2); k.h = round(Math.max(0.5, p.h + dy), 2); }
+      else { k.x = round(p.x + dx, 2); k.y = round(p.y + dy, 2); }
+      return;
+    }
+    if(resize){
+      c.w = round(Math.max(0.5, c.w + dx), 2); c.h = round(Math.max(0.5, c.h + dy), 2);
+      for(const kk of c.keys){ if(kk.w != null) kk.w = round(Math.max(0.5, kk.w + dx), 2); if(kk.h != null) kk.h = round(Math.max(0.5, kk.h + dy), 2); }
+    }else{
+      c.x = round(c.x + dx, 2); c.y = round(c.y + dy, 2);
+      for(const kk of c.keys){ if(kk.x != null) kk.x = round(kk.x + dx, 2); if(kk.y != null) kk.y = round(kk.y + dy, 2); }
+    }
+  }
+
+  (function setupStageDrag(){
+    const layer = el("edit-layer");
+    let drag = null;   // { clip, startX, startY, resize }
+
+    function pct(ev){
+      const r = layer.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) / r.width * 100, y: (ev.clientY - r.top) / r.height * 100, rw: r.width, rh: r.height };
+    }
+    // その時刻に見えているクリップのうち、点の上にある一番手前のものを拾う
+    function hit(x, y){
+      if(!scene) return null;
+      for(let i = scene.tracks.length - 1; i >= 0; i--){
+        const c = scene.tracks[i];
+        if(c.type === "sound") continue;
+        const r = clipRect(c);
+        if(!r) continue;
+        if(x >= r.l && x <= r.l + r.w && y >= r.t && y <= r.t + r.h) return c;
+      }
+      return null;
+    }
+    layer.addEventListener("pointerdown", (ev)=>{
+      if(!scene) return;
+      const q = pct(ev);
+      const resize = ev.target.classList.contains("br");
+      let c = selectedClip();
+      if(!resize){
+        const h = hit(q.x, q.y);
+        if(h){ c = h; selId = h.id; renderAll(); }
+        else if(!ev.target.closest("#sel-box")) { selId = null; renderAll(); return; }
+      }
+      if(!c) return;
+      drag = { clip: c, x: q.x, y: q.y, resize };
+      layer.setPointerCapture(ev.pointerId);
+      ev.preventDefault();
+    });
+    layer.addEventListener("pointermove", (ev)=>{
+      if(!drag) return;
+      const q = pct(ev);
+      const dx = q.x - drag.x, dy = q.y - drag.y;
+      if(Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
+      drag.x = q.x; drag.y = q.y;
+      nudge(drag.clip, dx, dy, drag.resize);
+      markDirty();
+      apply(drag.clip, false);
+      renderProps();
+      renderKeys();
+    });
+    const end = (ev)=>{
+      if(!drag) return;
+      drag = null;
+      try{ layer.releasePointerCapture(ev.pointerId); }catch(e){}
+    };
+    layer.addEventListener("pointerup", end);
+    layer.addEventListener("pointercancel", end);
+  })();
+
+  /* ===================== タイムラインの操作 ===================== */
+  (function setupTimelineDrag(){
+    const ruler = el("tl-ruler"), rows = el("tl-rows");
+
+    function timeAt(ev, box){
+      const r = box.getBoundingClientRect();
+      return clamp((ev.clientX - r.left) / r.width * scene.duration, 0, scene.duration);
+    }
+    function snap(t, ev){
+      return ev.shiftKey ? round(t, 3) : round(Math.round(t / 0.05) * 0.05, 3);
+    }
+    function seekTo(t){
+      time = clamp(t, 0, scene.duration);
+      stopPlayback();
+      player.seek(time);
+      renderAll();
+    }
+    ruler.addEventListener("pointerdown", (ev)=>{
+      if(!scene) return;
+      ruler.setPointerCapture(ev.pointerId);
+      seekTo(timeAt(ev, ruler));
+      const move = (e)=> seekTo(timeAt(e, ruler));
+      const up = (e)=>{ ruler.removeEventListener("pointermove", move); ruler.removeEventListener("pointerup", up); try{ ruler.releasePointerCapture(e.pointerId); }catch(err){} };
+      ruler.addEventListener("pointermove", move);
+      ruler.addEventListener("pointerup", up);
+    });
+
+    let drag = null;   // { clip, mode:"move|l|r", t0, start0, dur0 }
+    rows.addEventListener("pointerdown", (ev)=>{
+      if(!scene) return;
+      const bar = ev.target.closest(".tl-bar");
+      if(!bar) return;
+      const c = scene.tracks.find(x=> x.id === bar.dataset.clipId);
+      if(!c) return;
+      selId = c.id;
+      const grip = ev.target.dataset.grip;
+      drag = { clip: c, mode: grip === "l" ? "l" : (grip === "r" ? "r" : "move"), t0: timeAt(ev, rows), start0: c.start, dur0: c.dur };
+      rows.setPointerCapture(ev.pointerId);
+      renderAll();
+      ev.preventDefault();
+    });
+    rows.addEventListener("pointermove", (ev)=>{
+      if(!drag) return;
+      const d = timeAt(ev, rows) - drag.t0;
+      const c = drag.clip;
+      if(drag.mode === "move"){
+        c.start = Math.max(0, snap(drag.start0 + d, ev));
+      }else if(drag.mode === "r"){
+        c.dur = Math.max(0.05, snap(drag.dur0 + d, ev));
+      }else{
+        const s = clamp(snap(drag.start0 + d, ev), 0, drag.start0 + drag.dur0 - 0.05);
+        c.dur = round(drag.dur0 + (drag.start0 - s), 3);
+        c.start = s;
+      }
+      markDirty();
+      player.seek(time);
+      apply(c, false);
+      renderProps();
+    });
+    const end = (ev)=>{ if(!drag) return; drag = null; try{ rows.releasePointerCapture(ev.pointerId); }catch(e){} refresh(false); };
+    rows.addEventListener("pointerup", end);
+    rows.addEventListener("pointercancel", end);
+  })();
+
+  /* ===================== 再生 ===================== */
+  let uiRaf = 0;
+  function stopPlayback(){
+    if(uiRaf){ cancelAnimationFrame(uiRaf); uiRaf = 0; }
+    if(player.playing) player.stop();
+    el("btn-play").textContent = "▶ 再生";
+  }
+  function startPlayback(){
+    if(!scene) return;
+    stopPlayback();
+    const from = time >= scene.duration - 0.01 ? 0 : time;
+    el("btn-play").textContent = "⏸ 一時停止";
+    player.play(from).then(()=>{
+      if(uiRaf){ cancelAnimationFrame(uiRaf); uiRaf = 0; }
+      el("btn-play").textContent = "▶ 再生";
+      time = scene.duration;
+      player.seek(time);
+      renderAll();
+    });
+    const tick = ()=>{
+      if(!player.playing) return;
+      time = player.time;
+      el("tl-time").textContent = `${time.toFixed(2)} / ${scene.duration.toFixed(2)} 秒`;
+      el("tl-playhead").style.left = (clamp(time / scene.duration, 0, 1) * 100) + "%";
+      renderSel();
+      uiRaf = requestAnimationFrame(tick);
+    };
+    uiRaf = requestAnimationFrame(tick);
+  }
+  el("btn-play").addEventListener("click", ()=>{
+    if(player.playing){ time = player.time; stopPlayback(); player.seek(time); renderAll(); }
+    else startPlayback();
+  });
+  el("btn-stop").addEventListener("click", ()=>{ stopPlayback(); time = 0; player.seek(0); renderAll(); });
+
+  /* ===================== シーン設定の入力 ===================== */
+  el("sc-name").addEventListener("input", ()=>{ scene.name = el("sc-name").value; markDirty(); renderClipList(); });
+  el("sc-dur").addEventListener("input", ()=>{
+    scene.duration = Math.max(0.2, Number(el("sc-dur").value) || 0.2);
+    markDirty(); refresh(false);
+  });
+  for(const id of ["sc-ev","sc-rank","sc-trig"]){
+    el(id).addEventListener("change", ()=>{
+      const ev = el("sc-ev").value;
+      scene.bind = ev ? YA.normalizeBind({ event: ev, rank: el("sc-rank").value, trigger: el("sc-trig").value }) : null;
+      markDirty();
+    });
+  }
+
+  /* ===================== クリップの追加・並べ替え ===================== */
+  function addClip(type, patch){
+    if(!scene) return;
+    const c = YA.blankClip(type, { start: round(time, 2), dur: Math.min(1.5, Math.max(0.3, scene.duration - time)), ...(patch || {}) });
+    if(type === "text"){ c.name = "文字"; c.text = "チャンス"; c.color = "#ffe27a"; c.stroke = "#3a1500"; c.strokeW = 0.5; c.fontSize = 12; c.h = 20; }
+    if(type === "shape"){ c.name = "図形"; c.bg = "#ff3b3b"; c.w = 100; c.h = 100; c.opacity = 0.6; c.blend = "screen"; }
+    if(type === "image"){ c.name = "画像"; c.w = 50; c.h = 50; }
+    if(type === "video"){ c.name = "動画"; c.w = 100; c.h = 100; }
+    if(type === "sound"){ c.name = "音"; }
+    scene.tracks.push(c);
+    selId = c.id;
+    markDirty();
+    refresh(true);
+  }
+  document.querySelectorAll("[data-add]").forEach(b=> b.addEventListener("click", ()=> addClip(b.dataset.add)));
+
+  el("btn-clip-del").addEventListener("click", ()=>{
+    const c = selectedClip(); if(!c) return;
+    scene.tracks = scene.tracks.filter(x=> x !== c);
+    selId = scene.tracks.length ? scene.tracks[scene.tracks.length - 1].id : null;
+    markDirty(); refresh(true);
+  });
+  el("btn-clip-dup").addEventListener("click", ()=>{
+    const c = selectedClip(); if(!c) return;
+    const copy = YA.normalizeClip({ ...JSON.parse(JSON.stringify(c)), id: YA.newId("c"), name: (c.name || "クリップ") + " 複製" });
+    scene.tracks.push(copy);
+    selId = copy.id;
+    markDirty(); refresh(true);
+  });
+  function moveClipOrder(delta){
+    const c = selectedClip(); if(!c) return;
+    const i = scene.tracks.indexOf(c);
+    const j = clamp(i + delta, 0, scene.tracks.length - 1);
+    if(i === j) return;
+    scene.tracks.splice(i, 1);
+    scene.tracks.splice(j, 0, c);
+    markDirty(); refresh(true);
+  }
+  el("btn-clip-up").addEventListener("click", ()=> moveClipOrder(1));     // 表示上は上=手前なので配列では後ろへ
+  el("btn-clip-down").addEventListener("click", ()=> moveClipOrder(-1));
+
+  /* ===================== シーンの新規・複製・削除 ===================== */
+  function askId(defaultId){
+    const raw = prompt("シーンID (ファイル名。半角英数と _ - が無難です)", defaultId || "");
+    if(raw == null) return null;
+    const id = raw.trim();
+    if(!id || /[\\/:*?"<>|.]/.test(id)){ alert("ID に \\ / : * ? \" < > | . は使えません"); return null; }
+    if(scenes.some(s=> s.id === id)){ alert("同じ ID のシーンがあります"); return null; }
+    return id;
+  }
+  el("btn-new").addEventListener("click", async ()=>{
+    const id = askId("yokoku" + (scenes.length + 1));
+    if(!id) return;
+    const s = YA.blankScene(id);
+    try{
+      await api("/api/authoring", { id, scene: s });
+      await loadScenes(id);
+      setStatus(`新しいシーン「${id}」を作りました`, "ok");
+    }catch(e){ setStatus("作成に失敗: " + e.message, "ng"); }
+  });
+  el("btn-dup").addEventListener("click", async ()=>{
+    if(!scene) return;
+    const id = askId(scene.id + "_copy");
+    if(!id) return;
+    const s = YA.normalizeScene(JSON.parse(JSON.stringify(scene)));
+    s.id = id; s.name = scene.name + " のコピー";
+    try{
+      await api("/api/authoring", { id, scene: s });
+      await loadScenes(id);
+      setStatus(`「${id}」へ複製しました`, "ok");
+    }catch(e){ setStatus("複製に失敗: " + e.message, "ng"); }
+  });
+  el("btn-del").addEventListener("click", async ()=>{
+    if(!scene) return;
+    if(!confirm(`シーン「${scene.name}」(${scene.id}.json) を削除します。よろしいですか?`)) return;
+    try{
+      await api("/api/authoring", { id: scene.id, delete: true });
+      const gone = scene.id;
+      scene = null;
+      await loadScenes();
+      setStatus(`「${gone}」を削除しました`, "ok");
+    }catch(e){ setStatus("削除に失敗: " + e.message, "ng"); }
+  });
+  el("scene-select").addEventListener("change", ()=>{
+    if(dirty && !confirm("保存していない変更があります。破棄して切り替えますか?")){
+      el("scene-select").value = scene ? scene.id : "";
+      return;
+    }
+    openScene(el("scene-select").value);
+  });
+  el("btn-save").addEventListener("click", saveScene);
+
+  /* ===================== 素材 ===================== */
+  function renderAssets(){
+    const box = el("asset-list");
+    box.textContent = "";
+    if(!assets.length){ box.innerHTML = '<div class="note">まだ素材がありません。</div>'; return; }
+    for(const name of assets){
+      const d = document.createElement("div");
+      d.className = "asset";
+      const type = YA.guessType(name);
+      const th = document.createElement(type === "image" ? "img" : "div");
+      th.className = "th";
+      if(type === "image"){ th.src = "yokoku/authoring/assets/" + encodeURIComponent(name); th.alt = ""; }
+      else th.textContent = type === "video" ? "動画" : "音";
+      const nm = document.createElement("span");
+      nm.className = "nm"; nm.textContent = name; nm.title = name;
+      const del = document.createElement("button");
+      del.className = "sm ng"; del.textContent = "×"; del.title = "この素材を削除";
+      del.addEventListener("click", async (ev)=>{
+        ev.stopPropagation();
+        if(!confirm(`${name} を削除します。使っているクリップは表示されなくなります。`)) return;
+        try{ await api("/api/authoring/asset", { name, delete: true }); await loadAssets(); setStatus(`${name} を削除しました`, "ok"); }
+        catch(e){ setStatus("素材の削除に失敗: " + e.message, "ng"); }
+      });
+      d.appendChild(th); d.appendChild(nm); d.appendChild(del);
+      d.addEventListener("click", ()=> addClip(type, { src: "assets/" + name, name }));
+      box.appendChild(d);
+    }
+  }
+
+  async function uploadFiles(files){
+    for(const file of files){
+      try{
+        const data = await new Promise((resolve, reject)=>{
+          const r = new FileReader();
+          r.onload = ()=> resolve(r.result);
+          r.onerror = ()=> reject(r.error);
+          r.readAsDataURL(file);
+        });
+        const res = await api("/api/authoring/asset", { name: file.name, data });
+        setStatus(`素材を保存しました: ${res.name}`, "ok");
+      }catch(e){
+        setStatus(`${file.name} の保存に失敗: ${e.message}`, "ng");
+      }
+    }
+    await loadAssets();
+  }
+  const drop = el("drop");
+  drop.addEventListener("click", ()=> el("file-input").click());
+  el("file-input").addEventListener("change", (ev)=>{ uploadFiles([...ev.target.files]); ev.target.value = ""; });
+  ["dragenter","dragover"].forEach(t=> drop.addEventListener(t, (ev)=>{ ev.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave","drop"].forEach(t=> drop.addEventListener(t, (ev)=>{ ev.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (ev)=>{ if(ev.dataTransfer && ev.dataTransfer.files.length) uploadFiles([...ev.dataTransfer.files]); });
+
+  /* ===================== オーバーレイでの試し再生 =====================
+     中継サーバー(このページを配信しているのと同じポート)へ playAuthoring を投げる。
+     オーバーレイが繋がっていればそのまま本番と同じ経路で再生される。 */
+  let relay = null;
+  function connectRelay(){
+    if(location.protocol === "file:") return;
+    try{
+      relay = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host);
+      relay.addEventListener("close", ()=> setTimeout(connectRelay, 3000));
+      relay.addEventListener("error", ()=>{ try{ relay.close(); }catch(e){} });
+    }catch(e){ /* 中継サーバーが無ければ送信ボタンだけが効かない */ }
+  }
+  connectRelay();
+  el("btn-send").addEventListener("click", ()=>{
+    if(!scene) return;
+    if(!relay || relay.readyState !== WebSocket.OPEN){ setStatus("中継サーバーに繋がっていません", "ng"); return; }
+    if(dirty){ setStatus("保存していない変更はオーバーレイに反映されません (先に保存してください)", "ng"); }
+    relay.send(JSON.stringify({ action: "playAuthoring", id: scene.id }));
+    setStatus(`オーバーレイへ ${scene.id} の再生を送りました`, "ok");
+  });
+
+  /* ===================== その他 ===================== */
+  el("dark-bg").addEventListener("change", ()=> stageBox.classList.toggle("dark", el("dark-bg").checked));
+  el("volume").value = 0.8;
+  document.addEventListener("keydown", (ev)=>{
+    const t = ev.target.tagName;
+    if(t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+    if(ev.code === "Space"){ ev.preventDefault(); el("btn-play").click(); }
+    if(ev.key === "Delete"){ el("btn-clip-del").click(); }
+  });
+  window.addEventListener("beforeunload", (ev)=>{
+    if(!dirty) return;
+    ev.preventDefault();
+    ev.returnValue = "";
+  });
+
+  (async function init(){
+    if(location.protocol === "file:"){
+      setStatus("http://localhost:8787/enshutsu/authoring_editor.html で開いてください (file:// では保存できません)", "ng");
+      return;
+    }
+    try{
+      await loadAssets();
+      await loadScenes();
+      if(scenes.length) setStatus("準備完了", "ok");
+    }catch(e){
+      setStatus("中継サーバーに接続できません: " + e.message, "ng");
+    }
+  })();
+})();
+</script>
+</body>
+</html>

@@ -35,6 +35,8 @@
 //     "reelIn" / "reelOut" / "reelToggle"            … リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切替
 //     "subEvent" (event: {...})                      … 副制御の演出イベントをオーバーレイへ直接流す(確認用)
 //                                                      例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
+//     "playAuthoring" (id: "...")                    … 予告オーサリングのシーンを1回再生する
+//                                                      例: {"action":"playAuthoring","id":"akatsu"}
 //
 // このサーバーはメッセージを「受け取ったら他の全クライアントに転送するだけ」の単純な中継役です。
 
@@ -316,6 +318,142 @@ function handleApiSymbols(req, res) {
   });
 }
 
+// ===================== 予告オーサリングの保存 API =====================
+// シーン (オーサリングデータ) は enshutsu/yokoku/authoring/<id>.json、素材は同フォルダの assets/ に置く。
+//   GET  /api/authoring          → { scenes: [シーンJSON, ...] }  (オーバーレイが起動時とid更新時に読む)
+//   GET  /api/authoring?id=xxx   → シーンJSON 1件
+//   POST /api/authoring          body: { id, scene } で保存 / { id, delete:true } で削除
+//   POST /api/authoring/asset    body: { name, data:"data:...;base64,..." } で素材を1件保存
+// 保存・削除のあとは { action:"authoringUpdated", id, op } を全 WebSocket クライアントへ流す
+// (オーバーレイはこれを受けてシーンを読み直す)。
+const AUTHORING_DIR = path.join(ROOT, "enshutsu", "yokoku", "authoring");
+const AUTHORING_ASSET_DIR = path.join(AUTHORING_DIR, "assets");
+const AUTHORING_ASSET_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".mp4", ".webm", ".mov", ".m4v", ".mp3", ".wav", ".ogg", ".m4a"];
+
+// ファイル名に使えない文字と、上の階層へ出る指定を弾く。ドットを禁じているので "..", "a.json" も通らない
+function safeSceneId(raw) {
+  const s = String(raw == null ? "" : raw).trim();
+  if (!s || s.length > 48) return null;
+  if (/[\\/:*?"<>|.\u0000-\u001f]/.test(s)) return null;
+  return s;
+}
+
+function safeAssetName(raw) {
+  const s = path.basename(String(raw == null ? "" : raw).trim()).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_");
+  if (!s || s.length > 96 || s.startsWith(".")) return null;
+  const ext = path.extname(s).toLowerCase();
+  if (!AUTHORING_ASSET_EXT.includes(ext)) return null;
+  return s;
+}
+
+function readScene(id) {
+  try {
+    const scene = JSON.parse(fs.readFileSync(path.join(AUTHORING_DIR, id + ".json"), "utf-8"));
+    if (!scene || typeof scene !== "object") return null;
+    scene.id = id;
+    return scene;
+  } catch (e) {
+    return null;
+  }
+}
+
+function listScenes() {
+  let names = [];
+  try { names = fs.readdirSync(AUTHORING_DIR).filter((n) => n.toLowerCase().endsWith(".json")); }
+  catch (e) { return []; }
+  names.sort((a, b) => a.localeCompare(b, "ja", { numeric: true }));
+  return names.map((n) => readScene(n.replace(/\.json$/i, ""))).filter(Boolean);
+}
+
+function broadcast(payload) {
+  const msg = JSON.stringify(payload);
+  for (const client of wss.clients) if (client.readyState === client.OPEN) client.send(msg);
+}
+
+// リクエストのボディを JSON として読む (上限つき)。読めなければ res へエラーを返して null を渡す
+function readJsonBody(req, res, limitBytes, cb) {
+  const chunks = [];
+  let size = 0;
+  req.on("data", (c) => { size += c.length; if (size > limitBytes) { req.destroy(); } else chunks.push(c); });
+  req.on("end", () => {
+    try { cb(JSON.parse(Buffer.concat(chunks).toString("utf-8"))); }
+    catch (e) { sendJson(res, 400, { error: "invalid json" }); }
+  });
+}
+
+function handleApiAuthoring(req, res, url) {
+  if (req.method === "GET") {
+    const id = url.searchParams.get("id");
+    if (id) {
+      const safe = safeSceneId(id);
+      const scene = safe && readScene(safe);
+      if (!scene) { sendJson(res, 404, { error: "not found: " + id }); return; }
+      sendJson(res, 200, { scene });
+      return;
+    }
+    sendJson(res, 200, { scenes: listScenes() });
+    return;
+  }
+  if (req.method !== "POST") { sendJson(res, 405, { error: "GET or POST only" }); return; }
+  readJsonBody(req, res, 16 * 1024 * 1024, (body) => {
+    const id = safeSceneId(body && body.id);
+    if (!id) { sendJson(res, 400, { error: "id が不正です (\\ / : * ? \" < > | . は使えません。48文字まで)" }); return; }
+    const file = path.join(AUTHORING_DIR, id + ".json");
+    if (body.delete) {
+      try { fs.unlinkSync(file); } catch (e) { sendJson(res, 404, { error: "not found: " + id }); return; }
+      broadcast({ action: "authoringUpdated", id, op: "delete" });
+      console.log("[予告オーサリング] 削除", id);
+      sendJson(res, 200, { ok: true, id, op: "delete", scenes: listScenes().map((s) => s.id) });
+      return;
+    }
+    const scene = body.scene;
+    if (!scene || typeof scene !== "object" || !Array.isArray(scene.tracks)) {
+      sendJson(res, 400, { error: "scene: tracks 配列を持つオブジェクトを送ってください" });
+      return;
+    }
+    scene.id = id;
+    fs.mkdirSync(AUTHORING_DIR, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(scene, null, 2) + "\n");
+    broadcast({ action: "authoringUpdated", id, op: "save" });
+    console.log("[予告オーサリング] 保存", id, `(${scene.tracks.length} クリップ / ${scene.duration} 秒)`);
+    sendJson(res, 200, { ok: true, id, op: "save" });
+  });
+}
+
+function handleApiAuthoringAsset(req, res) {
+  if (req.method === "GET") {
+    let files = [];
+    try {
+      files = fs.readdirSync(AUTHORING_ASSET_DIR, { withFileTypes: true })
+        .filter((e) => e.isFile() && AUTHORING_ASSET_EXT.includes(path.extname(e.name).toLowerCase()))
+        .map((e) => e.name)
+        .sort((a, b) => a.localeCompare(b, "ja", { numeric: true }));
+    } catch (e) { /* フォルダが無ければ空 */ }
+    sendJson(res, 200, { files });
+    return;
+  }
+  if (req.method !== "POST") { sendJson(res, 405, { error: "GET or POST only" }); return; }
+  readJsonBody(req, res, 128 * 1024 * 1024, (body) => {
+    if (body && body.delete) {
+      const name = safeAssetName(body.name);
+      if (!name) { sendJson(res, 400, { error: "name が不正です" }); return; }
+      try { fs.unlinkSync(path.join(AUTHORING_ASSET_DIR, name)); }
+      catch (e) { sendJson(res, 404, { error: "not found: " + name }); return; }
+      console.log("[予告オーサリング] 素材を削除", name);
+      sendJson(res, 200, { ok: true, name, op: "delete" });
+      return;
+    }
+    const name = safeAssetName(body && body.name);
+    if (!name) { sendJson(res, 400, { error: "name が不正です (対応拡張子: " + AUTHORING_ASSET_EXT.join(" ") + ")" }); return; }
+    const buf = dataUriToBuffer(body && body.data);
+    if (!buf) { sendJson(res, 400, { error: "data は data:<mime>;base64,... で送ってください" }); return; }
+    fs.mkdirSync(AUTHORING_ASSET_DIR, { recursive: true });
+    fs.writeFileSync(path.join(AUTHORING_ASSET_DIR, name), buf);
+    console.log("[予告オーサリング] 素材を保存", name, `(${buf.length} バイト)`);
+    sendJson(res, 200, { ok: true, name, src: "assets/" + name });
+  });
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://localhost");
 
@@ -326,6 +464,16 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/api/symbols") {
     handleApiSymbols(req, res);
+    return;
+  }
+
+  if (url.pathname === "/api/authoring") {
+    handleApiAuthoring(req, res, url);
+    return;
+  }
+
+  if (url.pathname === "/api/authoring/asset") {
+    handleApiAuthoringAsset(req, res);
     return;
   }
 
@@ -376,6 +524,7 @@ server.listen(PORT, () => {
   console.log(`[コンパネURL]     http://localhost:${PORT}/control/main_control.html`);
   console.log(`[筐体ビューURL]   http://localhost:${PORT}/reel/reel.html?mode=link&hidebar=1`);
   console.log(`[図柄設定URL]     http://localhost:${PORT}/reel/symbol_editor.html`);
+  console.log(`[予告オーサリング] http://localhost:${PORT}/enshutsu/authoring_editor.html`);
   console.log("このウィンドウは起動したまま(閉じない)にしておいてください。");
 });
 

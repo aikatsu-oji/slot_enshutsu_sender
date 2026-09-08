@@ -361,6 +361,12 @@
   .sb-events .ev-freeze{color:#ff6b6b;font-weight:700;}
   .sb-events .ev-banner{color:var(--gold-bright);}
 
+  /* ===== 予告オーサリング ===== */
+  .auth-select{
+    flex:1;min-width:0;background:#0d0b14;border:1px solid var(--line);border-radius:8px;
+    color:var(--text);font-family:inherit;font-size:12.5px;padding:8px 10px;
+  }
+
   /* ===== 信号注入 ===== */
   .inj-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .inj-row select,
@@ -556,6 +562,18 @@
         <button class="btn" id="btn-reel-out" disabled>リールを液晶から出す</button>
       </div>
     </div>
+
+    <div class="card">
+      <h2>予告オーサリング</h2>
+      <div class="row2">
+        <select class="auth-select" id="auth-scene"></select>
+        <button class="btn" id="btn-auth-play" disabled style="flex:0 0 auto">▶ 再生</button>
+      </div>
+      <div class="row2" style="margin-top:8px">
+        <button class="btn btn-sm" id="btn-auth-reload">🔄 一覧を更新</button>
+      </div>
+      <div class="screen-info" id="auth-info">読み込み中...</div>
+    </div>
   </div>
 
   <!-- モニタ: ダイジェストに載らない詳細 -->
@@ -625,6 +643,15 @@
       </div>
       <div class="screen-info" id="symbols-info">図柄画像の差し替えとリールの見た目 (地色・背景画像・枠・影・図柄の大きさ) を編集します</div>
     </div>
+
+    <div class="card">
+      <h2>予告オーサリング</h2>
+      <div class="row2">
+        <button class="btn" id="btn-authoring">🎬 予告オーサリングを開く</button>
+        <button class="btn" id="btn-authoring-window">別ウィンドウで開く</button>
+      </div>
+      <div class="screen-info" id="authoring-info">予告 (オーサリングデータ) を作ります。保存するとオーバーレイが自動で読み直します</div>
+    </div>
   </div>
 
   <!-- 注入: 検証用 -->
@@ -672,6 +699,19 @@
   <iframe id="symbols-frame" title="図柄設定"></iframe>
 </div>
 
+<!-- 予告オーサリング。中身は enshutsu/authoring_editor.html を iframe で開く (URL の組み立ては図柄設定と同じ) -->
+<div class="modal" id="authoring-modal">
+  <div class="modal-head">
+    <b>予告オーサリング</b>
+    <span class="modal-url" id="authoring-url"></span>
+    <span class="spacer"></span>
+    <button class="btn btn-sm" id="btn-authoring-reload">再読込</button>
+    <button class="btn btn-sm" id="btn-authoring-popout">別ウィンドウ</button>
+    <button class="btn btn-sm" id="btn-authoring-close">閉じる (Esc)</button>
+  </div>
+  <iframe id="authoring-frame" title="予告オーサリング"></iframe>
+</div>
+
 <script>
 (function(){
   "use strict";
@@ -701,6 +741,7 @@
     lever: document.getElementById("btn-lever"),
     manual: document.getElementById("btn-manual"),
     ramClear: document.getElementById("btn-ramclear"),
+    authPlay: document.getElementById("btn-auth-play"),
   };
 
   let ws = null;
@@ -760,6 +801,7 @@
       if(data.action === "mainBoard"){ handleMainBoard(data); return; }
       if(data.action === "subBoard"){ handleSubBoard(data); return; }
       if(data.action === "symbolsUpdated"){ handleSymbolsUpdated(data); return; }
+      if(data.action === "authoringUpdated"){ handleAuthoringUpdated(data); return; }
       handleSignalMessage(data);
     });
     ws.addEventListener("close", ()=>{
@@ -1441,63 +1483,80 @@
     sendSignal("webrtcStop", null);
   });
 
-  // 図柄設定 (reel/symbol_editor.html)
+  // エディタ(別ページ)を全画面モーダルの iframe で開く仕組み。図柄設定と予告オーサリングで共用する。
   // このパネルは相対パス依存を持たないので、エディタの URL は接続先の ws URL のホストから組み立てる。
-  // 保存は中継サーバーの POST /api/symbols がやり、結果は symbolsUpdated として全クライアントに流れてくる。
-  const symbolsModal = document.getElementById("symbols-modal");
-  const symbolsFrame = document.getElementById("symbols-frame");
-  const symbolsUrlEl = document.getElementById("symbols-url");
-  const symbolsInfo = document.getElementById("symbols-info");
-  const openSymbolsBtn = document.getElementById("btn-symbols");
-  const symbolsWindowBtn = document.getElementById("btn-symbols-window");
-  const symbolsReloadBtn = document.getElementById("btn-symbols-reload");
-  const symbolsPopoutBtn = document.getElementById("btn-symbols-popout");
-  const symbolsCloseBtn = document.getElementById("btn-symbols-close");
-
-  function symbolEditorUrl(){
+  function relayHttpBase(){
     const raw = urlInput.value.trim();
     try{
       const u = new URL(raw);
       if(u.protocol === "ws:" || u.protocol === "wss:"){
-        return `${u.protocol === "wss:" ? "https:" : "http:"}//${u.host}/reel/symbol_editor.html`;
+        return `${u.protocol === "wss:" ? "https:" : "http:"}//${u.host}`;
       }
     }catch(e){ /* 入力が URL として読めないときは下の location.origin へ */ }
     // ws URL が使えなくても、このページ自体が中継サーバー経由なら同じホストで開ける
-    if(location.protocol === "http:" || location.protocol === "https:"){
-      return `${location.origin}/reel/symbol_editor.html`;
-    }
+    if(location.protocol === "http:" || location.protocol === "https:") return location.origin;
     return null;
   }
 
-  function openSymbols(){
-    const url = symbolEditorUrl();
-    if(!url){
-      log("⚠️ 図柄設定: 中継サーバーの URL が分かりません (ws URL を入れ直すか http://localhost:8787/control/main_control.html で開いてください)");
-      return;
+  function makeEditorModal(o){
+    const modal = document.getElementById(o.modal);
+    const frame = document.getElementById(o.frame);
+    const urlEl = document.getElementById(o.urlEl);
+    const editorUrl = ()=>{ const b = relayHttpBase(); return b ? b + o.path : null; };
+    const warn = ()=> log(`⚠️ ${o.label}: 中継サーバーの URL が分かりません (ws URL を入れ直すか http://localhost:8787/control/main_control.html で開いてください)`);
+
+    function open(){
+      const url = editorUrl();
+      if(!url){ warn(); return; }
+      // 開き直しで編集中の内容が消えないよう、同じ URL なら iframe は読み込み直さない
+      if(frame.getAttribute("data-url") !== url){
+        frame.setAttribute("data-url", url);
+        frame.src = url;
+      }
+      urlEl.textContent = url;
+      modal.classList.add("show");
+      log(`${o.icon} ${o.label}を開きました`);
     }
-    // 開き直しで編集中の内容が消えないよう、同じ URL なら iframe は読み込み直さない
-    if(symbolsFrame.getAttribute("data-url") !== url){
-      symbolsFrame.setAttribute("data-url", url);
-      symbolsFrame.src = url;
+    function close(){ modal.classList.remove("show"); }
+    function popout(){
+      const url = editorUrl();
+      if(!url){ warn(); return; }
+      window.open(url, o.frame);
+      log(`${o.icon} ${o.label}を別ウィンドウで開きました`);
     }
-    symbolsUrlEl.textContent = url;
-    symbolsModal.classList.add("show");
-    log("🎴 図柄設定を開きました");
+    function reload(){
+      const url = editorUrl();
+      if(!url) return;
+      frame.setAttribute("data-url", url);
+      urlEl.textContent = url;
+      frame.src = url;
+    }
+    document.getElementById(o.openBtn).addEventListener("click", open);
+    document.getElementById(o.windowBtn).addEventListener("click", popout);
+    document.getElementById(o.popoutBtn).addEventListener("click", ()=>{ popout(); close(); });
+    document.getElementById(o.closeBtn).addEventListener("click", close);
+    document.getElementById(o.reloadBtn).addEventListener("click", reload);
+    document.addEventListener("keydown", (ev)=>{
+      if(ev.key === "Escape" && modal.classList.contains("show")) close();
+    });
+    return { open, close, popout, reload };
   }
 
-  function closeSymbols(){
-    symbolsModal.classList.remove("show");
-  }
-
-  function popoutSymbols(){
-    const url = symbolEditorUrl();
-    if(!url){
-      log("⚠️ 図柄設定: 中継サーバーの URL が分かりません (ws URL を入れ直すか http://localhost:8787/control/main_control.html で開いてください)");
-      return;
-    }
-    window.open(url, "symbolEditor");
-    log("🎴 図柄設定を別ウィンドウで開きました");
-  }
+  // 図柄設定 (reel/symbol_editor.html)。保存は中継サーバーの POST /api/symbols がやり、
+  // 結果は symbolsUpdated として全クライアントに流れてくる。
+  const symbolsInfo = document.getElementById("symbols-info");
+  makeEditorModal({
+    modal:"symbols-modal", frame:"symbols-frame", urlEl:"symbols-url", path:"/reel/symbol_editor.html",
+    label:"図柄設定", icon:"🎴", openBtn:"btn-symbols", windowBtn:"btn-symbols-window",
+    popoutBtn:"btn-symbols-popout", closeBtn:"btn-symbols-close", reloadBtn:"btn-symbols-reload",
+  });
+  // 予告オーサリング (enshutsu/authoring_editor.html)。保存は POST /api/authoring、
+  // 結果は authoringUpdated として流れてくる。
+  makeEditorModal({
+    modal:"authoring-modal", frame:"authoring-frame", urlEl:"authoring-url", path:"/enshutsu/authoring_editor.html",
+    label:"予告オーサリング", icon:"🎬", openBtn:"btn-authoring", windowBtn:"btn-authoring-window",
+    popoutBtn:"btn-authoring-popout", closeBtn:"btn-authoring-close", reloadBtn:"btn-authoring-reload",
+  });
 
   function handleSymbolsUpdated(data){
     const written = Array.isArray(data.written) ? data.written : [];
@@ -1512,20 +1571,46 @@
     log(`🎴 図柄設定を保存しました (${detail})`);
   }
 
-  openSymbolsBtn.addEventListener("click", openSymbols);
-  symbolsWindowBtn.addEventListener("click", popoutSymbols);
-  symbolsPopoutBtn.addEventListener("click", ()=>{ popoutSymbols(); closeSymbols(); });
-  symbolsCloseBtn.addEventListener("click", closeSymbols);
-  symbolsReloadBtn.addEventListener("click", ()=>{
-    const url = symbolEditorUrl();
-    if(!url) return;
-    symbolsFrame.setAttribute("data-url", url);
-    symbolsUrlEl.textContent = url;
-    symbolsFrame.src = url;
+  /* 予告オーサリングのシーン一覧 (操作タブ)。中継サーバーの GET /api/authoring から取り、
+     選んだシーンを playAuthoring でオーバーレイに再生させる。 */
+  const authSelect = document.getElementById("auth-scene");
+  const authInfo = document.getElementById("auth-info");
+  async function loadAuthoringScenes(quiet){
+    const base = relayHttpBase();
+    if(!base){ authInfo.textContent = "中継サーバーの URL が分かりません"; return; }
+    try{
+      const res = await fetch(base + "/api/authoring", { cache:"no-store" });
+      if(!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      const scenes = Array.isArray(data.scenes) ? data.scenes : [];
+      const keep = authSelect.value;
+      authSelect.textContent = "";
+      for(const sc of scenes){
+        const o = document.createElement("option");
+        o.value = sc.id;
+        o.textContent = (sc.name || sc.id) + (sc.bind ? ` [${sc.bind.rank || sc.bind.event}]` : "");
+        authSelect.appendChild(o);
+      }
+      if(scenes.some(sc=> sc.id === keep)) authSelect.value = keep;
+      authInfo.textContent = scenes.length ? `${scenes.length} シーン (enshutsu/yokoku/authoring/)` : "シーンがありません (「設定」タブの予告オーサリングで作成してください)";
+      if(!quiet) log(`🎬 予告オーサリング: ${scenes.length} シーンを読み込みました`);
+    }catch(e){
+      authInfo.textContent = "一覧の取得に失敗: " + e.message;
+      if(!quiet) log(`⚠️ 予告オーサリングの一覧を取得できません: ${e.message}`);
+    }
+  }
+  function handleAuthoringUpdated(data){
+    loadAuthoringScenes(true);
+    log(`🎬 予告オーサリング: ${data.id} を${data.op === "delete" ? "削除" : "保存"}しました`);
+  }
+  buttons.authPlay.addEventListener("click", ()=>{
+    const id = authSelect.value;
+    if(!id){ log("⚠️ 予告オーサリング: 再生するシーンがありません"); return; }
+    sendRaw({ action:"playAuthoring", id }, `予告オーサリング「${id}」の再生`);
   });
-  document.addEventListener("keydown", (ev)=>{
-    if(ev.key === "Escape" && symbolsModal.classList.contains("show")) closeSymbols();
-  });
+  document.getElementById("btn-auth-reload").addEventListener("click", ()=> loadAuthoringScenes(false));
+  loadAuthoringScenes(true);
+
 
   // オフライン時ヘルプ: コマンドコピー
   copyCmdBtn.addEventListener("click", async ()=>{

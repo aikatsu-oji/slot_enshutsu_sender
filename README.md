@@ -35,6 +35,7 @@ scripts\dev.cmd stop
 | オーバーレイ (OBS ブラウザソース) | http://localhost:8787/enshutsu/enshutsu_overlay.html |
 | 筐体ビュー | http://localhost:8787/reel/reel.html?mode=link&hidebar=1 |
 | 図柄設定 (図柄画像の差し替え) | http://localhost:8787/reel/symbol_editor.html |
+| 予告オーサリング (予告の作成) | http://localhost:8787/enshutsu/authoring_editor.html |
 
 ## フォルダ
 
@@ -44,8 +45,22 @@ scripts\dev.cmd stop
 | `main_board/` | 主制御・副制御シミュレータ `god_main_board.py` (port 8765) |
 | `control/` | コンパネ `main_control.html` |
 | `reel/` | 筐体ビュー `reel.html` |
+| `enshutsu/yokoku/authoring/` | 予告オーサリングのデータ (`<id>.json`) と素材 (`assets/`) |
 | `enshutsu/` | オーバーレイ本体と演出素材 (`at/sound/`, `yokoku/banner/sound/` に効果音を置くと自動で鳴る。フリーズ素材・萌えカットインは GIF/画像のほか mp4/webm 動画も可) |
 | `doc/` | 仕様書 |
 | `scripts/` | CLI 用ツール |
+
+## 予告オーサリング
+
+予告 (バナー・カットイン・煽り) を、素材と時間の並びを持つ「オーサリングデータ」として作れます。
+
+1. コンパネの「設定」タブ →「🎬 予告オーサリングを開く」(または上の URL を直接開く)
+2. 画像 / 動画 / 音声をドロップして素材にし、文字・図形と一緒にタイムラインへ並べる
+3. キーフレームで動かして「💾 保存」。データは `enshutsu/yokoku/authoring/<id>.json` に入ります
+4. 「割り当て」を決めておくと、副制御からそのイベント (予告バナーのランク・ナビ・GG突入など) が
+   届いたときにオーバーレイが既定の演出の代わりに自動再生します
+
+その場で流したいときは、コンパネ「操作」タブの予告オーサリング欄から選んで ▶ 再生、または
+`scripts\dev.cmd send authoring:<id>` を実行します。
 
 開発時の詳細は `CLAUDE.md` を参照してください。

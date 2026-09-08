@@ -18,6 +18,7 @@
                                            send credit  … クレジット投入信号 +50枚
                                            send manual / send auto … 進み方を切り替える
                                            send ramclear … ラムクリア(主制御のRAMを初期化)
+                                           send authoring:<id> … 予告オーサリングのシーンをオーバーレイで再生
   logs    [-Tail 40]                       .run\ 配下のログ末尾を表示
   help
 
@@ -218,8 +219,8 @@ function Do-Test {
     Info "中継サーバー 構文チェック"
     & node --check $ServerJs
     if ($LASTEXITCODE -ne 0) { Fail "trigger_relay_server.js の構文エラー" }
-    Info "筐体ビュー 構文チェック (reel/symbols.js, reel/reel_window.js)"
-    foreach ($js in @("reel/symbols.js", "reel/reel_window.js")) {
+    Info "筐体ビュー・予告オーサリング 構文チェック (reel/symbols.js, reel/reel_window.js, enshutsu/authoring_player.js)"
+    foreach ($js in @("reel/symbols.js", "reel/reel_window.js", "enshutsu/authoring_player.js")) {
       & node --check (Join-Path $Root $js)
       if ($LASTEXITCODE -ne 0) { Fail "$js の構文エラー" }
     }
@@ -253,6 +254,8 @@ function Do-Send($json) {
   if (-not $json) { Fail "送信する内容を指定してください  例: send triggerEnshutsu   /  send '{\"action\":\"playUpToLock2\"}'" }
   # cmd 経由(-File)では引数のダブルクォートが剥がれるため、action 名だけの短縮形も受け付ける
   $json = $json.Trim().Trim("'")
+  # 予告オーサリングの再生: send authoring:<シーンID>
+  if ($json -match '^[Aa]uthoring:(.+)$') { $json = '{"action":"playAuthoring","id":"' + $Matches[1].Trim() + '"}' }
   # 主制御への入力の短縮形。lever は --manual で待っている主制御を1ゲーム進める
   switch ($json.ToLower()) {
     "lever"  { $json = '{"action":"panelInject","layer":"lever"}' }

@@ -1,0 +1,70 @@
+{
+  "id": "sample_akatsu",
+  "name": "激アツ (サンプル)",
+  "version": 1,
+  "duration": 2.2,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "c_flash",
+      "name": "赤フラッシュ",
+      "type": "shape",
+      "start": 0,
+      "dur": 0.5,
+      "x": 50, "y": 50, "w": 100, "h": 100,
+      "bg": "#ff2a2a",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        { "t": 0, "opacity": 0, "ease": "linear" },
+        { "t": 0.08, "opacity": 0.8, "ease": "out" },
+        { "t": 0.5, "opacity": 0, "ease": "in" }
+      ]
+    },
+    {
+      "id": "c_band",
+      "name": "帯",
+      "type": "shape",
+      "start": 0.1,
+      "dur": 2.0,
+      "x": 50, "y": 46, "w": 120, "h": 22,
+      "rot": -3,
+      "bg": "#7a0008",
+      "stroke": "#ffd76a",
+      "strokeW": 0.3,
+      "shadow": 1.5,
+      "opacity": 0,
+      "keys": [
+        { "t": 0, "x": -40, "opacity": 0, "ease": "linear" },
+        { "t": 0.28, "x": 50, "opacity": 0.92, "ease": "outCubic" },
+        { "t": 1.7, "x": 50, "opacity": 0.92, "ease": "linear" },
+        { "t": 2.0, "x": 50, "opacity": 0, "ease": "in" }
+      ]
+    },
+    {
+      "id": "c_text",
+      "name": "激アツ",
+      "type": "text",
+      "text": "激アツ",
+      "start": 0.15,
+      "dur": 1.9,
+      "x": 50, "y": 46, "w": 90, "h": 24,
+      "color": "#fff4d6",
+      "stroke": "#3a0000",
+      "strokeW": 0.7,
+      "fontSize": 17,
+      "fontWeight": 900,
+      "letter": 0.12,
+      "shadow": 1.5,
+      "opacity": 0,
+      "keys": [
+        { "t": 0, "scale": 0.4, "opacity": 0, "ease": "linear" },
+        { "t": 0.3, "scale": 1.12, "opacity": 1, "ease": "outBack" },
+        { "t": 0.45, "scale": 1, "ease": "out" },
+        { "t": 1.6, "scale": 1, "opacity": 1, "ease": "linear" },
+        { "t": 1.9, "scale": 1.15, "opacity": 0, "ease": "in" }
+      ]
+    }
+  ]
+}

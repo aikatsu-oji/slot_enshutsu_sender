@@ -30,10 +30,15 @@ slot_enshutsu_sender/
 │   └── symbols.html             図柄カタログ。全図柄・リール窓の停止形・配列表の確認と SVG/PNG 書き出し
 ├── enshutsu/
 │   ├── enshutsu_overlay.html    OBS ブラウザソース用オーバーレイ本体
+│   ├── authoring_player.js      予告オーサリングの再生エンジン。シーンJSONをDOMへ組み、時刻tの姿を描くだけの部品
+│   │                            (globalThis.YokokuAuthoring)。オーバーレイとエディタが同じものを読む
+│   ├── authoring_editor.html    予告オーサリング(作成)。プレビュー+タイムライン+キーフレーム。POST /api/authoring で保存
 │   ├── real/                    リールの効果音。start (回転開始) / stop (停止。stop1〜stop3 で停止順別も可)
 │   │                            筐体ビュー reel.html が /api/list で読む (任意。無ければ無音)
 │   ├── at/sound/                AT系演出の効果音 (任意: gg_start / stock_up / add_games / at_end / navi)
 │   └── yokoku/
+│       ├── authoring/           オーサリングデータ <id>.json と素材 assets/ (エディタが読み書きする)
+│       │                        sample_akatsu.json / sample_chance.json を同梱 (割り当て無しの手動再生用)
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, frz.mp4, moe.mp4)。GIF/画像に加え動画 (mp4/webm/mov) 可
 │       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
@@ -63,6 +68,7 @@ slot_enshutsu_sender/
   - 筐体ビュー   http://localhost:8787/reel/reel.html?mode=link&hidebar=1  (`&wait=0` でレバーON無効時間なし)
   - 図柄カタログ http://localhost:8787/reel/symbols.html
   - 図柄設定     http://localhost:8787/reel/symbol_editor.html
+  - 予告オーサリング http://localhost:8787/enshutsu/authoring_editor.html
   - 旧 URL `/main_control.html` `/kyotai.html` `/kyotai/kyotai.html` はサーバーが 302 で新 URL へ転送する。
 
 ## コマンド (Claude Code から実行してよいもの)
@@ -77,6 +83,7 @@ scripts\dev.cmd send reelIn                          # リールユニットを�
 scripts\dev.cmd send ramclear                        # ラムクリア (主制御のRAMを初期化。コンパネの🧹ボタンと同じ)
 scripts\dev.cmd send lever                           # -Mode manual の主制御を1ゲーム進める (レバーON)
 scripts\dev.cmd send credit                          # クレジット投入信号 +50枚 (send manual / send auto で進み方の切替)
+scripts\dev.cmd send authoring:sample_akatsu         # 予告オーサリングのシーンをオーバーレイで1回再生
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
@@ -162,6 +169,21 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
+- 予告オーサリング (予告の作成と再生): データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの
+  `assets/`。形は `authoring_player.js` の先頭コメントが唯一の定義 (シーン = クリップの配列、クリップ =
+  種類/素材/開始・長さ/位置・大きさ/キーフレーム)。**座標・大きさ・文字サイズはすべてステージ比の %** で持つ
+  (px 固定にしない。HUD の `--sh` と同じ理由)。
+  - 再生は `ScenePlayer` (`load` → `play` / `seek`)。`renderAt(t)` が「時刻 t の姿」を作る純粋な描画で、
+    エディタのスクラブと本番再生は同じ経路を通る。**進行は rAF + 100ms のタイマーの二本立て**。
+    見えていないタブ (OBS の裏・別タブ) では rAF が止まり、片方だけだと再生が固まったまま終わらない。
+  - オーバーレイ側は再生1回ごとに `#authoring-layer` の中へ箱と ScenePlayer を作り、終わったら捨てる
+    (重ねて呼ばれても互いを壊さない。上限 6)。
+  - 割り当て (`bind`) が一致するシーンは既定の演出の代わりに出る。バナー系 (lever / stop / banner) は
+    `playBanner` の入口で、それ以外は `handleSubEvent` の switch の手前で差し替える。
+    設定パネル「予告」→「オーサリング」のチェックを外すと既定の演出に戻る。
+  - 保存は中継サーバーの `POST /api/authoring` (シーン) と `POST /api/authoring/asset` (素材)。
+    保存・削除のたびに `authoringUpdated` を全クライアントへ流し、オーバーレイとコンパネが読み直す。
+    シーンID は `\ / : * ? " < > | .` を禁止して 48 文字まで (ドット禁止なので `..` も通らない)。
 - 主制御の副制御ポート (8765) は **排他バインド** (Windows は `SO_EXCLUSIVEADDRUSE`)。二重起動すると2つ目は
   起動時にエラーを出して落ちる。`SO_REUSEADDR` に戻すと Windows では2つ目が黙ってポートを奪い、2台ぶんの
   state とコマンドが中継サーバーへ流れて **1回のレバーONでリールが2回回る**。ここは元に戻さないこと。
