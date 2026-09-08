@@ -221,7 +221,7 @@
        base   … src の前に付ける URL (既定 "yokoku/authoring/")
        volume … 音量の親玉 (0〜1)。クリップの volume に掛ける
        speed  … 再生速度を返す関数 (オーバーレイのスロー再生 speedFactor をそのまま渡す)
-       silent … true なら音を鳴らさない (エディタのスクラブ用) */
+       silent … true ならスクラブ中 (seek / renderAt) は鳴らさない。再生 (play) 中は鳴る。エディタ用 */
   function ScenePlayer(root, opts) {
     const o = opts || {};
     this.root = root;
@@ -339,7 +339,7 @@
       entry.media.style.borderRadius = s.borderRadius;
     }
     if (entry.media && (c.type === "video" || c.type === "sound")) {
-      entry.media.muted = !!c.muted || this.silent;
+      entry.media.muted = !!c.muted;   // スクラブ中の消音は syncMedia が毎フレーム面倒を見る
       entry.media.volume = clamp(c.volume * this.getVolume(), 0, 1);
     }
   };
@@ -376,7 +376,8 @@
     }
   };
 
-  // 動画・音声の再生位置を合わせる。live のときだけ実際に鳴らす
+  // 動画・音声の再生位置を合わせる。live (再生中) のときだけ実際に鳴らし、スクラブ中は止めて位置だけ合わせる。
+  // silent はスクラブ中の消音にしか効かない (再生中は silent でも鳴る = エディタの試聴)
   ScenePlayer.prototype.syncMedia = function (entry, local, live) {
     const m = entry.media, c = entry.clip;
     if (!m || !m.src) return;
@@ -384,7 +385,7 @@
     m.muted = !!c.muted || (this.silent && !live);
     const rate = clamp(this.getSpeed(), 0.25, 4);
     if (m.playbackRate !== rate) { try { m.playbackRate = rate; } catch (e) { /* 一部ブラウザは範囲外で例外 */ } }
-    if (!live || this.silent) {
+    if (!live) {
       if (!m.paused) m.pause();
       if (c.type === "video" && Number.isFinite(m.duration)) {
         const want = c.loop && m.duration > 0 ? local % m.duration : Math.min(local, m.duration);
@@ -394,14 +395,26 @@
     }
     if (!entry.fired) {
       entry.fired = true;
-      try { m.currentTime = Math.min(local, 0.2); } catch (e) { /* まだ読めていない */ }
-      const pr = m.play();
-      if (pr && pr.catch) pr.catch(() => { /* 自動再生が拒否されたら無音のまま続ける */ });
+      // クリップの途中から再生を始めたときも、素材の頭からではなくその位置から鳴らす
+      try { m.currentTime = c.loop && m.duration > 0 ? local % m.duration : local; } catch (e) { /* まだ読めていない */ }
+      playMedia(m);
     } else if (m.paused) {
-      const pr = m.play();
-      if (pr && pr.catch) pr.catch(() => {});
+      playMedia(m);
     }
   };
+
+  // 音付きの自動再生はブラウザに拒否されることがある (ユーザー操作を挟んでいないページ)。
+  // そのときは無音にして再生だけは続ける (オーバーレイの startVideo と同じ考え方)
+  function playMedia(m) {
+    const pr = m.play();
+    if (!pr || !pr.catch) return;
+    pr.catch(() => {
+      if (m.muted) return;
+      m.muted = true;
+      const retry = m.play();
+      if (retry && retry.catch) retry.catch(() => {});
+    });
+  }
 
   ScenePlayer.prototype.stopMedia = function () {
     for (const entry of this.entries) {
