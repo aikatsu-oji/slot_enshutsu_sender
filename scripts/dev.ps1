@@ -12,7 +12,8 @@
   restart [-Mode ...]                      stop → start
   status                                   ポート/ヘルスチェック/PIDの状態を表示
   test                                     主制御・副制御の単体テスト(通信なし)。setup.bat と同じ内容
-  open                                     コンパネ / オーバーレイをアプリウィンドウで開く(リールは液晶内)
+  open    [authoring]                      コンパネ / オーバーレイをアプリウィンドウで開く(リールは液晶内)
+                                           open authoring … 予告オーサリング(単独ページ)だけを開く
   send    <action|json>                    中継サーバーへ1件送る  例: send triggerEnshutsu / send '{"action":"playUpToLock2"}'
                                            send lever   … -Mode manual の主制御を1ゲーム進める(レバーON)
                                            send credit  … クレジット投入信号 +50枚
@@ -228,7 +229,7 @@ function Do-Test {
   } finally { Pop-Location }
 }
 
-function Do-Open {
+function Do-Open($Target) {
   if (-not (Test-Port $Port)) { Fail "中継サーバーが起動していません。先に start してください" }
   $browser = @(
     "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
@@ -243,6 +244,10 @@ function Do-Open {
     @("$BaseUrl/control/main_control.html", "480,900", "0,0"),
     @("$BaseUrl/enshutsu/enshutsu_overlay.html", "1280,720", "520,0")
   )
+  # 予告オーサリングは単独のページ(編集はここで完結する)。open authoring のときはこれだけを開く
+  if ($Target -and $Target.Trim().ToLower() -eq "authoring") {
+    $pages = @(@("$BaseUrl/enshutsu/authoring_editor.html", "1400,900", "0,0"))
+  }
   foreach ($pg in $pages) {
     if ($browser) { Start-Process $browser -ArgumentList @("--new-window", "--app=$($pg[0])", "--window-size=$($pg[1])", "--window-position=$($pg[2])") }
     else { Start-Process $pg[0] }
@@ -287,7 +292,7 @@ switch ($Command.ToLower()) {
   "restart" { Do-Stop; Start-Sleep -Seconds 1; Start-Server; Start-Board $Mode }
   "status"  { Do-Status }
   "test"    { Do-Test }
-  "open"    { Do-Open }
+  "open"    { Do-Open ($Rest -join " ") }
   "send"    { Do-Send ($Rest -join " ") }
   "logs"    { Do-Logs }
   default   {

@@ -32,7 +32,8 @@ slot_enshutsu_sender/
 │   ├── enshutsu_overlay.html    OBS ブラウザソース用オーバーレイ本体
 │   ├── authoring_player.js      予告オーサリングの再生エンジン。シーンJSONをDOMへ組み、時刻tの姿を描くだけの部品
 │   │                            (globalThis.YokokuAuthoring)。オーバーレイとエディタが同じものを読む
-│   ├── authoring_editor.html    予告オーサリング(作成)。プレビュー+タイムライン+キーフレーム。POST /api/authoring で保存
+│   ├── authoring_editor.html    予告オーサリング(作成)。単独ページ (コンパネには埋め込まず別ウィンドウで開く)。
+│   │                            プレビュー+タイムライン+キーフレーム。POST /api/authoring で保存
 │   ├── real/                    リールの効果音。start (回転開始) / stop (停止。stop1〜stop3 で停止順別も可)
 │   │                            筐体ビュー reel.html が /api/list で読む (任意。無ければ無音)
 │   ├── at/sound/                AT系演出の効果音 (任意: gg_start / stock_up / add_games / at_end / navi)
@@ -84,6 +85,7 @@ scripts\dev.cmd send ramclear                        # ラムクリア (主制�
 scripts\dev.cmd send lever                           # -Mode manual の主制御を1ゲーム進める (レバーON)
 scripts\dev.cmd send credit                          # クレジット投入信号 +50枚 (send manual / send auto で進み方の切替)
 scripts\dev.cmd send authoring:sample_akatsu         # 予告オーサリングのシーンをオーバーレイで1回再生
+scripts\dev.cmd open authoring                       # 予告オーサリング(単独ページ)をウィンドウで開く
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
@@ -165,11 +167,17 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   「図柄設定」カードは `reel/symbol_editor.html` を全画面モーダルの iframe で開くが、その URL も ws URL の
   ホストから組み立てる (ws URL が読めないときだけ `location.origin` を使う)。相対パスを書かないこと。
   保存結果は中継サーバーが流す `symbolsUpdated` を受けてカードとログに出す。
+  予告オーサリングは単独ページなので `window.open` で開くだけ (モーダルは持たない)。URL の組み立ては共通の
+  `relayHttpBase()` を使う。
 - 図柄と配列: 図柄は `reel/symbols.js` に SVG として定義し、`reel.html` / `symbols.html` はスプライトを `<svg><use>` で
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
-- 予告オーサリング (予告の作成と再生): データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの
+- 予告オーサリング (予告の作成と再生): **エディタは単独ページ**。コンパネへは埋め込まず (図柄設定と違い
+  モーダルの iframe を持たない)、コンパネ「設定」タブのボタン・オーバーレイの設定パネル・
+  `scripts\dev.cmd open authoring`・URL 直打ちのいずれからも同じページが別ウィンドウで開く。
+  編集はそのページで完結し、コンパネ側はシーンの再生 (操作タブ) だけを持つ。
+  データは `enshutsu/yokoku/authoring/<id>.json`、素材は同フォルダの
   `assets/`。形は `authoring_player.js` の先頭コメントが唯一の定義 (シーン = クリップの配列、クリップ =
   種類/素材/開始・長さ/位置・大きさ/キーフレーム)。**座標・大きさ・文字サイズはすべてステージ比の %** で持つ
   (px 固定にしない。HUD の `--sh` と同じ理由)。
