@@ -330,6 +330,21 @@
   .sb-events .ev-banner{color:var(--gold-bright);}
 
   /* 信号注入 */
+  /* Twitch 連携カード */
+  .tw-lamps{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+  .tw-lamp{
+    display:flex;align-items:center;gap:6px;font-size:11.5px;color:#7a7488;
+    background:#0d0b14;border:1px solid #3a3348;border-radius:8px;padding:5px 10px;
+  }
+  .tw-lamp i{width:8px;height:8px;border-radius:50%;background:#4a4358;flex:none;}
+  .tw-lamp.on{color:#c9bfc5;}
+  .tw-lamp.on i{background:#7cf2a8;box-shadow:0 0 8px rgba(46,204,113,.6);}
+  .tw-lamp.off i{background:#ff6b6b;}
+  .tw-mock{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .tw-mock .btn{padding:7px 10px;font-size:11.5px;}
+  .tw-off .mb-val{color:#ff9a8a;}
+  .tw-events .ev-enshutsu{color:var(--gold-bright);}
+  .tw-note{font-size:11.5px;color:#7a7488;margin-top:10px;line-height:1.6;}
   .inj-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
   .inj-row select,
   .inj-row input[type=text]{
@@ -552,6 +567,44 @@
   </div>
 
   <div class="card">
+    <div class="mb-head">
+      <h2>Twitch 連携</h2>
+      <span class="status-pill" id="tw-pill"><span class="dot"></span><span id="tw-pill-text">未受信</span></span>
+    </div>
+    <div class="tw-lamps">
+      <span class="tw-lamp" id="tw-lamp-twitch"><i></i>Twitch</span>
+      <span class="tw-lamp" id="tw-lamp-bridge"><i></i>ブリッジ</span>
+      <span class="tw-lamp" id="tw-lamp-relay"><i></i>中継</span>
+    </div>
+    <div class="mb-grid">
+      <div class="mb-tile" id="tw-tile-enabled">
+        <div class="lbl">連携</div>
+        <div class="mb-val" id="tw-enabled">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">購読</div>
+        <div class="mb-val" id="tw-subs">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">演出キュー</div>
+        <div class="mb-val" id="tw-queue">—</div>
+      </div>
+      <div class="mb-tile">
+        <div class="lbl">送信保留</div>
+        <div class="mb-val" id="tw-pending">—</div>
+      </div>
+    </div>
+    <div class="row2" style="margin-top:12px">
+      <button class="btn" id="tw-toggle" disabled>連携を OFF にする</button>
+      <button class="btn btn-sm" id="tw-reload" disabled>ルール表を再読込</button>
+    </div>
+    <div class="lbl" style="margin-top:14px">疑似イベント</div>
+    <div class="tw-mock" id="tw-mock"></div>
+    <div class="mb-events tw-events" id="tw-events">twitch/twitch_bridge.js を起動すると、ここにイベントが流れます</div>
+    <div class="tw-note">疑似イベントは本物と同じ経路 (正規化 → ルール判定 → 流量制御) を通ります。配信前の通し確認に使ってください。</div>
+  </div>
+
+  <div class="card">
     <div class="lbl">ログ</div>
     <div class="log" id="log"></div>
   </div>
@@ -575,6 +628,11 @@
   "use strict";
 
   const urlInput = document.getElementById("ws-url");
+  // http:// 経由で開かれていれば、そのホストを既定の接続先にする。
+  // (中継サーバーは既定で 127.0.0.1 だけを待ち受けるので、開いた URL と揃えておく)
+  if(/^https?:$/.test(location.protocol)){
+    urlInput.value = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+  }
   const connectBtn = document.getElementById("btn-connect");
   const pill = document.getElementById("status-pill");
   const statusText = document.getElementById("status-text");
@@ -657,6 +715,9 @@
       if(data.action === "mainBoard"){ handleMainBoard(data); return; }
       if(data.action === "subBoard"){ handleSubBoard(data); return; }
       if(data.action === "symbolsUpdated"){ handleSymbolsUpdated(data); return; }
+      if(data.action === "twitchState"){ handleTwitchState(data); return; }
+      if(data.action === "twitchEvent"){ handleTwitchEvent(data.ev); return; }
+      if(data.action === "subEvent"){ handleTwitchEnshutsu(data.event); return; }
       handleSignalMessage(data);
     });
     ws.addEventListener("close", ()=>{
@@ -1207,6 +1268,140 @@
     sendAction("gameScreenInfo", "ゲーム画面情報(解除)", null);
     sendSignal("webrtcStop", null);
   });
+
+  /* ===================== Twitch 連携 =====================
+     twitch/twitch_bridge.js が 1 秒周期で流す twitchState を見てランプと数値を出し、
+     キルスイッチ・ルール表の再読込・疑似イベントを送る。
+     ブリッジが居なくてもこのカードは静かに待つだけで、他の機能には影響しない。 */
+  const twPill = document.getElementById("tw-pill");
+  const twPillText = document.getElementById("tw-pill-text");
+  const twLamps = {
+    twitch: document.getElementById("tw-lamp-twitch"),
+    bridge: document.getElementById("tw-lamp-bridge"),
+    relay: document.getElementById("tw-lamp-relay"),
+  };
+  const twEnabledEl = document.getElementById("tw-enabled");
+  const twTileEnabled = document.getElementById("tw-tile-enabled");
+  const twSubsEl = document.getElementById("tw-subs");
+  const twQueueEl = document.getElementById("tw-queue");
+  const twPendingEl = document.getElementById("tw-pending");
+  const twToggleBtn = document.getElementById("tw-toggle");
+  const twReloadBtn = document.getElementById("tw-reload");
+  const twEventsEl = document.getElementById("tw-events");
+  const twMockEl = document.getElementById("tw-mock");
+
+  let twEnabled = null;        // ブリッジから届いた連携の ON/OFF (null = 未受信)
+  let twLastState = 0;         // 最後に twitchState を受けた時刻
+  const twLines = [];
+
+  function twLamp(el, on){
+    el.classList.toggle("on", on === true);
+    el.classList.toggle("off", on === false);
+  }
+
+  function twLog(text, cls){
+    const t = new Date();
+    const hh = String(t.getHours()).padStart(2,"0"), mm = String(t.getMinutes()).padStart(2,"0");
+    twLines.push(`<span class="${cls || ""}">${hh}:${mm} ${text}</span>`);
+    while(twLines.length > 10) twLines.shift();
+    twEventsEl.innerHTML = twLines.join("\n");
+    twEventsEl.scrollTop = twEventsEl.scrollHeight;
+  }
+
+  // 表示名や報酬名はブリッジ側でサニタイズ済みだが、ここでも必ずエスケープしてから入れる
+  function twEsc(s){
+    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+      ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+  }
+
+  function handleTwitchState(d){
+    twLastState = Date.now();
+    twEnabled = !!d.enabled;
+    twPill.classList.add("on");
+    twPillText.textContent = "受信中";
+    twLamp(twLamps.twitch, !!d.connected);
+    twLamp(twLamps.bridge, true);
+    twEnabledEl.textContent = d.enabled ? "ON" : "OFF";
+    twTileEnabled.classList.toggle("tw-off", !d.enabled);
+    twSubsEl.textContent = d.subs != null ? d.subs : "—";
+    twQueueEl.textContent = d.queue != null ? d.queue : "—";
+    twPendingEl.textContent = d.pending != null ? d.pending : "—";
+    twToggleBtn.textContent = d.enabled ? "連携を OFF にする" : "連携を ON にする";
+    twToggleBtn.classList.toggle("toggle-on", !d.enabled);
+    twUpdateButtons();
+  }
+
+  function handleTwitchEvent(ev){
+    if(!ev || typeof ev.kind !== "string") return;
+    const who = ev.user && ev.user.name ? twEsc(ev.user.name) : "—";
+    const detail = [
+      ev.reward ? twEsc(ev.reward) : "",
+      ev.amount ? `${ev.amount}` : "",
+      ev.tier ? `tier${ev.tier}` : "",
+    ].filter(Boolean).join(" ");
+    twLog(`${twEsc(ev.kind)} ${who} ${detail}`.replace(/\s+$/, ""));
+  }
+
+  function handleTwitchEnshutsu(ev){
+    if(!ev || typeof ev.type !== "string") return;
+    const by = ev.by ? ` ← ${twEsc(ev.by)}` : "";
+    const merged = ev.merged ? ` (${ev.merged}件を合流)` : "";
+    twLog(`演出 ${twEsc(ev.type)} ${twEsc(ev.rank || "")}${by}${merged}`, "ev-enshutsu");
+  }
+
+  // ブリッジからの状態が途絶えたらランプを消す (ブリッジを落としたときに気付けるように)
+  setInterval(()=>{
+    const alive = twLastState && (Date.now() - twLastState < 3000);
+    if(!alive && twLastState){
+      twLamp(twLamps.bridge, false);
+      twLamp(twLamps.twitch, false);
+      twPill.classList.remove("on");
+      twPillText.textContent = "受信途絶";
+    }
+    twLamp(twLamps.relay, !!(ws && ws.readyState === WebSocket.OPEN));
+    twUpdateButtons();
+  }, 1000);
+
+  function twUpdateButtons(){
+    const online = !!(ws && ws.readyState === WebSocket.OPEN);
+    const alive = twLastState && (Date.now() - twLastState < 3000);
+    twToggleBtn.disabled = !online || !alive;
+    twReloadBtn.disabled = !online || !alive;
+    twMockEl.querySelectorAll("button").forEach(b => { b.disabled = !online; });
+  }
+
+  twToggleBtn.addEventListener("click", ()=>{
+    const next = !twEnabled;
+    sendRaw({ action:"twitchControl", enabled: next }, `Twitch連携を ${next ? "ON" : "OFF"} に`);
+  });
+  twReloadBtn.addEventListener("click", ()=>{
+    sendRaw({ action:"twitchControl", reload:true }, "ルール表の再読込");
+  });
+
+  // 疑似イベント。ブリッジの handleEvent に本物と同じ形で入る。
+  const TW_MOCKS = [
+    ["フォロー",     () => ({ kind:"follow", user:{ login:"testuser", name:"テスト視聴者" } })],
+    ["ビッツ100",    () => ({ kind:"cheer", amount:100, user:{ login:"bits100", name:"ビッツ子" } })],
+    ["ビッツ1000",   () => ({ kind:"cheer", amount:1000, user:{ login:"bits1k", name:"ビッツ太郎" } })],
+    ["ビッツ10000",  () => ({ kind:"cheer", amount:10000, user:{ login:"bits10k", name:"ビッツ次郎" } })],
+    ["サブスク t1",  () => ({ kind:"sub", tier:1, user:{ login:"sub1", name:"サブ子" } })],
+    ["サブスク t3",  () => ({ kind:"sub", tier:3, user:{ login:"sub3", name:"サブ三郎" } })],
+    ["サブギフト5",  () => ({ kind:"subgift", tier:1, amount:5, user:{ login:"gifter", name:"ギフト男" } })],
+    ["レイド50",     () => ({ kind:"raid", amount:50, user:{ login:"friend", name:"ともだち" } })],
+    ["100回転",      () => ({ kind:"redeem", reward:"100回転", amount:500, user:{ login:"pt1", name:"ポイント子" } })],
+    ["10回転",       () => ({ kind:"redeem", reward:"10回転", amount:50, user:{ login:"pt2", name:"ポイント太" } })],
+    // 初コメ判定は login ごとなので、押すたびに別人にする
+    ["初コメ",       () => ({ kind:"chat", text:"はじめまして", user:{ login:"newbie" + Date.now(), name:"新規さん" } })],
+  ];
+  TW_MOCKS.forEach(([label, make])=>{
+    const b = document.createElement("button");
+    b.className = "btn btn-sm";
+    b.textContent = label;
+    b.disabled = true;
+    b.addEventListener("click", ()=> sendRaw({ action:"twitchMock", ev: make() }, `疑似イベント「${label}」`));
+    twMockEl.appendChild(b);
+  });
+  twUpdateButtons();
 
   // 図柄設定 (reel/symbol_editor.html)
   // このパネルは相対パス依存を持たないので、エディタの URL は接続先の ws URL のホストから組み立てる。

@@ -41,7 +41,9 @@ $Root      = Split-Path -Parent $PSScriptRoot
 $RunDir    = Join-Path $Root ".run"
 $Port      = if ($env:PORT) { [int]$env:PORT } else { 8787 }
 $SubPort   = 8765
-$BaseUrl   = "http://localhost:$Port"
+# 中継サーバーは既定で 127.0.0.1 だけを待ち受けるので、localhost ではなく実アドレスで叩く
+# (Windows の localhost は ::1 に解決されることがあり、IPv4 だけの待ち受けだと届かない)
+$BaseUrl   = "http://127.0.0.1:$Port"
 $ServerJs  = Join-Path $Root "server\trigger_relay_server.js"
 $MainBoard = Join-Path $Root "main_board\god_main_board.py"
 $PidServer = Join-Path $RunDir "server.pid"

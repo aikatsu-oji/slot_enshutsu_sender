@@ -11,7 +11,7 @@ echo [情報] 作業フォルダ: %cd%
 
 rem 中継サーバーのポート。trigger_relay_server.js の PORT と合わせてください。
 set "PORT=8787"
-set "BASEURL=http://localhost:%PORT%"
+set "BASEURL=http://127.0.0.1:%PORT%"
 echo.
 
 echo [1/6] Node.jsを確認しています...

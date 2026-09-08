@@ -45,6 +45,14 @@ const path = require("path");
 
 const PORT = Number(process.env.PORT) || 8787;
 
+// 待ち受けるアドレス。既定はループバックのみ。
+//   このサーバーは演出トリガーだけでなく、Twitch連携では遊技者の操作(メダル投入・設定変更)も
+//   中継する。全インターフェースで待つと同一LANの誰でもそれを送れてしまうため、
+//   既定を 127.0.0.1 にして同じPC からだけ繋がるようにしている。
+//   別PC の OBS から見るなど、外から繋ぐ必要があるときだけ HOST=0.0.0.0 で起動する。
+const HOST = process.env.HOST || "127.0.0.1";
+const LOOPBACK = ["127.0.0.1", "::1", "localhost"];
+
 // 旧配置(ルート直下)のURLを新配置へ転送する。ブックマークやOBSの設定を壊さないための互換措置。
 const LEGACY_REDIRECTS = {
   "/main_control.html": "/control/main_control.html",
@@ -369,13 +377,21 @@ const server = http.createServer((req, res) => {
 // WebSocketを同じサーバー(同じポート)に相乗りさせる
 const wss = new WebSocketServer({ server });
 
-server.listen(PORT, () => {
-  console.log(`[演出トリガー中継サーバー] ws://localhost:${PORT} で待機中...`);
-  console.log(`[静的配信] http://localhost:${PORT}/ (公開ルート: ${ROOT})`);
-  console.log(`[オーバーレイURL] http://localhost:${PORT}/enshutsu/enshutsu_overlay.html`);
-  console.log(`[コンパネURL]     http://localhost:${PORT}/control/main_control.html`);
-  console.log(`[筐体ビューURL]   http://localhost:${PORT}/reel/reel.html?mode=link&hidebar=1`);
-  console.log(`[図柄設定URL]     http://localhost:${PORT}/reel/symbol_editor.html`);
+server.listen(PORT, HOST, () => {
+  // 表示する URL は実際の待ち受け先に合わせる。localhost と書くと、
+  // 127.0.0.1 だけを待っているときに ::1 へ繋ぎに行って失敗することがある。
+  const shown = HOST === "0.0.0.0" || HOST === "::" ? "localhost" : HOST;
+  const base = `http://${shown.includes(":") ? `[${shown}]` : shown}:${PORT}`;
+  console.log(`[演出トリガー中継サーバー] ws://${shown}:${PORT} で待機中... (bind: ${HOST})`);
+  if (!LOOPBACK.includes(HOST)) {
+    console.log("[警告] ループバック以外で待ち受けています。同じネットワークの誰でも");
+    console.log("       コンパネと同じ操作を送れます。必要が無ければ HOST を外してください。");
+  }
+  console.log(`[静的配信] ${base}/ (公開ルート: ${ROOT})`);
+  console.log(`[オーバーレイURL] ${base}/enshutsu/enshutsu_overlay.html`);
+  console.log(`[コンパネURL]     ${base}/control/main_control.html`);
+  console.log(`[筐体ビューURL]   ${base}/reel/reel.html?mode=link&hidebar=1`);
+  console.log(`[図柄設定URL]     ${base}/reel/symbol_editor.html`);
   console.log("このウィンドウは起動したまま(閉じない)にしておいてください。");
 });
 

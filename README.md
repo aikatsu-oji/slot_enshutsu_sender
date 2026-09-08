@@ -26,13 +26,16 @@ npm run twitch                   # 本番 (初回は .run/twitch_config.json の
 ```
 
 `twitch/config.example.json` を `.run/twitch_config.json` にコピーして `clientId` と `channel` を入れ、
-中継サーバーとオーバーレイを開いた状態で起動します。詳細は `doc/twitch連携設計.md`。
+中継サーバーとオーバーレイを開いた状態で起動します。状態確認・キルスイッチ・疑似イベントは
+コンパネの「Twitch 連携」カードから。詳細は `doc/twitch連携設計.md`。
+
+中継サーバーは既定で 127.0.0.1 だけを待ち受けます。別 PC から繋ぐときだけ `HOST=0.0.0.0` を付けてください。
 
 ## URL
 
 | 画面 | URL |
 | --- | --- |
-| コンパネ | http://localhost:8787/control/main_control.html |
+| コンパネ (Twitch 連携カードもここ) | http://localhost:8787/control/main_control.html |
 | オーバーレイ (OBS ブラウザソース) | http://localhost:8787/enshutsu/enshutsu_overlay.html |
 | 筐体ビュー | http://localhost:8787/reel/reel.html?mode=link&hidebar=1 |
 | 図柄設定 (図柄画像の差し替え) | http://localhost:8787/reel/symbol_editor.html |

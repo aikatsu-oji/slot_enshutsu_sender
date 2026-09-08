@@ -256,6 +256,10 @@
   // ---------------------------------------------------------------
   let ws = null, queue = [], busy = false;
   const wsUrl = $("ws-url"), wsSt = $("ws-st"), btnConn = $("btn-conn");
+  // http:// 経由 (8787 の静的配信) で開かれていれば、そのホストを既定の接続先にする
+  if(/^https?:$/.test(location.protocol)){
+    wsUrl.value = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
+  }
 
   function connect(){
     if(ws){ ws.close(); ws = null; return; }

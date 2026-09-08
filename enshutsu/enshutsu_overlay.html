@@ -2381,7 +2381,12 @@ function hideGameVideo(){
      中継サーバーが起動していない場合も、自動的に再接続を試み続ける。
   */
   (function setupRemoteTrigger(){
-    const WS_URL = "ws://localhost:8787"; // 中継サーバーのアドレス(必要に応じて変更してください)
+    // 中継サーバーのアドレス。http:// 経由で開かれていれば、そのホストをそのまま使う。
+    // (中継サーバーは既定で 127.0.0.1 だけを待ち受けるので、開いた URL と揃えておく)
+    // file:// で開いた場合だけ従来どおり localhost:8787 に繋ぐ。
+    const WS_URL = /^https?:$/.test(location.protocol)
+      ? `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`
+      : "ws://localhost:8787";
     const ACTIONS = {
       playLock1: () => window.playLock1 && window.playLock1(),
       playLock2: () => window.playLock2 && window.playLock2(),
