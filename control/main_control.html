@@ -259,6 +259,12 @@
     background:linear-gradient(180deg,#4a3c1a,#2e2410);
     box-shadow:0 0 18px rgba(212,175,55,.35);
   }
+  /* 2度押し待ち。色だけ変える(枠や余白は変えないのでレイアウトは動かない) */
+  .danger-on{
+    background:#3a1520 !important;
+    border-color:#ff6b6b !important;
+    color:#ffd0d0 !important;
+  }
   .toggle-on{
     background:#20351f !important;
     border-color:var(--green) !important;
@@ -324,12 +330,18 @@
   .mb-roles span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
   /* 遊技操作 (--manual のときのレバーON)。実機のレバーは主制御への入力なので、ここは操作部の代わり */
-  .mb-play{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;
-           font-size:12px;color:#c9bfc5;}
-  .mb-play span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
+  /* 表示(進み方・クレジット)とボタンを別の格子にして、中身の文字数が変わっても
+     枠の幅と折り返しが動かないようにする。値は枠内で省略する。 */
+  .mb-play{margin-top:8px;font-size:12px;color:#c9bfc5;}
+  .mb-play-read{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+  .mb-play-read span{
+    background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;
+  }
   .mb-play b{color:var(--gold-bright);font-weight:600;}
-  .mb-play .btn{margin-left:auto;}
-  .mb-play .btn + .btn{margin-left:0;}
+  .mb-play-btns{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));
+                gap:8px;margin-top:8px;}
+  .mb-play-btns .btn{width:100%;overflow:hidden;text-overflow:ellipsis;}
   .mb-play .waiting{color:#7cf2a8;}
   .mb-events{
     margin-top:8px;
@@ -525,13 +537,17 @@
     <div class="card">
       <h2>主制御 操作</h2>
       <div class="mb-play">
-        <span>進み方 <b id="mb-mode">—</b></span>
-        <span>クレジット <b id="mb-credit">—</b></span>
-        <button class="btn btn-sm" id="btn-credit3" disabled>🪙 +3</button>
-        <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
-        <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
-        <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
-        <button class="btn btn-sm" id="btn-ramclear" disabled>🧹 ラムクリア</button>
+        <div class="mb-play-read">
+          <span>進み方 <b id="mb-mode">—</b></span>
+          <span>クレジット <b id="mb-credit">—</b></span>
+        </div>
+        <div class="mb-play-btns">
+          <button class="btn btn-sm" id="btn-credit3" disabled>🪙 +3</button>
+          <button class="btn btn-sm" id="btn-credit50" disabled>🪙 +50</button>
+          <button class="btn btn-sm" id="btn-lever" disabled>🕹️ レバーON</button>
+          <button class="btn btn-sm" id="btn-manual" disabled>手動にする</button>
+          <button class="btn btn-sm" id="btn-ramclear" disabled>🧹 ラムクリア</button>
+        </div>
       </div>
     </div>
 
@@ -1148,10 +1164,27 @@
   // 自動で回っている主制御に送っても何も起きない。
   buttons.lever.addEventListener("click", ()=>
     sendRaw({ action:"panelInject", layer:"lever" }, "レバーON"));
-  // ラムクリア。押し間違いで遊技中の台が飛ぶので、実行前に確認する
+  // ラムクリア。押し間違いで遊技中の台が飛ぶので2度押しにする。
+  // confirm() は OBS のブラウザソースやアプリウィンドウだとダイアログを出さずに
+  // false を返すことがあり、ボタンが効かなくなるので使わない。
+  const RAMCLEAR_LABEL = "🧹 ラムクリア";
+  let ramClearArmTimer = null;
+  function ramClearDisarm(){
+    clearTimeout(ramClearArmTimer);
+    ramClearArmTimer = null;
+    buttons.ramClear.textContent = RAMCLEAR_LABEL;
+    buttons.ramClear.classList.remove("danger-on");
+  }
   buttons.ramClear.addEventListener("click", ()=>{
-    if(!confirm("ラムクリアします。遊技状態・ストック・クレジット・出玉カウンタが消えます。よろしいですか？")) return;
-    sendRaw({ action:"panelInject", layer:"ramClear" }, "ラムクリア");
+    if(ramClearArmTimer){                      // 2度目 → 実行
+      ramClearDisarm();
+      sendRaw({ action:"panelInject", layer:"ramClear" }, "ラムクリア");
+      return;
+    }
+    buttons.ramClear.textContent = "🧹 実行する？";
+    buttons.ramClear.classList.add("danger-on");
+    log("🧹 ラムクリア: もう一度押すと実行します（遊技状態・ストック・クレジット・出玉カウンタが消えます。5秒で取り消し）");
+    ramClearArmTimer = setTimeout(ramClearDisarm, 5000);
   });
 
   // クレジット投入信号。最大クレジットは無限なので何度でも足せる
