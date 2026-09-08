@@ -41,8 +41,8 @@ slot_enshutsu_sender/
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
 │   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
 │   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ
-├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf,
-│                              twitch連携設計.md, twitch認証の取り方.md)
+├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf, twitch連携設計.md,
+│                              twitch認証の取り方.md, はじめて使う人へ.md)
 ├── scripts/
 │   ├── dev.ps1 / dev.cmd        CLI 用: start / stop / restart / status / test / open / send / logs
 │   ├── ws_send.js               中継サーバーへ JSON を1件送る
@@ -168,6 +168,9 @@ node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿�
   (仕様は doc/主制御・副制御仕様書.docx)。
 - 中継サーバーはメッセージを「受信したら他の全クライアントへ転送するだけ」。ロジックを足さない。
 - 素材 (gif/mp3/wav/jpg) は大きい。バイナリを差し替えるコミットは分ける。
+  `enshutsu/` の同梱素材は**作者個人のもの**。第三者が使うときは差し替える前提で、
+  素材が 1 つも無くてもその演出をスキップして動くようになっている (空フォルダで確認済み)。
+  第三者向けの導入手順は `doc/はじめて使う人へ.md`。
 
 ## 起動の前提 (人手)
 
