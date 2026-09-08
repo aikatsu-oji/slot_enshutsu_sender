@@ -177,6 +177,39 @@
     return false;
   }
 
+  const $ = id => document.getElementById(id);
+
+  // ---------------------------------------------------------------
+  // ウェイト（レバーON無効時間）
+  //   規則: 前回の回転開始から WAIT 秒たつまで次の回転を開始できない。
+  //   ローカル試打 … ここで自前に計り、無効中のレバーONは弾く。
+  //   主制御連動   … 主制御(god_main_board.py)が送る入力受付状態
+  //                  { action:"mainBoard", type:"input", accept, waitMs } を監視して
+  //                  そのまま表示する。長さは主制御の --interval で決まる。
+  //   renderWait は下のアニメーションループ(即時実行)から毎フレーム呼ばれるので、
+  //   ここより後ろで定義しないこと。
+  // ---------------------------------------------------------------
+  const waitEl = $("wait"), waitFill = $("wait-fill"), waitSt = $("wait-st");
+  let waitSec = 4.1;            // ?wait=秒 で変更。0 で無効時間なし
+  let acceptAt = 0, waitSpan = 0, denyUntil = 0;
+
+  function armWait(sec){        // 回転開始（または主制御の無効化通知）で呼ぶ
+    waitSpan = Math.max(0, sec) * 1000;
+    acceptAt = performance.now() + waitSpan;
+  }
+  function clearWait(){ acceptAt = 0; waitSpan = 0; }
+  function acceptsLever(){ return performance.now() >= acceptAt; }
+  function denyLever(){ denyUntil = performance.now() + 220; }   // 無効中に叩かれたのを見せる
+  function renderWait(now){
+    const left = acceptAt - now;
+    const on = left > 0 && waitSpan > 0;
+    waitEl.classList.toggle("hidden", !on);
+    waitEl.classList.toggle("deny", on && now < denyUntil);
+    waitFill.style.width = on ? (left / waitSpan * 100).toFixed(1) + "%" : "0";
+    waitSt.textContent = on ? `ウェイト: 残り ${(left / 1000).toFixed(1)}秒（レバーON無効）`
+                            : (waitSpan > 0 ? "ウェイト: レバーON受付中" : "ウェイト: なし");
+  }
+
   // ---------------------------------------------------------------
   // リール物理
   //   約80rpm(28コマ/秒)。停止操作時の中段コマ + 滑り(0-4)を主制御と同じ規則で決め、
@@ -251,6 +284,7 @@
   (function loop(now){
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     reels.forEach(r => r.tick(dt));
+    renderWait(now);
     requestAnimationFrame(loop);
   })(performance.now());
 
@@ -273,7 +307,6 @@
     reels.forEach(r => r.el.classList.toggle("hit", hit));
   }
 
-  const $ = id => document.getElementById(id);
   const naviEls = [...$("navi").querySelectorAll("span")];
   const ORDER = {1:[0,1,2],2:[0,2,1],3:[1,0,2],4:[2,0,1],5:[1,2,0],6:[2,1,0]};   // 押し順番号 → リール順
   function setNavi(order){
@@ -300,10 +333,12 @@
 
   function leverOn(){
     if(mode !== "local" || game) return;
+    if(!acceptsLever()){ denyLever(); return; }   // ウェイト中はレバーON無効
     const flag = lottery();
     game = { flag, answer: Math.floor(Math.random() * 6) + 1, order: [], target: TARGET[flag] || null, miss: false };
     stopped = 0;
     startReels();
+    armWait(waitSec);                             // ウェイトの起点は回転開始
     if($("auto-stop").checked) [0,1,2].forEach((i,k)=> setTimeout(()=> stopReel(i), 900 + k * 420));
   }
 
@@ -336,6 +371,10 @@
     ws.addEventListener("message", ev => {
       let d; try{ d = JSON.parse(ev.data); }catch(e){ return; }
       if(d && d.action === "mainBoard" && d.type === "state"){ queue.push(d); pump(); }
+      // 主制御の入力受付状態。無効化のときに長さが来るので、以後は自前で数える
+      if(d && d.action === "mainBoard" && d.type === "input"){
+        if(d.accept) clearWait(); else armWait((Number(d.waitMs) || 0) / 1000);
+      }
       if(d && d.action === "symbolsUpdated") location.reload();   // 図柄設定ページで保存されたら新しい図柄で開き直す
     });
     ws.addEventListener("close", ()=>{ ws = null; wsSt.textContent = "未接続"; wsSt.className = "st"; btnConn.textContent = "接続"; });
@@ -381,6 +420,7 @@
   document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener("change", ()=>{
     mode = r.value;
     reels.forEach(x => x.el.classList.remove("armed"));
+    clearWait();   // 計り方がモードで変わる(自前 / 主制御の通知)ので持ち越さない
     if(mode === "link"){ if(!ws) connect(); pump(); } else setNavi(null);
   }));
   btnConn.addEventListener("click", connect);
@@ -403,6 +443,8 @@
   //   navi=0             ナビランプを隠す
   //   sound=0            効果音(開始音・停止音)を鳴らさない
   //   vol=0.8            効果音の音量(0〜1)
+  //   wait=4.1           ローカル試打のレバーON無効時間(秒)。0 で無効時間なし
+  //                      (連動時は主制御の --interval が長さを決める)
   //   bg=00ff00          背景色(クロマキー用)。未指定なら透過
   const q = new URLSearchParams(location.search);
   if(q.get("ws")) wsUrl.value = q.get("ws");
@@ -410,6 +452,7 @@
   if(q.get("navi") === "0"){ $("show-navi").checked = false; $("navi").classList.add("hidden"); }
   if(q.get("sound") === "0"){ sfxOn = false; $("sound-on").checked = false; }
   if(q.get("vol") !== null) sfxVolume = Math.min(1, Math.max(0, Number(q.get("vol")) || 0));
+  if(q.get("wait") !== null) waitSec = Math.max(0, Number(q.get("wait")) || 0);
   if(q.get("bg")) document.body.style.background = "#" + q.get("bg").replace(/^#/, "");
   if(q.get("mode") === "link"){ const r = document.querySelector('input[name=mode][value=link]'); r.checked = true; r.dispatchEvent(new Event("change")); }
 })();

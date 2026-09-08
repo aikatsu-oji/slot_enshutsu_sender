@@ -53,7 +53,7 @@ slot_enshutsu_sender/
 - URL (すべて 8787 経由で開くこと。file:// で開くと素材フォルダ選択が必要になる)
   - コンパネ     http://localhost:8787/control/main_control.html
   - オーバーレイ http://localhost:8787/enshutsu/enshutsu_overlay.html  (OBS ブラウザソース)
-  - 筐体ビュー   http://localhost:8787/reel/reel.html?mode=link&hidebar=1
+  - 筐体ビュー   http://localhost:8787/reel/reel.html?mode=link&hidebar=1  (`&wait=0` でレバーON無効時間なし)
   - 図柄カタログ http://localhost:8787/reel/symbols.html
   - 図柄設定     http://localhost:8787/reel/symbol_editor.html
   - 旧 URL `/main_control.html` `/kyotai.html` `/kyotai/kyotai.html` はサーバーが 302 で新 URL へ転送する。
@@ -74,6 +74,11 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
 - `-Mode fast` (0.5 秒/G・設定 6) は動作確認向け。`normal` は実機ウェイト 4.1 秒/G。
+- ウェイト (レバーON無効時間): 主制御は `--interval` 秒を「前回の**回転開始**から」計り、明けるまで
+  次の遊技を始めない (周期は `max(interval, 実際の遊技時間)`。固定スリープの加算ではない)。
+  無効化と復帰の2点だけ `{action:"mainBoard", type:"input", accept, waitMs, reason}` をコンパネへ送り、
+  残り時間は受け側が数える。コンパネの「レバー」欄と筐体ビューのリール下の帯がこれを表示する。
+  `--freeze-hold 秒` で神揃いフリーズの間さらに回転開始を止められる (既定 0 = 止めない)。
 - コード変更後は必ず `scripts\dev.cmd test` を通してから `restart` する。
 - 図柄の差し替え: 中継サーバー起動中にコンパネの「図柄設定」→「図柄設定を開く」(または直接
   http://localhost:8787/reel/symbol_editor.html) を開き、カードに画像をドロップして保存。
@@ -94,6 +99,11 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 - オーバーレイの HUD (バナー・ナビ・ポップアップ) の文字サイズは CSS 変数 `--sh` (16:9 ステージの高さ) 比で指定する。
   px 固定にしない (OBS の解像度に依存させない)。スロー再生は `--spd` でトランジション時間にも効く。
 - 設定パネル (歯車) の「予告」「AT」タブに各演出のテストボタンがある。本物のイベントと同じ `handleSubEvent` を通る。
+- 筐体ビューのウェイトは `reel.html` の「ウェイト」ブロック (`armWait` / `acceptsLever` / `renderWait`)。
+  ローカル試打は自前に計ってレバーONを弾き、主制御連動では `type:"input"` を監視して表示するだけ。
+  `renderWait` は**即時実行**のアニメーションループから毎フレーム呼ばれるので、このブロックを
+  ループより後ろへ動かさないこと (const の TDZ でスクリプト全体が止まる)。
+  なお表示していないタブでは rAF ごと停止するため、動作確認はタブを見える状態にして行う。
 - リールの効果音は筐体ビュー側 (`reel/reel.html`) が鳴らす。`enshutsu/real/` を `/api/list` で探し、回転開始で
   `start` を1回、各リール停止で `stop`(停止順に分けるなら `stop1`/`stop2`/`stop3`) を鳴らす。ファイルが無ければ無音。
   音量は単体なら `?vol=`、オーバーレイ内なら設定の `sfxVolume` を `postMessage({type:"reelSound"})` で渡している。
