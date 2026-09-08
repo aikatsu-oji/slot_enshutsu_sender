@@ -18,6 +18,16 @@ scripts\dev.cmd test
 scripts\dev.cmd stop
 ```
 
+**Twitch 連携 (段階1: 演出のみ)**:
+
+```
+npm run twitch:mock              # Twitch に繋がず擬似イベントで演出を確認
+npm run twitch                   # 本番 (初回は .run/twitch_config.json の用意と認証が必要)
+```
+
+`twitch/config.example.json` を `.run/twitch_config.json` にコピーして `clientId` と `channel` を入れ、
+中継サーバーとオーバーレイを開いた状態で起動します。詳細は `doc/twitch連携設計.md`。
+
 ## URL
 
 | 画面 | URL |
@@ -36,7 +46,8 @@ scripts\dev.cmd stop
 | `control/` | コンパネ `main_control.html` |
 | `reel/` | 筐体ビュー `reel.html` |
 | `enshutsu/` | オーバーレイ本体と演出素材 (`at/sound/`, `yokoku/banner/sound/` に効果音を置くと自動で鳴る。フリーズ素材・萌えカットインは GIF/画像のほか mp4/webm 動画も可) |
-| `doc/` | 仕様書 |
+| `twitch/` | Twitch 連携ブリッジ (`twitch_bridge.js`)。段階1 は演出のみで、主制御には触らない |
+| `doc/` | 仕様書 (`twitch連携設計.md` に Twitch 連携の設計) |
 | `scripts/` | CLI 用ツール |
 
 開発時の詳細は `CLAUDE.md` を参照してください。

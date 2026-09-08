@@ -1,0 +1,21 @@
+# 擬似イベント (1 行 1 件の JSON)。Twitch に繋がずに全経路を通すためのテストデータ。
+#   node twitch/twitch_bridge.js --mock twitch/mock_events.jsonl --speed 5
+# type は EventSub の subscription type、event はその通知本体をそのまま置く。
+# # で始まる行と空行は読み飛ばす。
+{"type":"stream.online","event":{"id":"9001","broadcaster_user_name":"テスト配信者","type":"live"}}
+{"type":"channel.follow","event":{"user_login":"hanako","user_name":"はなこ"}}
+{"type":"channel.chat.message","event":{"message_id":"c1","chatter_user_login":"hanako","chatter_user_name":"はなこ","message":{"text":"こんばんは"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c2","chatter_user_login":"taro","chatter_user_name":"たろう","message":{"text":"はじめまして"},"badges":[{"set_id":"subscriber","id":"12"}]}}
+{"type":"channel.cheer","event":{"user_login":"taro","user_name":"たろう","bits":100,"message":"がんばれ","is_anonymous":false}}
+{"type":"channel.channel_points_custom_reward_redemption.add","event":{"id":"r1","user_login":"hanako","user_name":"はなこ","reward":{"title":"100回転","cost":500},"user_input":""}}
+{"type":"channel.channel_points_custom_reward_redemption.add","event":{"id":"r2","user_login":"jiro","user_name":"じろう","reward":{"title":"10回転","cost":50},"user_input":""}}
+{"type":"channel.cheer","event":{"user_login":"jiro","user_name":"じろう","bits":1000,"message":"神引き頼む","is_anonymous":false}}
+{"type":"channel.subscribe","event":{"user_login":"saburo","user_name":"さぶろう","tier":"1000","is_gift":false}}
+{"type":"channel.subscribe","event":{"user_login":"shiro","user_name":"しろう","tier":"1000","is_gift":true}}
+{"type":"channel.subscription.gift","event":{"user_login":"saburo","user_name":"さぶろう","tier":"1000","total":5,"is_anonymous":false}}
+{"type":"channel.subscription.message","event":{"user_login":"goro","user_name":"ごろう","tier":"3000","cumulative_months":12,"message":{"text":"12ヶ月目です"}}}
+{"type":"channel.cheer","event":{"user_login":"","user_name":"","bits":10000,"message":"神","is_anonymous":true}}
+{"type":"channel.raid","event":{"from_broadcaster_user_login":"friend","from_broadcaster_user_name":"ともだち","viewers":50}}
+{"type":"channel.chat.message","event":{"message_id":"c3","chatter_user_login":"nightbot","chatter_user_name":"Nightbot","message":{"text":"広告です"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c4","chatter_user_login":"hanako","chatter_user_name":"はなこ","message":{"text":"!左"},"badges":[]}}
+{"type":"stream.offline","event":{"broadcaster_user_name":"テスト配信者"}}

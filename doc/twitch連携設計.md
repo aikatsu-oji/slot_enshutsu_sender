@@ -83,7 +83,7 @@ Tier 3 を使う場合は、**必ず HUD に「演出」と明示する**。
 「強制回数」を別カウントで残す。混ぜると設定判別配信としての意味が消える。
 
 やらせ無しで盛り上げたいなら、Tier 3 の代わりに **「見た目だけの神揃い」** を Tier 1 で撃つのが安全。
-`{"action":"panelInject","layer":"enshutsu","event":{"type":"freeze","seq":["lock1","lock2","lock3"],"rank":"金","fake":true}}`
+`{"action":"subEvent","event":{"type":"freeze","seq":["lock1","lock2","lock3"],"rank":"金","fake":true}}`
 既存の `handleSubEvent` にそのまま流れる (主制御は無関係)。
 
 ---
@@ -437,7 +437,11 @@ Tier 1 のまま扱える。
 {"action":"playerInput","input":"pause"}  / {"action":"playerInput","input":"resume"}
 
 // 演出だけ流す。既存の口をそのまま使う (新設不要)
-{"action":"panelInject","layer":"enshutsu","event":{"type":"banner","rank":"金","by":"@someone"}}
+//   段階1 (主制御を起動しない) では subEvent を使う。オーバーレイが 8787 で直接受ける。
+{"action":"subEvent","event":{"type":"banner","rank":"金","trigger":"cheer","by":"@someone"}}
+//   主制御を経由させたいとき (コンパネの副制御ログにも残したいとき) は panelInject。
+//   主制御が起動していないと届かないので、段階1では使わない。
+{"action":"panelInject","layer":"enshutsu","event":{"type":"banner","rank":"金"}}
 
 // ブリッジの生存と状態。1 秒周期
 {"action":"twitchState","connected":true,"enabled":true,"pending":0,"lastAt":"...","subs":8}
@@ -652,7 +656,7 @@ twitch/
 
 | 段階 | 内容 | 触るファイル | リスク |
 | --- | --- | --- | --- |
-| **1** | Tier 1 のみ。フォロー/サブスク/ビッツ → 既存の `panelInject(enshutsu)` でバナー | `twitch/` 新規のみ | ゼロ (主制御に触らない) |
+| **1** | **実装済み。** Tier 1 のみ。イベント → `subEvent` でバナー | `twitch/` 新規のみ | ゼロ (主制御に触らない) |
 | **2** | 中継を `127.0.0.1` に固定 + コンパネの Twitch カード (状態表示・キルスイッチ・疑似イベント) | `server/` 1 行, `control/` | 小 |
 | **3** | Tier 2 クレジット制。`--credit` と `playerInput` | `main_board/` | 中 (既定 OFF なので退避可能) |
 | **4** | 視聴者 HUD・投入者の紐付け・ランキング・貯金箱 | `enshutsu/`, `main_board/` | 小 |
@@ -660,6 +664,20 @@ twitch/
 
 段階 1 だけなら半日で動く。ここで「視聴者のアクションが画面に出る」体験を先に確認してから、
 段階 3 の主制御改造に進むのがよい。
+
+### 段階1 の実装メモ (実装済み)
+
+- 演出の送り先は **`subEvent`**。`panelInject(layer:"enshutsu")` は主制御を経由するので、
+  主制御を起動しない段階1 では届かない。「中継サーバー + オーバーレイ」だけで動くことが要件。
+- `medals` / `counter` / `vote` を持つルールは **`--medals` を付けない限り無視**する。
+  ルール表は完成形のまま置いておき、段階3 でフラグを既定にする。
+- **クールダウンはイベントを捨てない。** 演出を連続で出さないためだけに使い、
+  イベント自体は必ず中継へ流す。捨てるとチャンネルポイントやギフトが消える (視聴者はもう押している)。
+  キーは「人 × 種類」。人だけで持つと、直前にフォローした視聴者のビッツにバナーが出ない。
+- **演出の合流キーは「種類 × ランク × きっかけ」。** ランクだけで合流させると、
+  たまたま同じ色になった別のイベント (フォローとビッツ) が 1 件に潰れる。
+- **チャット本文は中継へ流さない。** 何も起きなかった普通のコメントは送信自体しない。
+- 表示名は制御文字と RTL 上書き文字 (U+202E など) を除去して 20 文字で切る。
 
 ---
 

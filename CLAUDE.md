@@ -33,7 +33,14 @@ slot_enshutsu_sender/
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, blackout.mp3 ...)。GIF/画像に加え動画 (mp4/webm/mov) 可
 │       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
-├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf)
+├── twitch/                    Twitch 連携 (段階1: 演出のみ。主制御には触らない)
+│   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 中継サーバーへ。単体で node twitch/twitch_bridge.js
+│   ├── eventsub.js              EventSub WebSocket の接続・再接続・keepalive 監視・重複排除だけの薄い層
+│   ├── auth.js                  Device Code Grant とトークン更新。設定/トークンは .run/ 配下 (git 管理外)
+│   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
+│   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
+│   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ
+├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf, twitch連携設計.md)
 ├── scripts/
 │   ├── dev.ps1 / dev.cmd        CLI 用: start / stop / restart / status / test / open / send / logs
 │   ├── ws_send.js               中継サーバーへ JSON を1件送る
@@ -69,6 +76,8 @@ scripts\dev.cmd send reelIn                          # リールユニットを�
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
+npm run twitch:mock                                    # Twitch に繋がず擬似イベントで演出を確認 (中継サーバーが要る)
+npm run twitch                                         # 本番。初回は Device Code Grant の認証が走る
 ```
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
@@ -108,6 +117,12 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
+- Twitch 連携 (`twitch/`) は中継サーバーに 1 クライアントとして繋ぐだけ。中継サーバーと主制御は改造しない。
+  演出は `{"action":"subEvent","event":{...}}` で送る (オーバーレイが 8787 で直接受ける)。
+  `panelInject(layer:"enshutsu")` は主制御を経由するので、主制御が起動していないと届かない。
+  段階1 は「中継サーバー + オーバーレイ」だけで動くことが要件なので `subEvent` を使う。
+  メダルを動かすルール (`medals` / `counter` / `vote`) は段階3までは `--medals` を付けない限り無視される。
+  clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
 - 主制御 → 副制御は 2 バイトコマンド (単方向)。副制御は主制御の内部状態を直接見ない。この境界を守る
   (仕様は doc/主制御・副制御仕様書.docx)。
 - 中継サーバーはメッセージを「受信したら他の全クライアントへ転送するだけ」。ロジックを足さない。
