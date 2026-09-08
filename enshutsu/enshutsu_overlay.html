@@ -200,6 +200,60 @@
   }
 
   /* 予告バナー: 左から滑り込み → 右へ抜ける。色はランク(白/青/緑/赤/金)ごとにJSで --b1/--b2/--fg を設定 */
+  /* ===== 視聴者HUD (Twitch連携) =====
+     文字サイズは全部 --sh 比。OBS の解像度が変わっても同じ見た目になる。 */
+  #tw-hud{
+    position:absolute; display:none; flex-direction:column;
+    gap:calc(var(--sh) * .009);
+    padding:calc(var(--sh) * .016) calc(var(--sh) * .022);
+    border-radius:calc(var(--sh) * .013);
+    background:rgba(8,6,14,.62);
+    border:1px solid rgba(212,175,55,.32);
+    font-size:calc(var(--sh) * .023); line-height:1.45; color:#efe7f5;
+    text-shadow:0 calc(var(--sh) * .003) calc(var(--sh) * .006) rgba(0,0,0,.85);
+    transform-origin:top left; white-space:nowrap; pointer-events:none;
+  }
+  #tw-hud.show{display:flex;}
+  #tw-hud .row{display:flex; gap:calc(var(--sh) * .022); align-items:baseline;}
+  #tw-hud b{color:#f5d97a; font-weight:700; font-variant-numeric:tabular-nums;}
+  #tw-hud .lbl{opacity:.6; font-size:calc(var(--sh) * .018); margin-right:calc(var(--sh) * .004);}
+  #tw-hud .big{font-size:calc(var(--sh) * .032); color:#f5d97a; font-weight:800; font-variant-numeric:tabular-nums;}
+  #tw-hud .sub{opacity:.72; font-size:calc(var(--sh) * .018);}
+  #tw-hud .sep{height:1px; background:rgba(255,255,255,.14); margin:calc(var(--sh) * .004) 0;}
+  #tw-gauge{height:calc(var(--sh) * .007); background:rgba(255,255,255,.14); border-radius:99px; overflow:hidden;}
+  #tw-gauge i{display:block; height:100%; width:0; background:linear-gradient(90deg,#7cf2a8,#f5d97a); transition:width .4s;}
+  #tw-rank{display:flex; gap:calc(var(--sh) * .016); font-size:calc(var(--sh) * .018); opacity:.85;}
+  #tw-rank span{font-variant-numeric:tabular-nums;}
+
+  /* メダル待ちの表示。止まっていることが配信で一番目立つべき情報 */
+  #tw-idle{
+    position:absolute; left:50%; bottom:calc(var(--sh) * .1);
+    transform:translateX(-50%); display:none; text-align:center;
+    padding:calc(var(--sh) * .02) calc(var(--sh) * .05);
+    border-radius:calc(var(--sh) * .016);
+    background:rgba(24,6,10,.72); border:1px solid rgba(255,120,110,.5);
+    color:#ffd9d3; font-size:calc(var(--sh) * .042); font-weight:800;
+    letter-spacing:.06em; text-shadow:0 0 calc(var(--sh) * .02) rgba(255,90,80,.6);
+    animation:tw-blink 1.6s ease-in-out infinite; pointer-events:none;
+  }
+  #tw-idle.show{display:block;}
+  #tw-idle .sub{display:block; font-size:calc(var(--sh) * .022); font-weight:600; opacity:.8; margin-top:calc(var(--sh) * .006);}
+  @keyframes tw-blink{ 0%,100%{opacity:1;} 50%{opacity:.55;} }
+
+  /* 投入されたときのトースト */
+  #tw-toast{
+    position:absolute; display:none; white-space:nowrap;
+    padding:calc(var(--sh) * .012) calc(var(--sh) * .024);
+    border-radius:calc(var(--sh) * .012);
+    background:rgba(10,26,16,.78); border:1px solid rgba(124,242,168,.5);
+    color:#c9ffd9; font-size:calc(var(--sh) * .026); font-weight:700;
+    text-shadow:0 0 calc(var(--sh) * .012) rgba(46,204,113,.5);
+    opacity:0; transform:translateY(calc(var(--sh) * .02));
+    transition:opacity calc(.28s / var(--spd)), transform calc(.28s / var(--spd));
+    pointer-events:none;
+  }
+  #tw-toast.show{display:block; opacity:1; transform:translateY(0);}
+
   #hud-banner{
     position:absolute; left:0; width:100%;
     top:60%;
@@ -538,6 +592,21 @@
       <div id="hud-navi" class="hud-font"><div class="digit"></div><div class="digit"></div><div class="digit"></div></div>
       <div id="hud-popup"><div id="hud-popup-main" class="hud-font"></div><div id="hud-popup-sub"></div></div>
       <div id="hud-end"><div class="main hud-font">AT END</div></div>
+      <div id="tw-hud">
+        <div class="row">
+          <span><span class="lbl">クレジット</span><b id="tw-credit">0</b></span>
+          <span><span class="lbl">下皿</span><b id="tw-reserve">0</b></span>
+          <span><span class="lbl">貯金</span><b id="tw-bank">0</b></span>
+        </div>
+        <div><span class="lbl">天井まで</span><span class="big" id="tw-ceiling">—</span><span class="sub" id="tw-ceiling-sub"></span></div>
+        <div class="sub" id="tw-by"></div>
+        <div class="sep"></div>
+        <div class="sub" id="tw-chat">あと — コメントで 100 回転</div>
+        <div id="tw-gauge"><i></i></div>
+        <div id="tw-rank"></div>
+      </div>
+      <div id="tw-idle">メダル募集中<span class="sub" id="tw-idle-sub"></span></div>
+      <div id="tw-toast"></div>
     </div>
     <div id="illustration-layer">
       <div id="illustration-white-bg"></div>
@@ -568,6 +637,7 @@
       <button class="tab-btn" data-tab="yokoku">予告</button>
       <button class="tab-btn" data-tab="at">AT</button>
       <button class="tab-btn" data-tab="reel">リール</button>
+      <button class="tab-btn" data-tab="twitch">視聴者</button>
     </div>
 
     <div class="tab-content" id="tab-controls">
@@ -767,6 +837,42 @@
       <div id="sub-log">(まだ受信していません)</div>
     </div>
 
+    <div class="tab-content" id="tab-twitch" hidden>
+      <div class="note" id="tw-hud-state">状態: 未受信</div>
+      <div class="note">
+        クレジット制 (<code>--credit</code>) で動かしている主制御と、Twitch ブリッジの状態を
+        視聴者向けに出します。中継サーバー(8787)から届く値をそのまま表示するだけで、
+        遊技には一切影響しません。<br><br>
+        主制御を <code>--credit</code> 無しで動かしているときは、クレジットの値が来ないので
+        HUD は自動的に隠れます。
+      </div>
+      <div class="hr"></div>
+      <div class="field-row">
+        <label for="twitchHud">視聴者HUDを表示</label>
+        <input type="checkbox" id="twitchHud">
+      </div>
+      <div class="field-row">
+        <label for="twitchIdle">メダル待ちのときに「メダル募集中」を出す</label>
+        <input type="checkbox" id="twitchIdle">
+      </div>
+      <div class="field-row">
+        <label for="twitchHudX">横位置(左端・ステージ幅の%)</label>
+        <input type="number" id="twitchHudX" min="0" max="95" step="1">
+      </div>
+      <div class="field-row">
+        <label for="twitchHudY">縦位置(上端・ステージ高さの%)</label>
+        <input type="number" id="twitchHudY" min="0" max="95" step="1">
+      </div>
+      <div class="field-row">
+        <label for="twitchHudScale">大きさ(倍率)</label>
+        <input type="number" id="twitchHudScale" min="0.4" max="2.5" step="0.05">
+      </div>
+      <div class="field-row">
+        <label for="twitchToastDuration">投入通知の表示時間(秒)</label>
+        <input type="number" id="twitchToastDuration" min="0.5" max="10" step="0.5">
+      </div>
+    </div>
+
     <div class="tab-content" id="tab-reel" hidden>
       <div class="note" id="reel-state">状態: 非表示</div>
       <button class="action" id="reel-toggle">🎰 リールを液晶に入れる</button>
@@ -860,11 +966,35 @@
     reelY: 62,
     reelW: 46,
     reelAnim: 0.5,
-    reelNavi: false
+    reelNavi: false,
+    // 視聴者HUD(Twitch連携)
+    twitchHud: true,
+    twitchIdle: true,
+    twitchHudX: 3,
+    twitchHudY: 4,
+    twitchHudScale: 1.0,
+    twitchToastDuration: 3.0
   };
 
   const STORAGE_KEY = "enshutsu_overlay_settings_v1";
   let settings = loadSettings();
+
+  /* 視聴者HUD(Twitch連携)の状態。updateTwitchHud() は起動直後の
+     applySettingsToUI() から呼ばれるので、宣言はここに置く (const は巻き上がらない)。 */
+  const MEDALS_PER_SPIN = 1.17;   // 通常時の実測純減(枚/G)。天井までの必要枚数の目安
+
+  const twState = {
+    credit: null, reserve: 0, bank: 0, by: "",
+    ceilingLeft: null, stateName: "",
+    idle: false, need: 0, paused: false,
+    chatCount: 0, chatGoal: 0,
+    ranking: new Map(),   // 出所 → 投入枚数
+  };
+  // 払出や配信者の種銭は視聴者ランキングに入れない
+  const TW_NOT_VIEWER = new Set(["自力", "スタート", "貯金", "視聴者"]);
+
+  const twFmt = (n) => (Number(n) || 0).toLocaleString("ja-JP");
+
 
   function loadSettings(){
     try{
@@ -1065,6 +1195,12 @@
     el("reelW").value = settings.reelW;
     el("reelAnim").value = settings.reelAnim;
     el("reelNavi").checked = !!settings.reelNavi;
+    el("twitchHud").checked = !!settings.twitchHud;
+    el("twitchIdle").checked = !!settings.twitchIdle;
+    el("twitchHudX").value = settings.twitchHudX;
+    el("twitchHudY").value = settings.twitchHudY;
+    el("twitchHudScale").value = settings.twitchHudScale;
+    el("twitchToastDuration").value = settings.twitchToastDuration;
     applyHudLayout();
   }
   // HUD・リールの位置設定をCSSへ反映する(数値設定の変更時・起動時・設定インポート時)
@@ -1079,6 +1215,18 @@
       reel.style.setProperty("--reel-anim", `${Math.max(0, Number(settings.reelAnim) || 0)}s`);
       reel.classList.toggle("in", !!settings.reelIn);
     }
+    const twHud = el("tw-hud"), twToast = el("tw-toast");
+    if(twHud){
+      twHud.style.left = `${settings.twitchHudX}%`;
+      twHud.style.top = `${settings.twitchHudY}%`;
+      twHud.style.transform = `scale(${Number(settings.twitchHudScale) || 1})`;
+    }
+    if(twToast){
+      // トーストは HUD のすぐ下。実際の高さは updateTwitchHud() で測って合わせる
+      twToast.style.left = `${settings.twitchHudX}%`;
+      twToast.style.top = `${Number(settings.twitchHudY) + 22}%`;
+    }
+    updateTwitchHud();  // 関数宣言なので巻き上げにより定義前でも呼べる
     updateReelUi(); // 関数宣言なので巻き上げにより定義前でも呼べる
   }
   applySettingsToUI();
@@ -1107,7 +1255,17 @@
   bindNumber("reelY","reelY");
   bindNumber("reelW","reelW");
   bindNumber("reelAnim","reelAnim");
-  ["bannerY","naviY","reelX","reelY","reelW","reelAnim"].forEach(id=> el(id).addEventListener("change", applyHudLayout));
+  bindNumber("twitchHudX","twitchHudX");
+  bindNumber("twitchHudY","twitchHudY");
+  bindNumber("twitchHudScale","twitchHudScale");
+  bindNumber("twitchToastDuration","twitchToastDuration");
+  ["bannerY","naviY","reelX","reelY","reelW","reelAnim",
+   "twitchHudX","twitchHudY","twitchHudScale"].forEach(id=> el(id).addEventListener("change", applyHudLayout));
+  ["twitchHud","twitchIdle"].forEach(id=> el(id).addEventListener("change", e=>{
+    settings[id] = !!e.target.checked;
+    saveSettings();
+    updateTwitchHud();
+  }));
   el("subWsUrl").addEventListener("change", e=>{
     const v = String(e.target.value || "").trim();
     settings.subWsUrl = v || DEFAULT_SETTINGS.subWsUrl;
@@ -2374,6 +2532,139 @@ function hideGameVideo(){
     connect();
   })();
 
+  /* ===================== 視聴者HUD (Twitch連携) =====================
+     中継サーバー(8787)から届く主制御のモニタ出力(クレジット・天井・投入)と、
+     ブリッジの状態(チャット連帯カウンタ)を視聴者向けに出すだけ。
+     ここから遊技へ戻る経路は無く、表示が壊れても遊技は続く。
+     名前は必ず textContent で入れる(innerHTML を使わない)。 */
+  function updateTwitchHud(){
+    const hud = el("tw-hud"), idleEl = el("tw-idle");
+    if(!hud || !idleEl) return;
+    // クレジット制で動いていないとき(credit が来ない)は HUD ごと隠す
+    const on = !!settings.twitchHud && twState.credit != null;
+    hud.classList.toggle("show", on);
+    idleEl.classList.toggle("show",
+      !!settings.twitchIdle && twState.credit != null && twState.idle);
+
+    if(twState.idle){
+      el("tw-idle-sub").textContent = twState.paused
+        ? "一時停止中"
+        : `あと ${twFmt(twState.need)} 枚で 1 ゲーム`;
+    }
+    if(!on) return;
+
+    // トーストが HUD に重ならないよう、HUD の実際の高さを測って真下に置く
+    // (拡大率と行数で高さが変わるので、CSS の % 指定だけでは合わせられない)
+    const toast = el("tw-toast");
+    if(toast && hud.offsetHeight){
+      const scale = Number(settings.twitchHudScale) || 1;
+      toast.style.top = `${Math.round(hud.offsetTop + hud.offsetHeight * scale + 10)}px`;
+    }
+
+    el("tw-credit").textContent = twFmt(twState.credit);
+    el("tw-reserve").textContent = twFmt(twState.reserve);
+    el("tw-bank").textContent = twFmt(twState.bank);
+
+    if(twState.ceilingLeft != null){
+      el("tw-ceiling").textContent = `あと ${twFmt(twState.ceilingLeft)} 回転`;
+      el("tw-ceiling-sub").textContent =
+        `（約 ${twFmt(Math.round(twState.ceilingLeft * MEDALS_PER_SPIN))} 枚）`;
+    }else{
+      el("tw-ceiling").textContent = twState.stateName || "—";
+      el("tw-ceiling-sub").textContent = "";
+    }
+
+    el("tw-by").textContent = twState.by ? `いま回しているのは ${twState.by} のメダル` : "";
+
+    const goal = Number(twState.chatGoal) || 0;
+    const left = Math.max(0, goal - (Number(twState.chatCount) || 0));
+    el("tw-chat").textContent = goal
+      ? `あと ${twFmt(left)} コメントで 100 回転`
+      : "";
+    const bar = el("tw-gauge").firstElementChild;
+    if(bar) bar.style.width = goal ? `${Math.min(100, (twState.chatCount / goal) * 100)}%` : "0";
+
+    // 投入ランキング TOP3
+    const rank = el("tw-rank");
+    rank.textContent = "";
+    const top = [...twState.ranking.entries()]
+      .filter(([src]) => !TW_NOT_VIEWER.has(src))
+      .sort((a, b) => b[1] - a[1]).slice(0, 3);
+    top.forEach(([src, n], i) => {
+      const sp = document.createElement("span");
+      sp.textContent = `${["①","②","③"][i]}${src} ${twFmt(n)}`;
+      rank.appendChild(sp);
+    });
+  }
+
+  let twToastTimer = null;
+  function twToast(text){
+    const t = el("tw-toast");
+    if(!t) return;
+    clearTimeout(twToastTimer);
+    t.textContent = text;
+    t.classList.add("show");
+    const ms = (Number(settings.twitchToastDuration) || 3) * 1000 / speedFactor;
+    twToastTimer = setTimeout(()=>{
+      t.classList.remove("show");
+      twToastTimer = setTimeout(()=>{ t.style.display = ""; }, 400);
+    }, ms);
+  }
+
+  // 主制御の試験用モニタ端子。state / idle / player の 3 つだけ見る。
+  function twOnMainBoard(msg){
+    if(!msg || typeof msg.type !== "string") return;
+    if(msg.type === "state"){
+      twState.idle = false;
+      if(msg.credit != null){
+        twState.credit = msg.credit;
+        twState.reserve = msg.reserve ?? 0;
+        twState.bank = msg.bank ?? 0;
+        if(msg.by) twState.by = String(msg.by);
+      }
+      twState.ceilingLeft = msg.ceilingLeft ?? null;
+      twState.stateName = msg.state || "";
+    }else if(msg.type === "idle"){
+      twState.idle = true;
+      twState.credit = msg.credit ?? twState.credit;
+      twState.reserve = msg.reserve ?? 0;
+      twState.bank = msg.bank ?? 0;
+      twState.need = msg.need ?? 0;
+      twState.paused = !!msg.paused;
+      if(msg.ceilingLeft !== undefined) twState.ceilingLeft = msg.ceilingLeft;
+      if(msg.state) twState.stateName = msg.state;
+    }else if(msg.type === "player"){
+      if(msg.credit != null){
+        twState.credit = msg.credit;
+        twState.reserve = msg.reserve ?? 0;
+        twState.bank = msg.bank ?? 0;
+      }
+      if(msg.event === "insertMedal" && msg.medals){
+        const src = String(msg.src || "視聴者");
+        twState.ranking.set(src, (twState.ranking.get(src) || 0) + Number(msg.medals));
+        twToast(`${src}  +${twFmt(msg.medals)}枚`);
+      }else if(msg.text){
+        twToast(String(msg.text));
+      }
+    }else{
+      return;
+    }
+    updateTwitchHud();
+  }
+
+  // ブリッジの状態。チャット連帯カウンタの進捗だけ使う。
+  function twOnTwitchState(msg){
+    if(!msg) return;
+    twState.chatCount = msg.chatCount ?? twState.chatCount;
+    twState.chatGoal = msg.chatGoal ?? twState.chatGoal;
+    const st = el("tw-hud-state");
+    if(st){
+      st.textContent = `状態: ブリッジ${msg.connected ? "接続" : "未接続"} / 連携${msg.enabled ? "ON" : "OFF"}`
+        + (twState.credit == null ? " / 主制御はクレジット制ではありません" : "");
+    }
+    updateTwitchHud();
+  }
+
   /* ===================== 外部の演出制御からのリモートトリガー(WebSocket) =====================
      別途起動する中継サーバー(trigger_relay_server.js)経由で、main_control.html などの
      外部コントローラーからこのオーバーレイの演出を呼び出せるようにする。
@@ -2400,6 +2691,9 @@ function hideGameVideo(){
       // 副制御の演出イベントを中継サーバー経由で直接流し込む(scripts\dev.cmd send での確認用)。
       //   例: {"action":"subEvent","event":{"type":"banner","rank":"赤"}}
       subEvent: (ev, msg) => { if(window.handleSubEvent) window.handleSubEvent(ev || (msg && msg.event)); },
+      // 主制御のモニタ出力とブリッジの状態を視聴者HUDへ (表示するだけ)
+      mainBoard: (_data, msg) => twOnMainBoard(msg),
+      twitchState: (_data, msg) => twOnTwitchState(msg),
       // リールユニット(筐体ビュー)を液晶内に入れる / 出す / 切り替える
       reelIn: () => { if(window.reelIn) window.reelIn(); },
       reelOut: () => { if(window.reelOut) window.reelOut(); },

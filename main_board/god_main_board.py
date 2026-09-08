@@ -1016,6 +1016,8 @@ class PanelLink:
             "credit": b.credit, "reserve": b.reserve, "bank": b.bank,
             "paused": b.paused,
             "need": max(0, BET - b.credit - b.reserve),
+            # 待機中に見に来た視聴者にも天井までの距離が見えるように入れておく
+            "ceilingLeft": max(0, CEILING - b.game_count) if b.state == ST_NORMAL else None,
             "diff": b.total_out - b.total_in,
         })
 
