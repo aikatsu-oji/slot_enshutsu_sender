@@ -220,9 +220,11 @@ class MainBoard:
     # クレジット（貯留）。ベットはMAXベット（規定投入枚数3枚）のみで、
     # 3クレジット無いと回転できない。最大クレジットは無限（上限なし）。
     credit: int = 0
-    # クレジットが足りないとき、その場で投入したことにするか。集計モードと
-    # 自動で回すモードはメダルが無限にある台として扱うので既定は True。
-    # --manual（レバーON待ち）では False にし、クレジット投入信号を必須にする。
+    # クレジットが足りないとき、その場で投入したことにするか。
+    # 集計・検証モード（--games / --ladder / --sim / --commands / --events / --trace）は
+    # メダルが無限にある台として扱うので既定は True。
+    # 稼働モード（--serve）は自動・手動のどちらでも False にし、実機と同じく
+    # クレジット投入信号を必須とする（貯留が尽きたら回らない）。
     auto_insert: bool = True
 
     # 出玉カウンタ
@@ -1376,7 +1378,8 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer",
 
 def run_live(board: MainBoard, games: int, host: str, port: int,
              interval: float, seed: int | None = None,
-             freeze_hold: float = 0.0, manual: bool = False) -> None:
+             freeze_hold: float = 0.0, manual: bool = False,
+             credit_refill: bool = False) -> None:
     """演出イベントをWebSocketで配信しながら稼働させる。
 
     遊技の周期はウェイトが決める。前回の回転開始から interval 秒たつまでは
@@ -1388,10 +1391,12 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
     筐体ビューのレバー（Space/Enter・レバー欄のクリック）、端末のEnterのいずれか。
     ウェイトは手動でも生きている（無効時間中のレバーONは実機と同じく効かない）。
 
-    手動のときはクレジットも実機どおり要る。MAXベット（規定投入枚数3枚）が
-    成立しないとレバーONを叩いても回らないので、先にクレジット投入信号を送る
-    （コンパネの「🪙投入」／--credit で起動時に入れておく）。自動のときは
-    メダルが無限にある台として扱い、不足ぶんは投入したことにして回し続ける。
+    クレジットは自動・手動のどちらでも実機どおり要る。MAXベット（規定投入枚数3枚）が
+    成立しないと回らないので、先にクレジット投入信号を送る（コンパネの「🪙投入」／
+    --credit で起動時に入れておく）。自動のときは貯留が尽きた時点で投入信号を待って止まる。
+    メダルが無限になるのは集計・検証モード（--games / --ladder / --sim / --commands /
+    --events / --trace）と、--credit-refill を付けた検証用の稼働だけで、
+    ふだんの稼働（--serve）では補充しない。
     """
     srv = EnshutsuServer(host, port)
     try:
@@ -1410,7 +1415,9 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
     board.power_on()
 
     inp = LiveInput(manual=manual)
-    board.auto_insert = not manual      # 手動はクレジット必須、自動はメダル無限
+    # 稼働中は自動・手動のどちらでもクレジットが要る（実機と同じく貯留が尽きたら回らない）。
+    # 演出の動作確認で貯留を気にしたくないときだけ --credit-refill で補充を有効にする。
+    board.auto_insert = credit_refill
     watch_stdin(inp)
     if manual:
         print(f"手動: レバーON待ち（コンパネ／筐体ビューのレバー、端末ならEnterで1G。"
@@ -1430,7 +1437,6 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
     def pump() -> None:
         drain_inject(board, srv, inp)   # コンパネからの注入・レバーON・投入・自動手動切替
         inp.drain()                     # 端末のEnterを含め、受け取った入力を反映
-        board.auto_insert = not inp.manual      # 手動へ切り替えたらクレジット必須になる
         n = inp.take_credit()
         if n:                           # クレジット投入信号（最大クレジットは無限）
             board.insert_credit(n)
@@ -1480,6 +1486,21 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
             if inp.quit:
                 break
             pump()
+            # [3] クレジット。自動でも実機と同じく貯留が要る。足りなければ投入信号を待つ
+            #     （待っている間に手動へ切り替えられたらループの頭へ戻る）。
+            if not board.can_bet():
+                if board.panel is not None:
+                    board.panel.send_credit(board, f"クレジット不足（MAXベット{BET}枚）")
+                print(f"クレジット不足（{board.credit}枚）: 投入信号待ち", file=sys.stderr)
+                while not board.can_bet() and not inp.quit and not inp.manual:
+                    pump()
+                    time.sleep(0.05)
+                if inp.quit:
+                    break
+                if inp.manual:
+                    continue
+                if board.panel is not None:
+                    board.panel.send_credit(board, "投入されました")
             r = board.play()
             played += 1
             if freeze_hold > 0.0 and "神揃い" in r["notice"]:
@@ -1616,8 +1637,13 @@ def main() -> None:
     ap.add_argument("--freeze-hold", type=float, default=0.0,
                     help="神揃いフリーズの間、回転開始をさらに止める秒数（既定0＝止めない）")
     ap.add_argument("--credit", type=int, default=0,
-                    help="起動時のクレジット枚数（既定0）。ベットはMAXベット固定で、"
+                    help="起動時のクレジット枚数（既定0）。--serve は自動・手動とも貯留が要る。"
+                         "ベットはMAXベット固定で、"
                          f"--manual では{BET}枚無いと回せない（投入信号で足す）")
+    ap.add_argument("--credit-refill", action="store_true",
+                    help="クレジットが足りないとき自動で補充する（検証用）。"
+                         "--serve の自動操作で貯留を気にせず回したいときに付ける。"
+                         "集計・検証モードは指定に関わらず補充する")
     ap.add_argument("--manual", action="store_true",
                     help="起動しても自分から回さず、レバーON入力を待つ（--serve / --trace）。"
                          "入力はコンパネの「レバーON」・筐体ビューのレバー・端末のEnter")
@@ -1646,7 +1672,8 @@ def main() -> None:
     try:
         if a.serve:
             run_live(board, games, a.host, a.port, a.interval, a.seed,
-                     freeze_hold=a.freeze_hold, manual=a.manual)
+                     freeze_hold=a.freeze_hold, manual=a.manual,
+                     credit_refill=a.credit_refill)
         elif a.commands:
             run_commands(board, a.commands)
         elif a.events:

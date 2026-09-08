@@ -84,6 +84,10 @@ npm test / npm run check / npm start                   # 同等の npm scripts
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
 - `-Mode fast` (0.5 秒/G・設定 6) は動作確認向け。`normal` は実機ウェイト 4.1 秒/G。
+- クレジットは `--serve` では自動・手動とも消費し、尽きたら投入信号 (コンパネの 🪙) を待って止まる。
+  補充が要るのは検証だけなので、`-Mode fast` / `tenjo` にだけ `--credit-refill` を付けている
+  (`normal` は実運用相当なので付けない)。集計・検証モード (`--games` / `--ladder` / `--sim` /
+  `--commands` / `--events` / `--trace`) は指定に関わらずメダル無限。
 - `-Mode manual` (`--manual --credit 50`) は**起動しても勝手に回さない**。1ゲームずつレバーON入力を待つ。
   入力はコンパネ「主制御 詳細」の🕹️レバーON、筐体ビューの Space/Enter (連動中)、端末起動なら Enter
   (`a`=自動 `m`=手動 `q`=終了)。稼働中でもコンパネの「手動にする/自動にする」で切り替えられる

@@ -23,7 +23,7 @@
 
   -Mode は setup.bat の選択肢に対応:
     normal : 実機ウェイト(4.1秒/G) 設定1        (既定)
-    fast   : 0.5秒/G 設定6
+    fast   : 0.5秒/G 設定6 (検証用。クレジットは自動補充)
     tenjo  : seed固定 0.2秒/G 1200Gで天井
     manual : 起動しても勝手に回さず、レバーON待ち。実機ウェイト 設定1・クレジット50枚
              (コンパネ「主制御 詳細」の🕹️レバーON / 筐体ビューで Space・Enter。
@@ -124,9 +124,11 @@ function Ensure-Deps {
 
 function Board-Args($m) {
   switch ($m) {
-    "normal" { return @("--serve", "--setting", "1", "--games", "100000") }
-    "fast"   { return @("--serve", "--setting", "6", "--interval", "0.5", "--games", "100000") }
-    "tenjo"  { return @("--serve", "--setting", "1", "--interval", "0.2", "--games", "3000", "--seed", "6") }
+    # normal は実運用相当。クレジットは補充しないので、尽きたら投入信号(コンパネの🪙)が要る
+    "normal" { return @("--serve", "--setting", "1", "--credit", "50", "--games", "100000") }
+    # fast / tenjo は演出の動作確認用。貯留を気にせず回せるよう --credit-refill を付ける
+    "fast"   { return @("--serve", "--setting", "6", "--interval", "0.5", "--credit-refill", "--games", "100000") }
+    "tenjo"  { return @("--serve", "--setting", "1", "--interval", "0.2", "--credit-refill", "--games", "3000", "--seed", "6") }
     # 起動しても自分から回さない。レバーON(コンパネ/筐体ビュー)が来たぶんだけ進む。
     # 手動はクレジットが要る(MAXベット3枚)ので、すぐ打てるよう50枚入れて起動する
     "manual" { return @("--serve", "--setting", "1", "--manual", "--credit", "50", "--games", "100000") }
