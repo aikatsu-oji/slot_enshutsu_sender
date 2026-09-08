@@ -5,27 +5,30 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>予告オーサリング</title>
 <!--
-  予告オーサリング (オーサリングデータの作成)。
-    - 16:9 のプレビュー上でクリップ (文字・図形・画像・動画・音) を置き、タイムラインで開始と長さを決め、
-      キーフレームで動かす。作ったものは中継サーバーの POST /api/authoring が
-      enshutsu/yokoku/authoring/<id>.json へ書き出す
+  予告オーサリング (オーサリングデータの作成)。After Effects に近い操作感で組み立てる。
+    - タイムラインは「レイヤー行 + その下に開くプロパティ行」の2段構え。プロパティ行の ⏱ を押すと
+      そのプロパティがアニメーションになり、値を変えるたびにプレイヘッドの位置へキーが打たれる (AE と同じ)
+    - 時間はフレーム単位でスナップする (fps はヘッダで切り替え)。タイムラインは拡大縮小・横スクロールできる
+    - 取り消し/やり直し (Ctrl+Z / Ctrl+Shift+Z)、コピー/貼り付け、I・O でのトリムなどのキー操作あり
+    - 作ったものは中継サーバーの POST /api/authoring が enshutsu/yokoku/authoring/<id>.json へ書き出す
     - 素材のドロップは POST /api/authoring/asset → enshutsu/yokoku/authoring/assets/<name>
-    - 保存すると WebSocket に authoringUpdated が流れ、オーバーレイがシーンを読み直す
-    - 再生の実体は authoring_player.js (オーバーレイと同じもの)。ここでの見た目はそのまま本番の見た目になる
+    - 再生の実体は authoring_player.js (オーバーレイと共通)。ここでの見た目がそのまま本番の見た目になる
   http://localhost:8787/enshutsu/authoring_editor.html で開くこと (file:// では保存できない)
 -->
 <style>
   :root{
     --frame:#c9a24a; --frame-bright:#f1d27a; --frame-dim:#7d6328; --bg:#0b1226;
     --text:#efe6d2; --sub:#9d97ad; --panel:#121a30; --line:#26304d; --ok:#6cc47f; --ng:#ff7f74;
+    --row:26px; --prow:22px; --labw:176px;
     --font-ui:"Yu Gothic","Hiragino Kaku Gothic ProN",sans-serif;
   }
   *{box-sizing:border-box;}
   html,body{height:100%;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13px;display:flex;flex-direction:column;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);font-size:13px;
+    display:flex;flex-direction:column;overflow:hidden;}
 
-  header{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:#0e1428;flex-wrap:wrap;}
-  header h1{font-size:15px;letter-spacing:3px;color:var(--frame-bright);margin:0 12px 0 0;white-space:nowrap;}
+  header{display:flex;align-items:center;gap:7px;padding:7px 12px;border-bottom:1px solid var(--line);background:#0e1428;flex-wrap:wrap;}
+  header h1{font-size:14px;letter-spacing:3px;color:var(--frame-bright);margin:0 8px 0 0;white-space:nowrap;}
   header .spacer{margin-left:auto;}
 
   button{background:#1b2340;border:1px solid var(--frame-dim);color:var(--text);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-family:inherit;}
@@ -34,18 +37,24 @@
   button.primary{background:var(--frame);color:#14213d;font-weight:700;border-color:var(--frame-bright);}
   button.ng{border-color:#7a3030;color:#ffb4ac;}
   button.sm{padding:3px 7px;font-size:11px;}
+  button.icon{padding:1px 4px;font-size:10px;line-height:1.2;border-color:transparent;background:none;color:var(--sub);}
+  button.icon:hover{color:var(--text);border-color:var(--frame-dim);}
   input,select,textarea{background:#08060a;border:1px solid #3a3348;color:var(--text);padding:4px 6px;border-radius:5px;font-size:12px;font-family:inherit;}
   input[type=number]{width:74px;}
   input[type=color]{width:38px;height:24px;padding:0;}
   input[type=range]{accent-color:var(--frame);width:100%;}
+  input[type=checkbox]{accent-color:var(--frame);}
   textarea{width:100%;resize:vertical;min-height:52px;}
   select{max-width:100%;}
   .note{color:var(--sub);font-size:11px;line-height:1.6;}
+  kbd{background:#1b2340;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 4px;font-size:10px;color:var(--text);}
 
-  /* ---- 3カラム (素材 / プレビュー+タイムライン / プロパティ) ---- */
-  main{flex:1;display:grid;grid-template-columns:220px minmax(420px,1fr) 300px;gap:10px;padding:10px;overflow:hidden;min-height:0;}
-  .col{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px;}
+  /* ---- 3カラム ---- */
+  main{flex:1;display:grid;grid-template-columns:210px minmax(440px,1fr) 292px;gap:8px;padding:8px;overflow:hidden;min-height:0;}
+  .col{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;}
+  .col.center{overflow:hidden;display:grid;grid-template-rows:auto minmax(230px,1fr);gap:8px;align-content:stretch;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px;display:flex;flex-direction:column;gap:7px;}
+  .card.grow{flex:1;min-height:0;overflow:hidden;}
   .card h2{margin:0;font-size:12px;letter-spacing:2px;color:var(--frame);font-weight:700;}
   .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .grid2{display:grid;grid-template-columns:auto 1fr;gap:5px 8px;align-items:center;}
@@ -53,76 +62,98 @@
   .grid2 input[type=number]{width:100%;}
 
   /* ---- プレビュー ---- */
-  #stage-box{position:relative;width:100%;aspect-ratio:16/9;background:
-      linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%),
-      linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%) ;
+  #stage-box{position:relative;width:100%;max-width:calc(40vh * 16 / 9);margin:0 auto;aspect-ratio:16/9;
+    background:linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%),
+               linear-gradient(45deg,#1a1a1a 25%,transparent 25%,transparent 75%,#1a1a1a 75%);
     background-color:#232323;background-size:24px 24px;background-position:0 0,12px 12px;
     border:1px solid var(--line);border-radius:6px;overflow:hidden;}
   #stage-box.dark{background:#000;}
+  #guides{position:absolute;inset:0;pointer-events:none;display:none;}
+  #guides.on{display:block;}
+  #guides i{position:absolute;background:rgba(255,255,255,.16);}
+  #guides i.v{top:0;bottom:0;width:1px;} #guides i.h{left:0;right:0;height:1px;}
+  #guides i.c{background:rgba(241,210,122,.45);}
+  #guides b{position:absolute;left:10%;top:10%;right:10%;bottom:10%;border:1px dashed rgba(255,255,255,.2);}
+  #snap-guide{position:absolute;inset:0;pointer-events:none;}
+  #snap-guide i{position:absolute;background:#ff5252;display:none;}
+  #snap-guide i.v{top:0;bottom:0;width:1px;} #snap-guide i.h{left:0;right:0;height:1px;}
   #edit-layer{position:absolute;inset:0;cursor:default;}
   #sel-box{position:absolute;border:1px solid var(--frame-bright);box-shadow:0 0 0 1px rgba(0,0,0,.6);display:none;cursor:move;}
-  #sel-box .h{position:absolute;width:10px;height:10px;background:var(--frame-bright);border:1px solid #14213d;border-radius:2px;}
-  #sel-box .h.br{right:-5px;bottom:-5px;cursor:nwse-resize;}
+  #sel-box .h{position:absolute;width:11px;height:11px;background:var(--frame-bright);border:1px solid #14213d;border-radius:2px;}
+  #sel-box .h.br{right:-6px;bottom:-6px;cursor:nwse-resize;}
   #sel-box .lbl{position:absolute;left:0;top:-17px;font-size:10px;color:#14213d;background:var(--frame-bright);padding:0 4px;border-radius:3px;white-space:nowrap;}
 
-  /* ---- タイムライン ---- */
-  #timeline{user-select:none;}
-  .tl-head{display:flex;align-items:center;gap:8px;}
-  .tl-time{font-variant-numeric:tabular-nums;color:var(--frame-bright);min-width:96px;text-align:right;}
-  .tl-body{position:relative;border:1px solid var(--line);border-radius:6px;background:#0a1020;overflow:hidden;}
-  .tl-ruler{position:relative;height:20px;border-bottom:1px solid var(--line);cursor:pointer;background:#0d1428;}
-  .tl-ruler .tick{position:absolute;top:0;bottom:0;border-left:1px solid rgba(157,151,173,.25);font-size:9px;color:var(--sub);padding-left:3px;}
-  .tl-rows{position:relative;max-height:210px;overflow-y:auto;}
-  .tl-row{position:relative;height:26px;border-bottom:1px solid rgba(38,48,77,.6);}
-  .tl-row.sel{background:rgba(201,162,74,.10);}
-  .tl-bar{position:absolute;top:3px;height:20px;background:#2b3a63;border:1px solid #4a5c8f;border-radius:4px;display:flex;align-items:center;
-    padding:0 6px;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;cursor:grab;min-width:8px;}
-  .tl-row.sel .tl-bar{background:#4a3c1c;border-color:var(--frame);}
-  .tl-bar .grip{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.14);}
+  /* ---- タイムライン (AE 風: レイヤー行 + プロパティ行) ---- */
+  #timeline{flex:1;min-height:0;display:flex;flex-direction:column;gap:6px;user-select:none;}
+  .tl-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .tl-time{font-variant-numeric:tabular-nums;color:var(--frame-bright);min-width:150px;text-align:right;font-size:12px;}
+  .tl-body{flex:1;min-height:0;border:1px solid var(--line);border-radius:6px;background:#0a1020;overflow:hidden;}
+  .tl-scroll{height:100%;overflow:auto;position:relative;}
+  .tl-grid{display:grid;grid-template-columns:var(--labw) var(--tlw,900px);position:relative;min-width:100%;}
+  .tl-lab{position:sticky;left:0;z-index:3;background:#0d1428;border-right:1px solid var(--line);
+    border-bottom:1px solid rgba(38,48,77,.7);height:var(--row);display:flex;align-items:center;gap:4px;
+    padding:0 4px;font-size:11px;overflow:hidden;white-space:nowrap;}
+  .tl-trk{position:relative;height:var(--row);border-bottom:1px solid rgba(38,48,77,.7);}
+  .tl-lab.ruler{position:sticky;top:0;left:0;z-index:6;background:#111a33;font-weight:700;color:var(--sub);}
+  .tl-trk.ruler{position:sticky;top:0;z-index:4;background:#111a33;cursor:ew-resize;}
+  .tl-tick{position:absolute;top:0;bottom:0;border-left:1px solid rgba(157,151,173,.32);font-size:9px;color:var(--sub);padding-left:3px;}
+  .tl-tick.minor{border-color:rgba(157,151,173,.12);}
+  .tl-lab.lay{cursor:pointer;}
+  .tl-lab.lay.sel{background:#2a2410;color:var(--frame-bright);}
+  .tl-trk.lay.sel{background:rgba(201,162,74,.06);}
+  .tl-lab.prop,.tl-trk.prop{height:var(--prow);}
+  .tl-lab.prop{padding-left:6px;background:#0b1122;color:var(--sub);}
+  .tl-trk.prop{background:rgba(255,255,255,.014);}
+  .tl-bar{position:absolute;top:3px;height:calc(var(--row) - 7px);background:#2b3a63;border:1px solid #4a5c8f;border-radius:4px;
+    display:flex;align-items:center;padding:0 7px;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;cursor:grab;min-width:6px;}
+  .tl-bar.sel{background:#4a3c1c;border-color:var(--frame);}
+  .tl-bar .grip{position:absolute;right:0;top:0;bottom:0;width:7px;cursor:ew-resize;background:rgba(255,255,255,.16);}
   .tl-bar .grip.l{left:0;right:auto;}
-  .tl-bar .key{position:absolute;top:50%;width:9px;height:9px;margin:-5px 0 0 -5px;background:var(--frame-bright);transform:rotate(45deg);cursor:pointer;}
-  .tl-bar .key:hover{background:#fff;box-shadow:0 0 4px var(--frame-bright);}
-  .tl-play{position:absolute;top:0;bottom:0;width:1px;background:#ff5252;pointer-events:none;z-index:5;}
-  .tl-play::before{content:"";position:absolute;left:-4px;top:0;border-left:4px solid transparent;border-right:4px solid transparent;border-top:6px solid #ff5252;}
+  .kf{position:absolute;top:50%;width:11px;height:11px;margin:-6px 0 0 -6px;background:var(--frame-bright);
+    border:1px solid #0b1226;transform:rotate(45deg);cursor:pointer;z-index:2;}
+  .kf:hover{background:#fff;}
+  .kf.sel{background:#ff5252;border-color:#fff;}
+  .kf.mini{width:7px;height:7px;margin:-4px 0 0 -4px;opacity:.7;cursor:grab;}
+  .stopwatch{background:none;border:1px solid transparent;color:#4a5c8f;padding:0 2px;font-size:11px;cursor:pointer;border-radius:4px;}
+  .stopwatch.on{color:var(--frame-bright);}
+  .stopwatch:hover{border-color:var(--frame-dim);}
+  .pval{color:var(--text);font-variant-numeric:tabular-nums;}
+  .tl-play{position:absolute;top:0;bottom:0;width:1px;background:#ff5252;pointer-events:none;z-index:7;}
+  .tl-play::before{content:"";position:absolute;left:-5px;top:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #ff5252;}
+  .tl-snap{position:absolute;top:0;bottom:0;width:1px;background:#7fc4ff;pointer-events:none;z-index:5;display:none;}
 
   /* ---- 素材一覧 ---- */
-  #drop{border:1px dashed #3a4666;border-radius:6px;padding:14px 8px;text-align:center;color:var(--sub);font-size:11px;cursor:pointer;}
+  #drop{border:1px dashed #3a4666;border-radius:6px;padding:12px 8px;text-align:center;color:var(--sub);font-size:11px;cursor:pointer;}
   #drop.over{border-color:var(--frame);color:var(--text);background:rgba(201,162,74,.08);}
   .asset{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer;font-size:11px;}
   .asset:hover{background:rgba(201,162,74,.10);}
   .asset .th{width:34px;height:24px;flex:0 0 auto;object-fit:cover;background:#000;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--sub);}
   .asset .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
-  /* ---- クリップ一覧 ---- */
-  .clip-item{display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;cursor:pointer;font-size:11px;}
-  .clip-item:hover{background:rgba(201,162,74,.08);}
-  .clip-item.sel{background:rgba(201,162,74,.18);}
-  .clip-item .k{color:var(--frame);width:2.6em;flex:0 0 auto;}
-  .clip-item .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-
-  /* ---- キーフレーム表 ---- */
-  table.keys{width:100%;border-collapse:collapse;font-size:11px;}
-  table.keys th{color:var(--sub);font-weight:400;font-size:10px;padding:1px 2px;}
-  table.keys td{padding:1px 2px;}
-  table.keys input{width:100%;padding:2px 3px;font-size:11px;}
-  table.keys select{width:100%;padding:2px;font-size:10px;}
-  table.keys tr.at td{background:rgba(255,82,82,.12);}
-
-  footer{display:flex;align-items:center;gap:12px;padding:6px 14px;border-top:1px solid var(--line);background:#0e1428;font-size:12px;}
+  footer{display:flex;align-items:center;gap:10px;padding:5px 12px;border-top:1px solid var(--line);background:#0e1428;font-size:12px;}
   .st{color:var(--sub);} .st.ok{color:var(--ok);} .st.ng{color:var(--ng);}
-  @media (max-width:1100px){ main{grid-template-columns:1fr;overflow:auto;} .col{overflow:visible;} }
+  #help{position:fixed;inset:0;background:rgba(6,9,18,.86);z-index:50;display:none;align-items:center;justify-content:center;}
+  #help.show{display:flex;}
+  #help .box{background:var(--panel);border:1px solid var(--frame-dim);border-radius:10px;padding:18px 22px;max-width:640px;max-height:80vh;overflow:auto;}
+  #help table{border-collapse:collapse;font-size:12px;}
+  #help td{padding:2px 12px 2px 0;} #help td:first-child{white-space:nowrap;color:var(--frame-bright);}
+  @media (max-width:1180px){ main{grid-template-columns:1fr;overflow:auto;} .col,.col.center{overflow:visible;} body{overflow:auto;} }
 </style>
 </head>
 <body>
 
 <header>
   <h1>予告オーサリング</h1>
-  <label class="note">シーン</label>
-  <select id="scene-select" style="min-width:180px"></select>
+  <select id="scene-select" style="min-width:168px"></select>
   <button id="btn-new">＋ 新規</button>
   <button id="btn-dup">複製</button>
   <button id="btn-del" class="ng">削除</button>
   <span class="spacer"></span>
+  <button id="btn-undo" title="取り消し (Ctrl+Z)">↶</button>
+  <button id="btn-redo" title="やり直し (Ctrl+Shift+Z)">↷</button>
+  <label class="note">fps</label>
+  <select id="fps" style="width:62px"><option>24</option><option selected>30</option><option>60</option></select>
+  <button id="btn-help" title="キー操作の一覧">?</button>
   <button id="btn-send">📡 オーバーレイで再生</button>
   <button id="btn-save" class="primary">💾 保存</button>
 </header>
@@ -155,7 +186,7 @@
           <option value="stop3">第3停止</option>
         </select>
       </div>
-      <div class="note">割り当てを決めると、副制御からそのイベントが来たときにオーバーレイがこのシーンを自動で再生します (バナーの代わりに出ます)。</div>
+      <div class="note">割り当てを決めると、副制御からそのイベントが来たときにオーバーレイがこのシーンを自動再生します。</div>
     </div>
 
     <div class="card">
@@ -164,71 +195,84 @@
         <input type="file" id="file-input" multiple hidden accept="image/*,video/*,audio/*">
       </div>
       <div id="asset-list" class="note">読み込み中...</div>
-      <div class="note">クリックすると、その素材のクリップを追加します。</div>
+      <div class="note">クリックでその素材のレイヤーを追加します (画像・動画は素材の比率で画面に合わせます)。</div>
     </div>
   </div>
 
   <!-- 中央: プレビューとタイムライン -->
-  <div class="col">
+  <div class="col center">
     <div class="card">
       <div class="row">
         <h2 style="flex:1">プレビュー</h2>
         <label class="note"><input type="checkbox" id="dark-bg"> 黒背景</label>
-        <label class="note">音量</label><input type="range" id="volume" min="0" max="1" step="0.05" style="width:80px">
+        <label class="note"><input type="checkbox" id="show-guides" checked> ガイド</label>
+        <label class="note"><input type="checkbox" id="snap-on" checked> スナップ</label>
+        <label class="note">音量</label><input type="range" id="volume" min="0" max="1" step="0.05" style="width:66px">
       </div>
       <div id="stage-box">
         <div id="stage"></div>
+        <div id="guides" class="on">
+          <i class="v c" style="left:50%"></i><i class="h c" style="top:50%"></i>
+          <i class="v" style="left:33.333%"></i><i class="v" style="left:66.666%"></i>
+          <i class="h" style="top:33.333%"></i><i class="h" style="top:66.666%"></i>
+          <b></b>
+        </div>
+        <div id="snap-guide"><i class="v" id="snap-v"></i><i class="h" id="snap-h"></i></div>
         <div id="edit-layer">
           <div id="sel-box"><span class="lbl"></span><span class="h br"></span></div>
         </div>
       </div>
-      <div class="note">プレビュー上でクリップをドラッグすると動かせます (右下でサイズ変更)。プレイヘッドの位置にキーフレームがあるときは、そのキーだけを動かします。<br>
-        画面に合わせたいときは、右の「クリップ設定」の<b>画面に合わせる</b>から「画面いっぱい」または「素材の比率で最大」を押します。</div>
+      <div class="note">ドラッグで移動 (右下でサイズ変更)。<kbd>Shift</kbd>+ドラッグで縦横どちらかに固定。
+        ⏱ でアニメーションにしたプロパティは、ドラッグした位置がプレイヘッドのキーフレームになります。</div>
     </div>
 
-    <div class="card" id="timeline">
+    <div class="card grow" id="timeline">
       <div class="tl-head">
         <button id="btn-play">▶ 再生</button>
         <button id="btn-stop">■ 停止</button>
-        <span class="tl-time" id="tl-time">0.00 / 0.00 秒</span>
+        <span class="tl-time" id="tl-time">0.00s / 0f</span>
         <span class="spacer" style="flex:1"></span>
-        <span class="note">クリップ追加:</span>
+        <button class="sm" id="btn-zoom-out" title="縮小 (-)">−</button>
+        <button class="sm" id="btn-zoom-in" title="拡大 (+)">＋</button>
+        <button class="sm" id="btn-zoom-fit" title="全体を表示 (0)">全体</button>
+      </div>
+      <div class="tl-head">
+        <span class="note">レイヤー追加:</span>
         <button class="sm" data-add="text">文字</button>
         <button class="sm" data-add="shape">図形</button>
         <button class="sm" data-add="image">画像</button>
         <button class="sm" data-add="video">動画</button>
         <button class="sm" data-add="sound">音</button>
         <button class="sm" data-add="scene">予告呼出</button>
+        <span class="spacer" style="flex:1"></span>
+        <button class="sm" id="btn-clip-up" title="手前へ">▲</button>
+        <button class="sm" id="btn-clip-down" title="奥へ">▼</button>
+        <button class="sm" id="btn-clip-dup" title="複製 (Ctrl+D)">複製</button>
+        <button class="sm ng" id="btn-clip-del" title="削除 (Delete)">削除</button>
       </div>
       <div class="tl-body">
-        <div class="tl-ruler" id="tl-ruler"></div>
-        <div class="tl-rows" id="tl-rows"></div>
-        <div class="tl-play" id="tl-playhead" style="left:0"></div>
+        <div class="tl-scroll" id="tl-scroll">
+          <div class="tl-grid" id="tl-grid">
+            <div class="tl-play" id="tl-playhead"></div>
+            <div class="tl-snap" id="tl-snapline"></div>
+          </div>
+        </div>
       </div>
-      <div class="row">
-        <span class="note">クリップ</span>
-        <span class="spacer" style="flex:1"></span>
-        <button class="sm" id="btn-clip-up">▲ 前へ</button>
-        <button class="sm" id="btn-clip-down">▼ 後へ</button>
-        <button class="sm" id="btn-clip-dup">複製</button>
-        <button class="sm ng" id="btn-clip-del">削除</button>
-      </div>
-      <div id="clip-list"></div>
     </div>
   </div>
 
-  <!-- 右: 選択クリップのプロパティ -->
+  <!-- 右: プロパティ -->
   <div class="col">
     <div class="card">
-      <h2>クリップ設定</h2>
-      <div id="prop-empty" class="note">クリップを選ぶとここに設定が出ます。</div>
+      <h2>レイヤー設定</h2>
+      <div id="prop-empty" class="note">レイヤーを選ぶとここに設定が出ます。</div>
       <div id="prop-fields" class="grid2"></div>
     </div>
     <div class="card" id="key-card" hidden>
       <h2>キーフレーム</h2>
       <div class="row">
-        <button class="sm" id="btn-key-add">＋ 現在位置にキー</button>
-        <select id="key-preset" class="sm">
+        <button class="sm" id="btn-key-add" title="アニメーション中のプロパティに、いまの値でキーを打つ (K)">＋ キーを打つ</button>
+        <select id="key-preset" class="sm" style="flex:1">
           <option value="">よく使う動き…</option>
           <option value="fade">フェードイン/アウト</option>
           <option value="zoom">ズームイン</option>
@@ -239,10 +283,8 @@
           <option value="flash">点滅</option>
         </select>
       </div>
-      <table class="keys" id="key-table"></table>
-      <div class="note">空欄のプロパティは動かしません (クリップの基本値のまま)。t はクリップ先頭からの秒。<br>
-        行を選ぶ (どこかにフォーカスする) か、タイムラインの<b>菱形</b>を押すと、そのキーの時刻へ移動してプレビューがその姿になります。
-        その状態で画面上をドラッグすると、そのキーだけを動かせます。</div>
+      <div id="key-none" class="note">タイムラインの菱形を押すと、そのキーをここで調整できます。</div>
+      <div id="key-edit" class="grid2" hidden></div>
     </div>
   </div>
 </main>
@@ -253,6 +295,29 @@
   <span class="note" id="path-note"></span>
 </footer>
 
+<div id="help">
+  <div class="box">
+    <h2 style="margin:0 0 10px;color:var(--frame-bright);letter-spacing:2px;">キー操作</h2>
+    <table>
+      <tr><td>Space</td><td>再生 / 一時停止</td></tr>
+      <tr><td>← →</td><td>1フレーム移動 (Shift で10フレーム)</td></tr>
+      <tr><td>Home / End</td><td>先頭 / 末尾へ</td></tr>
+      <tr><td>I / O</td><td>選択レイヤーの開始 / 終わりをプレイヘッドへ (トリム)</td></tr>
+      <tr><td>K</td><td>アニメーション中のプロパティに、いまの値でキーを打つ</td></tr>
+      <tr><td>Ctrl+D</td><td>レイヤーを複製</td></tr>
+      <tr><td>Ctrl+C / Ctrl+V</td><td>レイヤーをコピー / 貼り付け</td></tr>
+      <tr><td>Delete</td><td>選択レイヤー (キーを選んでいればそのキー) を削除</td></tr>
+      <tr><td>Ctrl+Z / Ctrl+Shift+Z</td><td>取り消し / やり直し</td></tr>
+      <tr><td>Ctrl+S</td><td>保存</td></tr>
+      <tr><td>+ / − / 0</td><td>タイムラインの拡大 / 縮小 / 全体表示</td></tr>
+      <tr><td>Ctrl+ホイール</td><td>タイムラインの拡大縮小</td></tr>
+      <tr><td>Alt+クリック</td><td>キーフレームを削除</td></tr>
+      <tr><td>ダブルクリック</td><td>プロパティ行にキーフレームを追加</td></tr>
+    </table>
+    <div class="row" style="margin-top:14px"><button id="btn-help-close">閉じる</button></div>
+  </div>
+</div>
+
 <script src="authoring_player.js"></script>
 <script>
 (function(){
@@ -262,63 +327,85 @@
   const el = (id)=> document.getElementById(id);
   const round = (v, d)=> Math.round(v * Math.pow(10, d)) / Math.pow(10, d);
   const clamp = (v, lo, hi)=> Math.min(hi, Math.max(lo, v));
+  const ANIM = YA.ANIM_PROPS;                       // x y w h opacity scale rot
+  const PROP_LABEL = { x:"位置X", y:"位置Y", w:"幅", h:"高さ", opacity:"不透明度", scale:"拡大", rot:"回転" };
+  const TYPE_LABEL = { text:"文字", shape:"図形", image:"画像", video:"動画", sound:"音", scene:"予告呼出" };
+  const STAGE_ASPECT = 16 / 9;
 
   /* ===================== 状態 ===================== */
-  let scenes = [];        // サーバーにある全シーン
-  let scene = null;       // 編集中のシーン (normalizeScene 済み)
+  let scenes = [];        // サーバーにある全シーン (保存済みの内容)
+  let scene = null;       // 編集中のシーン
   let assets = [];        // assets フォルダのファイル名
-  let selId = null;       // 選択中クリップの id
+  let selId = null;       // 選択中レイヤーの id
+  let selKey = null;      // 選択中キーフレーム { clipId, prop, t }
   let time = 0;           // プレイヘッド(秒)
   let dirty = false;
+  let zoom = 1;           // タイムラインの拡大率 (1 = 全体が収まる)
+  let clipboard = null;   // レイヤーのコピー
+  let fps = Number(localStorage.getItem("yk_fps")) || 30;
 
   const stageBox = el("stage-box");
   const player = new YA.ScenePlayer(el("stage"), {
     base: "yokoku/authoring/",
     silent: true,                                   // スクラブ中は鳴らさない (再生ボタンのときは鳴る)
     volume: ()=> Number(el("volume").value),
-    playScene: (id)=> previewScene(id, 1),          // 「予告呼出」クリップ
+    playScene: (id)=> previewScene(id, 1),          // 「予告呼出」レイヤー
   });
 
-  /* 「予告呼出」クリップのプレビュー。呼ばれた先のシーンをプレビューに重ねて再生する。
-     再生されるのは保存済みの内容 (サーバーから読んだもの) なので、呼び出し先を直したら保存してから確かめる。 */
-  const PREVIEW_MAX_DEPTH = 4;
-  const previewPlayers = new Set();
-  function previewScene(id, depth){
-    if(depth > PREVIEW_MAX_DEPTH){ setStatus("予告の呼び出しが深すぎます", "ng"); return; }
-    const target = scenes.find(sc=> sc.id === id);
-    if(!target){ setStatus(`呼び出し先の予告が見つかりません: ${id || "(未指定)"}`, "ng"); return; }
-    const box = document.createElement("div");
-    box.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
-    el("stage").appendChild(box);
-    const p = new YA.ScenePlayer(box, {
-      base: "yokoku/authoring/",
-      volume: ()=> Number(el("volume").value),
-      playScene: (next)=> previewScene(next, depth + 1),
-    });
-    previewPlayers.add(p);
-    p.load(target);
-    p.play(0).then(()=>{
-      previewPlayers.delete(p);
-      p.destroy();
-      if(box.parentNode) box.parentNode.removeChild(box);
-    });
-  }
-  function stopPreviewScenes(){
-    for(const p of [...previewPlayers]) p.stop();   // stop で Promise が解けて後片付けまで走る
-  }
-
+  /* ===================== 小道具 ===================== */
   function setStatus(text, cls){
     const s = el("status");
     s.textContent = text;
     s.className = "st" + (cls ? " " + cls : "");
   }
-  function markDirty(){
-    dirty = true;
-    el("btn-save").textContent = "💾 保存 *";
+  function markDirty(){ dirty = true; el("btn-save").textContent = "💾 保存 *"; }
+  function clearDirty(){ dirty = false; el("btn-save").textContent = "💾 保存"; }
+  const frameSec = ()=> 1 / fps;
+  const snapTime = (t)=> round(Math.round(t * fps) / fps, 4);     // フレームに合わせる
+  const snapOn = ()=> el("snap-on").checked;
+  function selectedClip(){ return scene ? scene.tracks.find(c=> c.id === selId) || null : null; }
+  function localTime(c){ return clamp(round(time - c.start, 4), 0, c.dur); }
+
+  /* ===================== 取り消し / やり直し =====================
+     シーンは小さいので、操作の前に丸ごと JSON で控えておく方式。 */
+  const undoStack = [], redoStack = [];
+  function sceneSnapshot(){ return scene ? JSON.stringify({ s: scene, sel: selId }) : null; }
+  function pushUndo(){
+    const cur = sceneSnapshot();
+    if(!cur || undoStack[undoStack.length - 1] === cur) return;
+    undoStack.push(cur);
+    if(undoStack.length > 80) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoUi();
   }
-  function clearDirty(){
-    dirty = false;
-    el("btn-save").textContent = "💾 保存";
+  function restoreSnapshot(json){
+    const o = JSON.parse(json);
+    scene = YA.normalizeScene(o.s);
+    selId = o.sel;
+    selKey = null;
+    markDirty();
+    refresh(true);
+    updateUndoUi();
+  }
+  function undo(){
+    if(!undoStack.length){ setStatus("これ以上戻せません", ""); return; }
+    const cur = sceneSnapshot();
+    restoreSnapshot(undoStack.pop());
+    if(cur) redoStack.push(cur);
+    updateUndoUi();
+    setStatus("取り消しました", "");
+  }
+  function redo(){
+    if(!redoStack.length){ setStatus("やり直せる操作がありません", ""); return; }
+    const cur = sceneSnapshot();
+    restoreSnapshot(redoStack.pop());
+    if(cur) undoStack.push(cur);
+    updateUndoUi();
+    setStatus("やり直しました", "");
+  }
+  function updateUndoUi(){
+    el("btn-undo").disabled = !undoStack.length;
+    el("btn-redo").disabled = !redoStack.length;
   }
 
   /* ===================== サーバーとのやり取り ===================== */
@@ -364,8 +451,12 @@
     if(!found) return;
     // 一覧の実体をそのまま編集すると保存前の変更が一覧へ混ざるので、複製して開く
     scene = YA.normalizeScene(JSON.parse(JSON.stringify(found)));
-    selId = scene.tracks.length ? scene.tracks[0].id : null;
+    selId = scene.tracks.length ? scene.tracks[scene.tracks.length - 1].id : null;
+    selKey = null;
     time = 0;
+    zoom = 1;
+    undoStack.length = 0; redoStack.length = 0;
+    updateUndoUi();
     clearDirty();
     refresh(true);
     setStatus(`「${scene.name}」を開きました`, "");
@@ -386,23 +477,100 @@
     }
   }
 
+  /* ===================== キーフレーム (プロパティ単位) =====================
+     保存の形は「1つのキー(時刻)が複数プロパティを持てる」ままだが、編集はプロパティ単位で行う。
+     AE と同じで、⏱ を入れたプロパティは値を変えるたびにプレイヘッドの位置へキーが打たれる。 */
+  const keysOf = (c, prop)=> c.keys.filter(k=> k[prop] != null);
+  const isAnimated = (c, prop)=> c.keys.some(k=> k[prop] != null);
+  const keyAtTime = (c, t)=> c.keys.find(k=> Math.abs(k.t - t) < 1e-3);
+
+  function cleanKeys(c){
+    c.keys = c.keys.filter(k=> ANIM.some(p=> k[p] != null));
+    c.keys.sort((a, b)=> a.t - b.t);
+  }
+  function ensureKey(c, t){
+    let k = keyAtTime(c, t);
+    if(!k){ k = { t: round(t, 4), ease: "inOut" }; c.keys.push(k); c.keys.sort((a, b)=> a.t - b.t); }
+    return k;
+  }
+  function setPropKey(c, prop, t, v){ ensureKey(c, clamp(t, 0, c.dur))[prop] = round(v, 3); }
+  function removePropKey(c, prop, t){
+    const k = keyAtTime(c, t);
+    if(!k) return;
+    delete k[prop];
+    cleanKeys(c);
+    if(selKey && selKey.prop === prop && Math.abs(selKey.t - t) < 1e-3) selKey = null;
+  }
+  // キーを時間方向へ動かす。同じ時刻に他プロパティのキーがあってもそれは動かさない
+  function movePropKey(c, prop, tOld, tNew){
+    const k = keyAtTime(c, tOld);
+    if(!k || k[prop] == null) return;
+    const v = k[prop], ease = k.ease;
+    delete k[prop];
+    cleanKeys(c);
+    const tt = clamp(tNew, 0, c.dur);
+    const exists = !!keyAtTime(c, tt);
+    const nk = ensureKey(c, tt);
+    nk[prop] = v;
+    if(!exists) nk.ease = ease;
+  }
+  // ⏱ の切り替え。オンでいまの値のキーを1つ打ち、オフで全キーを消して現在値を基本値にする
+  function toggleAnim(c, prop){
+    pushUndo();
+    const lt = localTime(c);
+    if(isAnimated(c, prop)){
+      c[prop] = round(YA.propsAt(c, lt)[prop], 3);
+      for(const k of c.keys) delete k[prop];
+      cleanKeys(c);
+    }else{
+      setPropKey(c, prop, lt, c[prop]);
+    }
+    markDirty(); apply(c, false); renderAll();
+  }
+  // プロパティへ値を書く。アニメーション中ならプレイヘッドのキーへ、そうでなければ基本値へ
+  function setProp(c, prop, v){
+    if(ANIM.includes(prop) && isAnimated(c, prop)) setPropKey(c, prop, localTime(c), v);
+    else c[prop] = ANIM.includes(prop) ? round(v, 3) : v;
+  }
+  function propValue(c, prop){
+    return ANIM.includes(prop) ? round(YA.propsAt(c, localTime(c))[prop], 3) : c[prop];
+  }
+  function addKeysAtPlayhead(){
+    const c = selectedClip();
+    if(!c) return;
+    const props = ANIM.filter(p=> isAnimated(c, p));
+    if(!props.length){ setStatus("⏱ でアニメーションにしたプロパティがありません", ""); return; }
+    pushUndo();
+    const lt = localTime(c);
+    for(const p of props) setPropKey(c, p, lt, YA.propsAt(c, lt)[p]);
+    markDirty(); apply(c, false); renderAll();
+    setStatus(`キーを打ちました (${props.map(p=> PROP_LABEL[p]).join(", ")})`, "ok");
+  }
+
   /* ===================== 描画 ===================== */
   function refresh(structural){
     if(structural) player.load(scene || { tracks: [] });
     player.seek(clamp(time, 0, scene ? scene.duration : 0));
     renderAll();
   }
-
+  // 入力中に呼ぶ軽い更新 (プロパティ欄を作り直さないのでフォーカスが飛ばない)
+  function refreshLight(){
+    player.seek(clamp(time, 0, scene ? scene.duration : 0));
+    renderTimeline();
+    renderSel();
+  }
   function renderAll(){
     renderSceneFields();
-    renderClipList();
     renderTimeline();
     renderProps();
-    renderKeys();
+    renderKeyEdit();
     renderSel();
-    el("tl-time").textContent = `${time.toFixed(2)} / ${(scene ? scene.duration : 0).toFixed(2)} 秒`;
   }
-
+  function renderTime(){
+    const d = scene ? scene.duration : 0;
+    el("tl-time").textContent = `${time.toFixed(2)}s / ${Math.round(time * fps)}f  (全 ${Math.round(d * fps)}f)`;
+    el("tl-playhead").style.left = `calc(var(--labw) + ${timeToPx(time)}px)`;
+  }
   function renderSceneFields(){
     const on = !!scene;
     el("sc-name").value = on ? scene.name : "";
@@ -412,80 +580,135 @@
     for(const id of ["sc-name","sc-dur","sc-ev","sc-trig","btn-save","btn-dup","btn-del","btn-send","btn-play","btn-stop"]) el(id).disabled = !on;
   }
 
-  const TYPE_LABEL = { text:"文字", shape:"図形", image:"画像", video:"動画", sound:"音", scene:"予告呼出" };
-
-  function renderClipList(){
-    const box = el("clip-list");
-    box.textContent = "";
-    if(!scene || !scene.tracks.length){
-      box.innerHTML = '<div class="note">クリップがありません。上のボタンで追加してください。</div>';
-      return;
-    }
-    // 表示は「手前が上」。配列は後ろほど手前なので逆順に並べる
-    for(let i = scene.tracks.length - 1; i >= 0; i--){
-      const c = scene.tracks[i];
-      const d = document.createElement("div");
-      d.className = "clip-item" + (c.id === selId ? " sel" : "");
-      d.innerHTML = `<span class="k">${TYPE_LABEL[c.type] || c.type}</span><span class="nm"></span><span class="note">${c.start.toFixed(2)}〜${(c.start + c.dur).toFixed(2)}s</span>`;
-      d.querySelector(".nm").textContent = c.name || c.text || c.src || "(無題)";
-      d.addEventListener("click", ()=>{ selId = c.id; renderAll(); });
-      box.appendChild(d);
-    }
+  /* ---- タイムライン ---- */
+  function labWidth(){ return parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--labw")) || 176; }
+  function trackWidth(){
+    const view = el("tl-scroll").clientWidth - labWidth();
+    return Math.max(240, Math.round(Math.max(view, 240) * zoom));
   }
+  function timeToPx(t){ return scene ? (t / scene.duration) * trackWidth() : 0; }
+  function pxToTime(px){ return scene ? (px / trackWidth()) * scene.duration : 0; }
 
   function renderTimeline(){
-    const ruler = el("tl-ruler"), rows = el("tl-rows");
-    ruler.textContent = ""; rows.textContent = "";
-    if(!scene) return;
-    const dur = scene.duration;
-    // 目盛り: 0.5 秒刻み (長いシーンでは 1 秒刻み)
-    const step = dur > 8 ? 1 : 0.5;
-    for(let t = 0; t <= dur + 1e-6; t += step){
-      const tick = document.createElement("div");
-      tick.className = "tick";
-      tick.style.left = (t / dur * 100) + "%";
-      tick.textContent = t.toFixed(step < 1 ? 1 : 0);
-      ruler.appendChild(tick);
-    }
+    const grid = el("tl-grid");
+    const play = el("tl-playhead"), snapline = el("tl-snapline");
+    grid.textContent = "";
+    grid.appendChild(play); grid.appendChild(snapline);
+    if(!scene){ renderTime(); return; }
+    const tlw = trackWidth();
+    grid.style.setProperty("--tlw", tlw + "px");
+
+    // 1行 = ラベルセル + トラックセル (CSS グリッドの2列)
+    const addRow = (cls, labelNodes, fill)=>{
+      const lab = document.createElement("div");
+      lab.className = "tl-lab " + cls;
+      labelNodes.forEach(n=> lab.appendChild(n));
+      const trk = document.createElement("div");
+      trk.className = "tl-trk " + cls;
+      grid.appendChild(lab); grid.appendChild(trk);
+      if(fill) fill(trk);
+      return { lab, trk };
+    };
+    const span = (t, cls)=>{ const s = document.createElement("span"); s.textContent = t; if(cls) s.className = cls; return s; };
+
+    // 目盛り
+    const step = pickTickStep(tlw);
+    const ruler = addRow("ruler", [span("時間 (秒)")], (trk)=>{
+      trk.dataset.role = "ruler";
+      for(let i = 0; i * step <= scene.duration + 1e-6; i++){
+        const t = round(i * step, 4);
+        const major = i % 5 === 0;
+        const tick = document.createElement("div");
+        tick.className = "tl-tick" + (major ? "" : " minor");
+        tick.style.left = timeToPx(t) + "px";
+        if(major) tick.textContent = t.toFixed(step < 0.5 ? 2 : 1);
+        trk.appendChild(tick);
+      }
+    });
+
+    // レイヤー行 (手前が上 = 配列の後ろから)
     for(let i = scene.tracks.length - 1; i >= 0; i--){
       const c = scene.tracks[i];
-      const row = document.createElement("div");
-      row.className = "tl-row" + (c.id === selId ? " sel" : "");
-      const bar = document.createElement("div");
-      bar.className = "tl-bar";
-      bar.style.left = (c.start / dur * 100) + "%";
-      bar.style.width = Math.max(0.6, c.dur / dur * 100) + "%";
-      bar.dataset.clipId = c.id;
-      bar.textContent = c.name || c.text || c.src || TYPE_LABEL[c.type];
-      const gl = document.createElement("span"); gl.className = "grip l"; gl.dataset.grip = "l";
-      const gr = document.createElement("span"); gr.className = "grip"; gr.dataset.grip = "r";
-      bar.appendChild(gl); bar.appendChild(gr);
-      c.keys.forEach((k, ki)=>{
-        const kd = document.createElement("span");
-        kd.className = "key";
-        kd.style.left = (clamp(k.t / c.dur, 0, 1) * 100) + "%";
-        kd.dataset.key = String(ki);
-        kd.title = `キー ${k.t.toFixed(2)}s (クリックでここへ移動)`;
-        bar.appendChild(kd);
+      const isSel = c.id === selId;
+      const twirl = document.createElement("button");
+      twirl.className = "icon";
+      twirl.textContent = isSel ? "▼" : "▶";
+      twirl.title = "プロパティの開閉";
+      twirl.addEventListener("click", (ev)=>{ ev.stopPropagation(); selId = isSel ? null : c.id; selKey = null; renderAll(); });
+      const name = span(`${TYPE_LABEL[c.type] || c.type}  ${c.name || c.text || c.src || ""}`.trim());
+      name.style.cssText = "flex:1;overflow:hidden;text-overflow:ellipsis;";
+      const lay = addRow("lay" + (isSel ? " sel" : ""), [twirl, name], (trk)=>{
+        const bar = document.createElement("div");
+        bar.className = "tl-bar" + (isSel ? " sel" : "");
+        bar.style.left = timeToPx(c.start) + "px";
+        bar.style.width = Math.max(6, timeToPx(c.dur)) + "px";
+        bar.dataset.clipId = c.id;
+        bar.textContent = c.name || c.text || c.src || TYPE_LABEL[c.type];
+        const gl = document.createElement("span"); gl.className = "grip l"; gl.dataset.grip = "l";
+        const gr = document.createElement("span"); gr.className = "grip"; gr.dataset.grip = "r";
+        bar.appendChild(gl); bar.appendChild(gr);
+        // 閉じているときは、どこにキーがあるかだけ小さく見せる
+        if(!isSel){
+          for(const k of c.keys){
+            const kd = document.createElement("span");
+            kd.className = "kf mini";
+            kd.style.left = timeToPx(k.t) + "px";
+            bar.appendChild(kd);
+          }
+        }
+        trk.appendChild(bar);
       });
-      row.appendChild(bar);
-      rows.appendChild(row);
+      lay.lab.addEventListener("pointerdown", ()=>{ if(!isSel){ selId = c.id; selKey = null; renderAll(); } });
+
+      // プロパティ行 (選択中のレイヤーだけ開く)。音・予告呼出は動かす対象が無い
+      if(isSel && c.type !== "sound" && c.type !== "scene"){
+        for(const prop of ANIM){
+          const sw = document.createElement("button");
+          sw.className = "stopwatch" + (isAnimated(c, prop) ? " on" : "");
+          sw.textContent = "⏱";
+          sw.title = isAnimated(c, prop) ? "アニメーションを解除 (このプロパティのキーを全部消す)" : "アニメーションにする (いまの値でキーを1つ打つ)";
+          sw.addEventListener("click", (ev)=>{ ev.stopPropagation(); toggleAnim(c, prop); });
+          const pn = span(PROP_LABEL[prop]);
+          pn.style.cssText = "flex:1;";
+          const val = span(String(propValue(c, prop)), "pval");
+          addRow("prop", [sw, pn, val], (trk)=>{
+            trk.dataset.prop = prop;
+            trk.dataset.clipId = c.id;
+            for(const k of keysOf(c, prop)){
+              const kd = document.createElement("span");
+              const on = selKey && selKey.clipId === c.id && selKey.prop === prop && Math.abs(selKey.t - k.t) < 1e-3;
+              kd.className = "kf" + (on ? " sel" : "");
+              kd.style.left = timeToPx(c.start + k.t) + "px";
+              kd.dataset.prop = prop; kd.dataset.t = String(k.t); kd.dataset.clipId = c.id;
+              kd.title = `${PROP_LABEL[prop]} = ${k[prop]}  (${(c.start + k.t).toFixed(2)}s / ${k.ease})`;
+              trk.appendChild(kd);
+            }
+          });
+        }
+      }
     }
-    el("tl-playhead").style.left = (clamp(time / dur, 0, 1) * 100) + "%";
+    renderTime();
+  }
+  // 1目盛りが 26px 以上になる刻みを、フレーム → 0.1 → … の順で選ぶ
+  function pickTickStep(tlw){
+    for(const s of [frameSec(), 0.1, 0.25, 0.5, 1, 2, 5]){
+      if((s / scene.duration) * tlw >= 26) return s;
+    }
+    return 5;
   }
 
-  /* ---- プロパティ欄 (種類ごとに出す項目を変える) ---- */
+  /* ---- レイヤー設定 (種類ごとに出す項目を変える) ---- */
   const FIELDS = [
     { k:"name",  l:"名前",       t:"text",  for:"*" },
     { k:"start", l:"開始(秒)",   t:"num", min:0, max:60, step:0.05, for:"*" },
     { k:"dur",   l:"長さ(秒)",   t:"num", min:0.05, max:60, step:0.05, for:"*" },
     { k:"src",   l:"素材",       t:"asset", for:"image video sound", structural:true },
     { k:"src",   l:"呼び出す予告", t:"sceneref", for:"scene", structural:true },
-    { k:"slot",  l:"差し替え名",   t:"text", for:"image video sound", structural:true,
+    { k:"slot",  l:"差し替え名",  t:"text", for:"image video sound", structural:true,
       hint:"副制御が images:{ この名前:\"素材\" } を送ってきたら、その素材に差し替えて再生します (指示が無ければ上の素材のまま)" },
     { k:"text",  l:"文字",       t:"area",  for:"text" },
-    { k:"x",     l:"X(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
-    { k:"y",     l:"Y(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
+    { k:"x",     l:"位置X(中心 %)", t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
+    { k:"y",     l:"位置Y(中心 %)", t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
     { k:"w",     l:"幅(%)",      t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
     { k:"h",     l:"高さ(%)",    t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
     { k:"_fit",  l:"画面に合わせる", t:"fit", for:"text shape image video" },
@@ -508,10 +731,6 @@
     { k:"volume",l:"音量",       t:"range", min:0, max:1, step:0.05, for:"video sound" },
   ];
 
-  function selectedClip(){
-    return scene ? scene.tracks.find(c=> c.id === selId) || null : null;
-  }
-
   function renderProps(){
     const box = el("prop-fields");
     box.textContent = "";
@@ -519,24 +738,28 @@
     el("prop-empty").hidden = !!c;
     el("key-card").hidden = !c;
     if(!c) return;
-    // 種類 (先頭に固定で置く)
+
     const tl = document.createElement("label"); tl.textContent = "種類";
     const ts = document.createElement("select");
     for(const t of YA.CLIP_TYPES){
       const o = document.createElement("option"); o.value = t; o.textContent = TYPE_LABEL[t] || t; ts.appendChild(o);
     }
     ts.value = c.type;
-    ts.addEventListener("change", ()=>{ c.type = ts.value; markDirty(); refresh(true); });
+    ts.addEventListener("change", ()=>{ pushUndo(); c.type = ts.value; markDirty(); refresh(true); });
     box.appendChild(tl); box.appendChild(ts);
 
     for(const f of FIELDS){
       if(f.for !== "*" && !f.for.split(" ").includes(c.type)) continue;
+      const animated = ANIM.includes(f.k) && isAnimated(c, f.k);
       const lab = document.createElement("label");
-      lab.textContent = f.l;
+      lab.textContent = f.l + (animated ? " ◆" : "");
+      if(animated) lab.title = "アニメーション中。値を変えるとプレイヘッドの位置にキーが打たれます";
       let input;
+
       if(f.t === "area"){
         input = document.createElement("textarea");
         input.value = c[f.k];
+        input.addEventListener("focusin", pushUndo);
         input.addEventListener("input", ()=>{ c[f.k] = input.value; markDirty(); apply(c, true); });
       }else if(f.t === "asset"){
         input = document.createElement("select");
@@ -548,22 +771,7 @@
           const o = document.createElement("option"); o.value = c.src; o.textContent = c.src + " (不明)"; input.appendChild(o);
         }
         input.value = c.src;
-        input.addEventListener("change", ()=>{ c.src = input.value; markDirty(); apply(c, true); });
-      }else if(f.t === "check"){
-        input = document.createElement("input"); input.type = "checkbox"; input.checked = !!c[f.k];
-        input.addEventListener("change", ()=>{ c[f.k] = input.checked; markDirty(); apply(c, true); });
-      }else if(f.t === "color"){
-        const wrap = document.createElement("span");
-        wrap.style.cssText = "display:flex;gap:4px;align-items:center;";
-        input = document.createElement("input"); input.type = "color";
-        input.value = /^#[0-9a-fA-F]{6}$/.test(c[f.k]) ? c[f.k] : "#ffffff";
-        const txt = document.createElement("input"); txt.type = "text"; txt.value = c[f.k] || ""; txt.style.flex = "1"; txt.placeholder = "例: #ff0000 / 空欄で無し";
-        const set = (v)=>{ c[f.k] = v; markDirty(); apply(c, false); };
-        input.addEventListener("input", ()=>{ txt.value = input.value; set(input.value); });
-        txt.addEventListener("input", ()=> set(txt.value));
-        wrap.appendChild(input); wrap.appendChild(txt);
-        box.appendChild(lab); box.appendChild(wrap);
-        continue;
+        input.addEventListener("change", ()=>{ pushUndo(); c.src = input.value; markDirty(); apply(c, true); });
       }else if(f.t === "sceneref"){
         input = document.createElement("select");
         const none = document.createElement("option"); none.value = ""; none.textContent = "(なし)"; input.appendChild(none);
@@ -575,7 +783,24 @@
           const o = document.createElement("option"); o.value = c.src; o.textContent = c.src + " (不明)"; input.appendChild(o);
         }
         input.value = c.src;
-        input.addEventListener("change", ()=>{ c.src = input.value; markDirty(); apply(c, true); });
+        input.addEventListener("change", ()=>{ pushUndo(); c.src = input.value; markDirty(); apply(c, true); });
+      }else if(f.t === "check"){
+        input = document.createElement("input"); input.type = "checkbox"; input.checked = !!c[f.k];
+        input.addEventListener("change", ()=>{ pushUndo(); c[f.k] = input.checked; markDirty(); apply(c, true); });
+      }else if(f.t === "color"){
+        const wrap = document.createElement("span");
+        wrap.style.cssText = "display:flex;gap:4px;align-items:center;";
+        input = document.createElement("input"); input.type = "color";
+        input.value = /^#[0-9a-fA-F]{6}$/.test(c[f.k]) ? c[f.k] : "#ffffff";
+        const txt = document.createElement("input"); txt.type = "text"; txt.value = c[f.k] || ""; txt.style.flex = "1"; txt.placeholder = "例: #ff0000 / 空欄で無し";
+        const set = (v)=>{ c[f.k] = v; markDirty(); apply(c, false); };
+        input.addEventListener("focusin", pushUndo);
+        txt.addEventListener("focusin", pushUndo);
+        input.addEventListener("input", ()=>{ txt.value = input.value; set(input.value); });
+        txt.addEventListener("input", ()=> set(txt.value));
+        wrap.appendChild(input); wrap.appendChild(txt);
+        box.appendChild(lab); box.appendChild(wrap);
+        continue;
       }else if(f.t === "fit"){
         const wrap = document.createElement("span");
         wrap.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
@@ -598,19 +823,25 @@
         input = document.createElement("select");
         for(const [v, t] of f.opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
         input.value = c[f.k];
-        input.addEventListener("change", ()=>{ c[f.k] = input.value; markDirty(); apply(c, false); });
+        input.addEventListener("change", ()=>{ pushUndo(); c[f.k] = input.value; markDirty(); apply(c, false); });
       }else{
         input = document.createElement("input");
         input.type = f.t === "range" ? "range" : (f.t === "num" ? "number" : "text");
         if(f.min != null) input.min = f.min;
         if(f.max != null) input.max = f.max;
         if(f.step != null) input.step = f.step;
-        input.value = c[f.k];
+        input.value = ANIM.includes(f.k) ? propValue(c, f.k) : c[f.k];
+        input.addEventListener("focusin", pushUndo);
         input.addEventListener("input", ()=>{
-          c[f.k] = f.t === "text" ? input.value : Number(input.value);
+          const v = f.t === "text" ? input.value : Number(input.value);
+          if(f.k === "start" || f.k === "dur"){
+            c[f.k] = Math.max(f.k === "dur" ? frameSec() : 0, v);
+            markDirty(); refreshLight(); return;      // 入力中に欄を作り直さない
+          }
+          setProp(c, f.k, v);
           markDirty();
-          if(f.k === "start" || f.k === "dur") { refresh(false); }
-          else apply(c, false);
+          apply(c, false);
+          if(ANIM.includes(f.k) && isAnimated(c, f.k)) renderTimeline();
         });
       }
       if(f.hint){ lab.title = f.hint; input.title = f.hint; }
@@ -618,14 +849,89 @@
     }
   }
 
-  /* ---- 画面サイズに合わせる ----
-     クリップの枠は「ステージに対する %」で持つので、画面いっぱい = 中心(50,50)・幅高さ 100%。
-     素材の比率で最大にするときは、ステージ(16:9)の中に素材と同じ形の枠を作る:
-       枠の実寸比 = (w / h) × (16/9) なので、素材比 asp に合わせるには w/h = asp ÷ (16/9)。 */
-  const STAGE_ASPECT = 16 / 9;
-  const assetSizeCache = new Map();
+  /* ---- 選択中キーフレームの調整 ---- */
+  function renderKeyEdit(){
+    const box = el("key-edit"), none = el("key-none");
+    box.textContent = "";
+    const c = selectedClip();
+    const k = c && selKey && selKey.clipId === c.id ? keyAtTime(c, selKey.t) : null;
+    const ok = !!(k && k[selKey.prop] != null);
+    box.hidden = !ok; none.hidden = ok;
+    if(!ok) return;
+    const prop = selKey.prop;
+    const add = (labelText, node)=>{
+      const l = document.createElement("label"); l.textContent = labelText;
+      box.appendChild(l); box.appendChild(node);
+    };
 
-  // 素材の元の大きさ(px)を読む。読めなければ null
+    const pn = document.createElement("span");
+    pn.style.color = "var(--frame-bright)";
+    pn.textContent = PROP_LABEL[prop];
+    add("プロパティ", pn);
+
+    const tIn = document.createElement("input");
+    tIn.type = "number"; tIn.step = String(round(frameSec(), 4)); tIn.min = "0"; tIn.max = String(c.dur); tIn.value = k.t;
+    tIn.addEventListener("focusin", pushUndo);
+    tIn.addEventListener("change", ()=>{
+      const nt = snapTime(clamp(Number(tIn.value) || 0, 0, c.dur));
+      movePropKey(c, prop, k.t, nt);
+      selKey = { clipId: c.id, prop, t: nt };
+      markDirty(); apply(c, false); renderAll();
+    });
+    add("時刻(秒)", tIn);
+
+    const vIn = document.createElement("input");
+    vIn.type = "number"; vIn.step = (prop === "opacity" || prop === "scale") ? "0.05" : "0.5"; vIn.value = k[prop];
+    vIn.addEventListener("focusin", pushUndo);
+    vIn.addEventListener("input", ()=>{
+      k[prop] = round(Number(vIn.value) || 0, 3);
+      markDirty(); apply(c, false); renderTimeline();
+    });
+    add("値", vIn);
+
+    const es = document.createElement("select");
+    for(const name of Object.keys(YA.EASINGS)){
+      const o = document.createElement("option"); o.value = name; o.textContent = name; es.appendChild(o);
+    }
+    es.value = k.ease;
+    es.title = "このキーへ向かう区間の補間";
+    es.addEventListener("change", ()=>{ pushUndo(); k.ease = es.value; markDirty(); apply(c, false); renderTimeline(); });
+    add("補間", es);
+
+    const del = document.createElement("button");
+    del.className = "sm ng"; del.textContent = "このキーを削除";
+    del.addEventListener("click", ()=>{
+      pushUndo();
+      removePropKey(c, prop, k.t);
+      markDirty(); apply(c, false); renderAll();
+    });
+    add("", del);
+  }
+
+  el("btn-key-add").addEventListener("click", addKeysAtPlayhead);
+  el("key-preset").addEventListener("change", ()=>{
+    const c = selectedClip();
+    const kind = el("key-preset").value;
+    el("key-preset").value = "";
+    if(!c || !kind) return;
+    pushUndo();
+    const d = c.dur, half = d / 2;
+    const K = {
+      fade:   [{ t:0, opacity:0 }, { t:Math.min(0.3, half), opacity:1, ease:"out" }, { t:Math.max(0, d - 0.3), opacity:1, ease:"linear" }, { t:d, opacity:0, ease:"in" }],
+      zoom:   [{ t:0, scale:0.4, opacity:0 }, { t:Math.min(0.4, half), scale:1, opacity:1, ease:"outBack" }, { t:d, scale:1.05, opacity:1, ease:"linear" }],
+      slideL: [{ t:0, x:c.x - 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
+      slideR: [{ t:0, x:c.x + 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
+      drop:   [{ t:0, y:c.y - 60, opacity:0 }, { t:Math.min(0.45, half), y:c.y, opacity:1, ease:"outBounce" }, { t:d, y:c.y, opacity:1, ease:"linear" }],
+      pulse:  [{ t:0, scale:1 }, { t:half, scale:1.18, ease:"inOut" }, { t:d, scale:1, ease:"inOut" }],
+      flash:  [{ t:0, opacity:1, ease:"step" }, { t:d * 0.25, opacity:0, ease:"step" }, { t:d * 0.5, opacity:1, ease:"step" }, { t:d * 0.75, opacity:0, ease:"step" }, { t:d, opacity:1, ease:"step" }],
+    }[kind];
+    c.keys = K.map(k=> ({ ease:"inOut", ...k, t: snapTime(k.t) }));
+    selKey = null;
+    markDirty(); apply(c, false); renderAll();
+  });
+
+  /* ===================== 画面サイズに合わせる ===================== */
+  const assetSizeCache = new Map();
   function measureAsset(url, kind){
     if(assetSizeCache.has(url)) return Promise.resolve(assetSizeCache.get(url));
     return new Promise((resolve)=>{
@@ -644,7 +950,6 @@
       }
     });
   }
-
   // 枠を作り直す。キーフレームで動かしている場合も、同じずれ幅・同じ倍率でついてくる
   function resizeClip(c, x, y, w, h){
     const dx = x - c.x, dy = y - c.y;
@@ -652,33 +957,33 @@
     for(const k of c.keys){
       if(k.x != null) k.x = round(k.x + dx, 2);
       if(k.y != null) k.y = round(k.y + dy, 2);
-      if(k.w != null) k.w = round(k.w * rw, 2);
-      if(k.h != null) k.h = round(k.h * rh, 2);
+      if(k.w != null) k.w = round(Math.max(0.5, k.w * rw), 2);
+      if(k.h != null) k.h = round(Math.max(0.5, k.h * rh), 2);
     }
     c.x = round(x, 2); c.y = round(y, 2); c.w = round(w, 2); c.h = round(h, 2);
   }
-
   function fitToStage(c){
+    pushUndo();
     resizeClip(c, 50, 50, 100, 100);
-    markDirty(); apply(c, false); renderProps(); renderKeys();
+    markDirty(); apply(c, false); renderAll();
     setStatus("画面いっぱいに合わせました", "ok");
   }
-
   async function fitToAsset(c){
     if(!c.src){ setStatus("先に素材を選んでください", "ng"); return null; }
     const size = await measureAsset(player.assetUrl(c.src), c.type);
     if(!size){ setStatus("素材の大きさを読み取れませんでした", "ng"); return null; }
+    pushUndo();
     const asp = size.w / size.h;
     const w = asp >= STAGE_ASPECT ? 100 : 100 * (asp / STAGE_ASPECT);
     const h = asp >= STAGE_ASPECT ? 100 * (STAGE_ASPECT / asp) : 100;
     resizeClip(c, 50, 50, w, h);
     c.fit = "fill";   // 枠が素材と同じ形になるので、引き伸ばしでちょうど収まる
-    markDirty(); apply(c, false); renderProps(); renderKeys();
+    markDirty(); apply(c, false); renderAll();
     setStatus(`素材の比率 ${size.w}×${size.h} に合わせました`, "ok");
     return size;
   }
 
-  // クリップ1件の変更を再生機へ反映する。structural=true のときだけ DOM を作り直す
+  // レイヤー1件の変更を再生機へ反映する。structural=true のときだけ DOM を作り直す
   function apply(clip, structural){
     if(structural){ refresh(true); return; }
     const entry = player.entries.find(e=> e.clip.id === clip.id);
@@ -687,130 +992,19 @@
     player.applyStatic(entry);
     player.seek(time);
     renderSel();
-    renderClipList();
-    renderTimeline();
   }
 
-  /* ---- キーフレーム ----
-     キーにフォーカス (またはタイムラインの菱形をクリック) したら、そのキーの時刻へプレイヘッドを移す。
-     プレビューがそのキーの姿になり、画面上のドラッグもそのキーだけを動かすようになる。
-     表を作り直すとフォーカスが外れるので、ここでは表以外だけを描き直す。 */
-  function gotoKey(c, k){
-    if(!scene || !c || !k) return;
-    const t = clamp(round(c.start + k.t, 3), 0, scene.duration);
-    if(Math.abs(t - time) > 0.002){
-      stopPlayback();
-      time = t;
-      player.seek(time);
-      renderTimeline(); renderSel(); renderProps();
-      el("tl-time").textContent = `${time.toFixed(2)} / ${scene.duration.toFixed(2)} 秒`;
-    }
-    markKeyRows(c);
-  }
-  // 現在のプレイヘッド上にあるキーの行を目立たせる (表は作り直さない)
-  function markKeyRows(c){
-    const local = time - c.start;
-    Array.from(el("key-table").querySelectorAll("tr")).slice(1).forEach((tr, i)=>{
-      const k = c.keys[i];
-      tr.classList.toggle("at", !!k && Math.abs(k.t - local) < 0.03);
-    });
-  }
-
-  function renderKeys(){
-    const table = el("key-table");
-    table.textContent = "";
-    const c = selectedClip();
-    if(!c) return;
-    const head = document.createElement("tr");
-    head.innerHTML = "<th>t</th><th>X</th><th>Y</th><th>幅</th><th>高</th><th>透</th><th>拡</th><th>回</th><th>補間</th><th></th>";
-    table.appendChild(head);
-    const local = time - c.start;
-    c.keys.forEach((k, i)=>{
-      const tr = document.createElement("tr");
-      if(Math.abs(k.t - local) < 0.03) tr.className = "at";
-      // 行のどこかにフォーカスが入ったら、そのキーを「いま編集中のキー」にする
-      tr.addEventListener("focusin", ()=> gotoKey(c, k));
-      tr.addEventListener("click", (ev)=>{ if(ev.target === tr || ev.target.tagName === "TD") gotoKey(c, k); });
-      const cell = (child)=>{ const td = document.createElement("td"); td.appendChild(child); tr.appendChild(td); return td; };
-      const tIn = document.createElement("input");
-      tIn.type = "number"; tIn.step = "0.05"; tIn.min = "0"; tIn.value = k.t;
-      tIn.addEventListener("input", ()=>{
-        k.t = Math.max(0, Number(tIn.value) || 0);
-        c.keys.sort((a, b)=> a.t - b.t);
-        markDirty(); apply(c, false);
-      });
-      cell(tIn);
-      for(const p of YA.ANIM_PROPS){
-        const inp = document.createElement("input");
-        inp.type = "number"; inp.step = p === "opacity" || p === "scale" ? "0.05" : "0.5";
-        inp.value = k[p] != null ? k[p] : "";
-        inp.placeholder = "–";
-        inp.addEventListener("input", ()=>{
-          if(inp.value === "") delete k[p]; else k[p] = Number(inp.value);
-          markDirty(); apply(c, false);
-        });
-        cell(inp);
-      }
-      const es = document.createElement("select");
-      for(const name of Object.keys(YA.EASINGS)){
-        const o = document.createElement("option"); o.value = name; o.textContent = name; es.appendChild(o);
-      }
-      es.value = k.ease;
-      es.addEventListener("change", ()=>{ k.ease = es.value; markDirty(); apply(c, false); });
-      cell(es);
-      const del = document.createElement("button");
-      del.className = "sm ng"; del.textContent = "×";
-      del.addEventListener("click", ()=>{ c.keys.splice(i, 1); markDirty(); apply(c, false); renderKeys(); });
-      cell(del);
-      table.appendChild(tr);
-    });
-  }
-
-  el("btn-key-add").addEventListener("click", ()=>{
-    const c = selectedClip();
-    if(!c) return;
-    const local = clamp(round(time - c.start, 2), 0, c.dur);
-    const p = YA.propsAt(c, local);
-    const k = { t: local, ease: "inOut" };
-    for(const prop of YA.ANIM_PROPS) k[prop] = round(p[prop], 3);
-    c.keys.push(k);
-    c.keys.sort((a, b)=> a.t - b.t);
-    markDirty(); apply(c, false); renderKeys();
-  });
-
-  // よく使う動きのひな形。今のクリップの基本値を起点に、始点と終点のキーを置く
-  el("key-preset").addEventListener("change", ()=>{
-    const c = selectedClip();
-    const kind = el("key-preset").value;
-    el("key-preset").value = "";
-    if(!c || !kind) return;
-    const d = c.dur, half = d / 2;
-    const K = {
-      fade:   [{ t:0, opacity:0 }, { t:Math.min(0.3, half), opacity:1, ease:"out" }, { t:Math.max(0, d - 0.3), opacity:1, ease:"linear" }, { t:d, opacity:0, ease:"in" }],
-      zoom:   [{ t:0, scale:0.4, opacity:0 }, { t:Math.min(0.4, half), scale:1, opacity:1, ease:"outBack" }, { t:d, scale:1.05, opacity:1, ease:"linear" }],
-      slideL: [{ t:0, x:c.x - 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
-      slideR: [{ t:0, x:c.x + 70, opacity:0 }, { t:Math.min(0.35, half), x:c.x, opacity:1, ease:"outCubic" }, { t:d, x:c.x, opacity:1, ease:"linear" }],
-      drop:   [{ t:0, y:c.y - 60, opacity:0 }, { t:Math.min(0.45, half), y:c.y, opacity:1, ease:"outBounce" }, { t:d, y:c.y, opacity:1, ease:"linear" }],
-      pulse:  [{ t:0, scale:1 }, { t:half, scale:1.18, ease:"inOut" }, { t:d, scale:1, ease:"inOut" }],
-      flash:  [{ t:0, opacity:1, ease:"step" }, { t:d * 0.25, opacity:0, ease:"step" }, { t:d * 0.5, opacity:1, ease:"step" }, { t:d * 0.75, opacity:0, ease:"step" }, { t:d, opacity:1, ease:"step" }],
-    }[kind];
-    c.keys = K.map(k=> ({ ease:"inOut", ...k, t: round(k.t, 2) }));
-    markDirty(); apply(c, false); renderKeys();
-  });
-
-  /* ===================== プレビュー上の選択と操作 ===================== */
+  /* ===================== プレビュー上の操作 ===================== */
   const selBox = el("sel-box");
-
   function clipRect(c){
-    const local = time - c.start;
-    if(local < 0 || local > c.dur) return null;
-    const p = YA.propsAt(c, local);
+    const lt = time - c.start;
+    if(lt < 0 || lt > c.dur) return null;
+    const p = YA.propsAt(c, lt);
     return { l: p.x - p.w / 2, t: p.y - p.h / 2, w: p.w, h: p.h, p };
   }
-
   function renderSel(){
     const c = selectedClip();
-    const r = c && c.type !== "sound" ? clipRect(c) : null;
+    const r = c && c.type !== "sound" && c.type !== "scene" ? clipRect(c) : null;
     if(!r){ selBox.style.display = "none"; return; }
     selBox.style.display = "block";
     selBox.style.left = r.l + "%";
@@ -819,40 +1013,27 @@
     selBox.style.height = r.h + "%";
     selBox.querySelector(".lbl").textContent = c.name || TYPE_LABEL[c.type];
   }
-
-  // ドラッグでクリップを動かす。プレイヘッドの位置にキーがあればそのキーを、無ければ基本値と全キーをまとめて動かす
-  function nudge(c, dx, dy, resize){
-    const local = time - c.start;
-    const k = c.keys.find(k=> Math.abs(k.t - local) < 0.03);
-    const p = YA.propsAt(c, local);
-    if(k){
-      if(resize){ k.w = round(Math.max(0.5, p.w + dx), 2); k.h = round(Math.max(0.5, p.h + dy), 2); }
-      else { k.x = round(p.x + dx, 2); k.y = round(p.y + dy, 2); }
-      return;
-    }
-    if(resize){
-      c.w = round(Math.max(0.5, c.w + dx), 2); c.h = round(Math.max(0.5, c.h + dy), 2);
-      for(const kk of c.keys){ if(kk.w != null) kk.w = round(Math.max(0.5, kk.w + dx), 2); if(kk.h != null) kk.h = round(Math.max(0.5, kk.h + dy), 2); }
-    }else{
-      c.x = round(c.x + dx, 2); c.y = round(c.y + dy, 2);
-      for(const kk of c.keys){ if(kk.x != null) kk.x = round(kk.x + dx, 2); if(kk.y != null) kk.y = round(kk.y + dy, 2); }
-    }
+  function showSnapGuide(vx, hy){
+    const v = el("snap-v"), h = el("snap-h");
+    v.style.display = vx == null ? "none" : "block";
+    h.style.display = hy == null ? "none" : "block";
+    if(vx != null) v.style.left = vx + "%";
+    if(hy != null) h.style.top = hy + "%";
   }
 
   (function setupStageDrag(){
     const layer = el("edit-layer");
-    let drag = null;   // { clip, startX, startY, resize }
+    let drag = null;
 
     function pct(ev){
       const r = layer.getBoundingClientRect();
-      return { x: (ev.clientX - r.left) / r.width * 100, y: (ev.clientY - r.top) / r.height * 100, rw: r.width, rh: r.height };
+      return { x: (ev.clientX - r.left) / r.width * 100, y: (ev.clientY - r.top) / r.height * 100 };
     }
-    // その時刻に見えているクリップのうち、点の上にある一番手前のものを拾う
     function hit(x, y){
       if(!scene) return null;
       for(let i = scene.tracks.length - 1; i >= 0; i--){
         const c = scene.tracks[i];
-        if(c.type === "sound") continue;
+        if(c.type === "sound" || c.type === "scene") continue;
         const r = clipRect(c);
         if(!r) continue;
         if(x >= r.l && x <= r.l + r.w && y >= r.t && y <= r.t + r.h) return c;
@@ -866,108 +1047,251 @@
       let c = selectedClip();
       if(!resize){
         const h = hit(q.x, q.y);
-        if(h){ c = h; selId = h.id; renderAll(); }
-        else if(!ev.target.closest("#sel-box")) { selId = null; renderAll(); return; }
+        if(h && h.id !== selId){ selId = h.id; selKey = null; c = h; renderAll(); }
+        else if(h) c = h;
+        else if(!ev.target.closest("#sel-box")){ selId = null; selKey = null; renderAll(); return; }
       }
       if(!c) return;
-      drag = { clip: c, x: q.x, y: q.y, resize };
+      pushUndo();
+      drag = { clip: c, x: q.x, y: q.y, sx: q.x, sy: q.y, resize, axis: null };
       layer.setPointerCapture(ev.pointerId);
       ev.preventDefault();
     });
     layer.addEventListener("pointermove", (ev)=>{
       if(!drag) return;
       const q = pct(ev);
-      const dx = q.x - drag.x, dy = q.y - drag.y;
+      let dx = q.x - drag.x, dy = q.y - drag.y;
       if(Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return;
+      // Shift: 移動は縦横どちらかに固定、サイズ変更は縦横比を保つ
+      if(ev.shiftKey && !drag.resize){
+        if(!drag.axis) drag.axis = Math.abs(q.x - drag.sx) >= Math.abs(q.y - drag.sy) ? "x" : "y";
+        if(drag.axis === "x") dy = 0; else dx = 0;
+      }
+      if(ev.shiftKey && drag.resize){
+        const asp = drag.clip.h > 0 ? drag.clip.w / drag.clip.h : 1;
+        dy = dx / asp;
+      }
       drag.x = q.x; drag.y = q.y;
-      nudge(drag.clip, dx, dy, drag.resize);
+      const c = drag.clip;
+      const p = YA.propsAt(c, localTime(c));
+      if(drag.resize){
+        setProp(c, "w", Math.max(0.5, p.w + dx));
+        setProp(c, "h", Math.max(0.5, p.h + dy));
+        showSnapGuide(null, null);
+      }else{
+        let nx = p.x + dx, ny = p.y + dy, gv = null, gh = null;
+        if(snapOn() && !ev.altKey){
+          for(const target of [0, 50, 100]){
+            if(Math.abs(nx - target) < 1.2){ nx = target; gv = target; }
+            if(Math.abs(ny - target) < 1.2){ ny = target; gh = target; }
+          }
+        }
+        setProp(c, "x", nx);
+        setProp(c, "y", ny);
+        showSnapGuide(gv, gh);
+      }
       markDirty();
-      apply(drag.clip, false);
-      renderProps();
-      renderKeys();
+      apply(c, false);
+      renderTimeline();
     });
     const end = (ev)=>{
       if(!drag) return;
       drag = null;
+      showSnapGuide(null, null);
       try{ layer.releasePointerCapture(ev.pointerId); }catch(e){}
+      renderAll();
     };
     layer.addEventListener("pointerup", end);
     layer.addEventListener("pointercancel", end);
   })();
 
   /* ===================== タイムラインの操作 ===================== */
+  function seekTo(t){
+    if(!scene) return;
+    stopPlayback();
+    time = clamp(t, 0, scene.duration);
+    player.seek(time);
+    renderAll();
+  }
+  // ドラッグ中のスナップ先: プレイヘッド・シーンの端・他レイヤーの端
+  function snapTargets(exceptId){
+    const out = [0, scene.duration, time];
+    for(const c of scene.tracks) if(c.id !== exceptId){ out.push(c.start, round(c.start + c.dur, 4)); }
+    return out;
+  }
+  function applySnap(t, exceptId, ev){
+    if(!snapOn() || (ev && ev.altKey)) return snapTime(t);
+    const tol = pxToTime(7);
+    for(const s of snapTargets(exceptId)) if(Math.abs(t - s) <= tol) return round(s, 4);
+    return snapTime(t);
+  }
+  function showTlSnap(t){
+    const line = el("tl-snapline");
+    if(t == null){ line.style.display = "none"; return; }
+    line.style.display = "block";
+    line.style.left = `calc(var(--labw) + ${timeToPx(t)}px)`;
+  }
+
   (function setupTimelineDrag(){
-    const ruler = el("tl-ruler"), rows = el("tl-rows");
+    const grid = el("tl-grid");
+    let drag = null;
 
-    function timeAt(ev, box){
-      const r = box.getBoundingClientRect();
-      return clamp((ev.clientX - r.left) / r.width * scene.duration, 0, scene.duration);
+    function timeAt(ev){
+      const trk = grid.querySelector(".tl-trk");
+      if(!trk) return 0;
+      const r = trk.getBoundingClientRect();
+      return clamp(pxToTime(ev.clientX - r.left), 0, scene.duration);
     }
-    function snap(t, ev){
-      return ev.shiftKey ? round(t, 3) : round(Math.round(t / 0.05) * 0.05, 3);
-    }
-    function seekTo(t){
-      time = clamp(t, 0, scene.duration);
-      stopPlayback();
-      player.seek(time);
-      renderAll();
-    }
-    ruler.addEventListener("pointerdown", (ev)=>{
-      if(!scene) return;
-      ruler.setPointerCapture(ev.pointerId);
-      seekTo(timeAt(ev, ruler));
-      const move = (e)=> seekTo(timeAt(e, ruler));
-      const up = (e)=>{ ruler.removeEventListener("pointermove", move); ruler.removeEventListener("pointerup", up); try{ ruler.releasePointerCapture(e.pointerId); }catch(err){} };
-      ruler.addEventListener("pointermove", move);
-      ruler.addEventListener("pointerup", up);
-    });
 
-    let drag = null;   // { clip, mode:"move|l|r", t0, start0, dur0 }
-    rows.addEventListener("pointerdown", (ev)=>{
+    grid.addEventListener("pointerdown", (ev)=>{
       if(!scene) return;
-      const bar = ev.target.closest(".tl-bar");
-      if(!bar) return;
-      const c = scene.tracks.find(x=> x.id === bar.dataset.clipId);
-      if(!c) return;
-      selId = c.id;
-      // 菱形(キーフレーム)を押したときは、バーを動かさずにそのキーへ移動する
-      if(ev.target.dataset.key !== undefined){
-        const k = c.keys[Number(ev.target.dataset.key)];
+      const target = ev.target;
+      const isKf = target.classList && target.classList.contains("kf") && target.dataset.prop;
+      const bar = target.closest ? target.closest(".tl-bar") : null;
+      const trk = target.closest ? target.closest(".tl-trk") : null;
+
+      // キーフレーム: Alt+クリックで削除、それ以外は選んで時間ドラッグ
+      if(isKf){
+        const c = scene.tracks.find(x=> x.id === target.dataset.clipId);
+        if(!c) return;
+        const prop = target.dataset.prop, t0 = Number(target.dataset.t);
+        if(ev.altKey){
+          pushUndo(); removePropKey(c, prop, t0); markDirty(); apply(c, false); renderAll(); return;
+        }
+        pushUndo();
+        selId = c.id; selKey = { clipId: c.id, prop, t: t0 };
+        drag = { kind:"key", clip: c, prop, t0 };
+        grid.setPointerCapture(ev.pointerId);
+        seekTo(c.start + t0);
+        return;
+      }
+      // レイヤーのバー: 本体で移動、端でトリム
+      if(bar){
+        const c = scene.tracks.find(x=> x.id === bar.dataset.clipId);
+        if(!c) return;
+        pushUndo();
+        selId = c.id; selKey = null;
+        const grip = target.dataset.grip;
+        drag = { kind: grip === "l" ? "trimL" : (grip === "r" ? "trimR" : "move"), clip: c,
+                 t0: timeAt(ev), start0: c.start, dur0: c.dur };
+        grid.setPointerCapture(ev.pointerId);
         renderAll();
-        gotoKey(c, k);
         ev.preventDefault();
         return;
       }
-      const grip = ev.target.dataset.grip;
-      drag = { clip: c, mode: grip === "l" ? "l" : (grip === "r" ? "r" : "move"), t0: timeAt(ev, rows), start0: c.start, dur0: c.dur };
-      rows.setPointerCapture(ev.pointerId);
-      renderAll();
-      ev.preventDefault();
+      // 目盛り・空きトラック: スクラブ
+      if(trk){
+        drag = { kind:"scrub" };
+        grid.setPointerCapture(ev.pointerId);
+        if(trk.dataset.clipId && trk.dataset.clipId !== selId) selId = trk.dataset.clipId;
+        seekTo(snapTime(timeAt(ev)));
+        ev.preventDefault();
+      }
     });
-    rows.addEventListener("pointermove", (ev)=>{
-      if(!drag) return;
-      const d = timeAt(ev, rows) - drag.t0;
+
+    grid.addEventListener("pointermove", (ev)=>{
+      if(!drag || !scene) return;
+      const t = timeAt(ev);
+      if(drag.kind === "scrub"){ seekTo(snapTime(t)); return; }
       const c = drag.clip;
-      if(drag.mode === "move"){
-        c.start = Math.max(0, snap(drag.start0 + d, ev));
-      }else if(drag.mode === "r"){
-        c.dur = Math.max(0.05, snap(drag.dur0 + d, ev));
+      if(drag.kind === "key"){
+        const nt = clamp(applySnap(t, c.id, ev) - c.start, 0, c.dur);
+        if(Math.abs(nt - drag.t0) > 1e-4){
+          movePropKey(c, drag.prop, drag.t0, nt);
+          drag.t0 = nt;
+          selKey = { clipId: c.id, prop: drag.prop, t: nt };
+          markDirty(); apply(c, false); renderTimeline(); renderKeyEdit();
+        }
+        return;
+      }
+      const d = t - drag.t0;
+      if(drag.kind === "move"){
+        c.start = round(Math.max(0, applySnap(drag.start0 + d, c.id, ev)), 4);
+        showTlSnap(c.start);
+      }else if(drag.kind === "trimR"){
+        const ne = applySnap(drag.start0 + drag.dur0 + d, c.id, ev);
+        c.dur = round(Math.max(frameSec(), ne - c.start), 4);
+        showTlSnap(round(c.start + c.dur, 4));
       }else{
-        const s = clamp(snap(drag.start0 + d, ev), 0, drag.start0 + drag.dur0 - 0.05);
-        c.dur = round(drag.dur0 + (drag.start0 - s), 3);
-        c.start = s;
+        const ns = clamp(applySnap(drag.start0 + d, c.id, ev), 0, drag.start0 + drag.dur0 - frameSec());
+        c.dur = round(drag.dur0 + (drag.start0 - ns), 4);
+        c.start = round(ns, 4);
+        showTlSnap(c.start);
       }
       markDirty();
-      player.seek(time);
       apply(c, false);
-      renderProps();
+      renderTimeline();
     });
-    const end = (ev)=>{ if(!drag) return; drag = null; try{ rows.releasePointerCapture(ev.pointerId); }catch(e){} refresh(false); };
-    rows.addEventListener("pointerup", end);
-    rows.addEventListener("pointercancel", end);
+
+    const end = (ev)=>{
+      if(!drag) return;
+      drag = null;
+      showTlSnap(null);
+      try{ grid.releasePointerCapture(ev.pointerId); }catch(e){}
+      renderAll();
+    };
+    grid.addEventListener("pointerup", end);
+    grid.addEventListener("pointercancel", end);
+
+    // プロパティ行のダブルクリックでキーを追加
+    grid.addEventListener("dblclick", (ev)=>{
+      const trk = ev.target.closest && ev.target.closest(".tl-trk");
+      if(!trk || !trk.dataset.prop) return;
+      const c = scene.tracks.find(x=> x.id === trk.dataset.clipId);
+      if(!c) return;
+      const r = trk.getBoundingClientRect();
+      const t = clamp(snapTime(pxToTime(ev.clientX - r.left)) - c.start, 0, c.dur);
+      pushUndo();
+      const prop = trk.dataset.prop;
+      setPropKey(c, prop, t, YA.propsAt(c, t)[prop]);
+      selKey = { clipId: c.id, prop, t: round(t, 4) };
+      markDirty(); apply(c, false); renderAll();
+    });
+
+    // Ctrl+ホイールで拡大縮小 (ホイールだけなら通常のスクロール)
+    el("tl-scroll").addEventListener("wheel", (ev)=>{
+      if(!ev.ctrlKey) return;
+      ev.preventDefault();
+      setZoom(zoom * (ev.deltaY < 0 ? 1.25 : 0.8));
+    }, { passive:false });
   })();
 
+  function setZoom(z){
+    zoom = clamp(z, 1, 16);
+    renderTimeline();
+  }
+  el("btn-zoom-in").addEventListener("click", ()=> setZoom(zoom * 1.25));
+  el("btn-zoom-out").addEventListener("click", ()=> setZoom(zoom * 0.8));
+  el("btn-zoom-fit").addEventListener("click", ()=> setZoom(1));
+  window.addEventListener("resize", ()=>{ if(scene) renderTimeline(); });
+
   /* ===================== 再生 ===================== */
+  const PREVIEW_MAX_DEPTH = 4;
+  const previewPlayers = new Set();
+  /* 「予告呼出」レイヤーのプレビュー。呼ばれた先のシーンをプレビューに重ねて再生する。
+     再生されるのは保存済みの内容なので、呼び出し先を直したら保存してから確かめる。 */
+  function previewScene(id, depth){
+    if(depth > PREVIEW_MAX_DEPTH){ setStatus("予告の呼び出しが深すぎます", "ng"); return; }
+    const target = scenes.find(sc=> sc.id === id);
+    if(!target){ setStatus(`呼び出し先の予告が見つかりません: ${id || "(未指定)"}`, "ng"); return; }
+    const box = document.createElement("div");
+    box.style.cssText = "position:absolute;inset:0;overflow:hidden;pointer-events:none;";
+    el("stage").appendChild(box);
+    const p = new YA.ScenePlayer(box, {
+      base: "yokoku/authoring/",
+      volume: ()=> Number(el("volume").value),
+      playScene: (next)=> previewScene(next, depth + 1),
+    });
+    previewPlayers.add(p);
+    p.load(target);
+    p.play(0).then(()=>{
+      previewPlayers.delete(p);
+      p.destroy();
+      if(box.parentNode) box.parentNode.removeChild(box);
+    });
+  }
+  function stopPreviewScenes(){ for(const p of [...previewPlayers]) p.stop(); }
+
   let uiRaf = 0;
   function stopPlayback(){
     if(uiRaf){ cancelAnimationFrame(uiRaf); uiRaf = 0; }
@@ -990,8 +1314,7 @@
     const tick = ()=>{
       if(!player.playing) return;
       time = player.time;
-      el("tl-time").textContent = `${time.toFixed(2)} / ${scene.duration.toFixed(2)} 秒`;
-      el("tl-playhead").style.left = (clamp(time / scene.duration, 0, 1) * 100) + "%";
+      renderTime();
       renderSel();
       uiRaf = requestAnimationFrame(tick);
     };
@@ -1001,26 +1324,36 @@
     if(player.playing){ time = player.time; stopPlayback(); player.seek(time); renderAll(); }
     else startPlayback();
   });
-  el("btn-stop").addEventListener("click", ()=>{ stopPlayback(); time = 0; player.seek(0); renderAll(); });
+  el("btn-stop").addEventListener("click", ()=> seekTo(0));
 
   /* ===================== シーン設定の入力 ===================== */
-  el("sc-name").addEventListener("input", ()=>{ scene.name = el("sc-name").value; markDirty(); renderClipList(); });
+  el("sc-name").addEventListener("focusin", pushUndo);
+  el("sc-name").addEventListener("input", ()=>{ scene.name = el("sc-name").value; markDirty(); renderTimeline(); });
+  el("sc-dur").addEventListener("focusin", pushUndo);
   el("sc-dur").addEventListener("input", ()=>{
     scene.duration = Math.max(0.2, Number(el("sc-dur").value) || 0.2);
-    markDirty(); refresh(false);
+    markDirty(); refreshLight();
   });
   for(const id of ["sc-ev","sc-trig"]){
     el(id).addEventListener("change", ()=>{
+      pushUndo();
       const ev = el("sc-ev").value;
       scene.bind = ev ? YA.normalizeBind({ event: ev, trigger: el("sc-trig").value }) : null;
       markDirty();
     });
   }
+  el("fps").value = String(fps);
+  el("fps").addEventListener("change", ()=>{
+    fps = Number(el("fps").value) || 30;
+    localStorage.setItem("yk_fps", String(fps));
+    renderAll();
+  });
 
-  /* ===================== クリップの追加・並べ替え ===================== */
+  /* ===================== レイヤーの追加・並べ替え ===================== */
   function addClip(type, patch){
-    if(!scene) return;
-    const c = YA.blankClip(type, { start: round(time, 2), dur: Math.min(1.5, Math.max(0.3, scene.duration - time)), ...(patch || {}) });
+    if(!scene) return null;
+    pushUndo();
+    const c = YA.blankClip(type, { start: snapTime(time), dur: Math.min(1.5, Math.max(0.3, scene.duration - time)), ...(patch || {}) });
     if(type === "text"){ c.name = "文字"; c.text = "チャンス"; c.color = "#ffe27a"; c.stroke = "#3a1500"; c.strokeW = 0.5; c.fontSize = 12; c.h = 20; }
     if(type === "shape"){ c.name = "図形"; c.bg = "#ff3b3b"; c.w = 100; c.h = 100; c.opacity = 0.6; c.blend = "screen"; }
     if(type === "image"){ c.name = "画像"; c.w = 50; c.h = 50; }
@@ -1028,7 +1361,7 @@
     if(type === "sound"){ c.name = "音"; }
     if(type === "scene"){ c.name = "予告呼出"; c.dur = 0.1; }   // 時刻を指す目印なので短くてよい
     scene.tracks.push(c);
-    selId = c.id;
+    selId = c.id; selKey = null;
     markDirty();
     refresh(true);
     // 素材つきの画像・動画は、置いた時点で素材の比率どおりに画面へ合わせておく
@@ -1037,28 +1370,34 @@
   }
   document.querySelectorAll("[data-add]").forEach(b=> b.addEventListener("click", ()=> addClip(b.dataset.add)));
 
-  el("btn-clip-del").addEventListener("click", ()=>{
+  function deleteSelected(){
     const c = selectedClip(); if(!c) return;
+    pushUndo();
     scene.tracks = scene.tracks.filter(x=> x !== c);
     selId = scene.tracks.length ? scene.tracks[scene.tracks.length - 1].id : null;
+    selKey = null;
     markDirty(); refresh(true);
-  });
-  el("btn-clip-dup").addEventListener("click", ()=>{
+  }
+  function duplicateSelected(){
     const c = selectedClip(); if(!c) return;
-    const copy = YA.normalizeClip({ ...JSON.parse(JSON.stringify(c)), id: YA.newId("c"), name: (c.name || "クリップ") + " 複製" });
+    pushUndo();
+    const copy = YA.normalizeClip({ ...JSON.parse(JSON.stringify(c)), id: YA.newId("c"), name: (c.name || "レイヤー") + " 複製" });
     scene.tracks.push(copy);
-    selId = copy.id;
+    selId = copy.id; selKey = null;
     markDirty(); refresh(true);
-  });
+  }
   function moveClipOrder(delta){
     const c = selectedClip(); if(!c) return;
     const i = scene.tracks.indexOf(c);
     const j = clamp(i + delta, 0, scene.tracks.length - 1);
     if(i === j) return;
+    pushUndo();
     scene.tracks.splice(i, 1);
     scene.tracks.splice(j, 0, c);
     markDirty(); refresh(true);
   }
+  el("btn-clip-del").addEventListener("click", deleteSelected);
+  el("btn-clip-dup").addEventListener("click", duplicateSelected);
   el("btn-clip-up").addEventListener("click", ()=> moveClipOrder(1));     // 表示上は上=手前なので配列では後ろへ
   el("btn-clip-down").addEventListener("click", ()=> moveClipOrder(-1));
 
@@ -1067,16 +1406,15 @@
     const raw = prompt("シーンID (ファイル名。半角英数と _ - が無難です)", defaultId || "");
     if(raw == null) return null;
     const id = raw.trim();
-    if(!id || /[\\/:*?"<>|.]/.test(id)){ alert("ID に \\ / : * ? \" < > | . は使えません"); return null; }
+    if(!id || /[\\/:*?"<>|.]/.test(id)){ alert("ID に使えない文字があります (\\ / : * ? \" < > | . は不可)"); return null; }
     if(scenes.some(s=> s.id === id)){ alert("同じ ID のシーンがあります"); return null; }
     return id;
   }
   el("btn-new").addEventListener("click", async ()=>{
     const id = askId("yokoku" + (scenes.length + 1));
     if(!id) return;
-    const s = YA.blankScene(id);
     try{
-      await api("/api/authoring", { id, scene: s });
+      await api("/api/authoring", { id, scene: YA.blankScene(id) });
       await loadScenes(id);
       setStatus(`新しいシーン「${id}」を作りました`, "ok");
     }catch(e){ setStatus("作成に失敗: " + e.message, "ng"); }
@@ -1112,6 +1450,8 @@
     openScene(el("scene-select").value);
   });
   el("btn-save").addEventListener("click", saveScene);
+  el("btn-undo").addEventListener("click", undo);
+  el("btn-redo").addEventListener("click", redo);
 
   /* ===================== 素材 ===================== */
   function renderAssets(){
@@ -1132,7 +1472,7 @@
       del.className = "sm ng"; del.textContent = "×"; del.title = "この素材を削除";
       del.addEventListener("click", async (ev)=>{
         ev.stopPropagation();
-        if(!confirm(`${name} を削除します。使っているクリップは表示されなくなります。`)) return;
+        if(!confirm(`${name} を削除します。使っているレイヤーは表示されなくなります。`)) return;
         try{ await api("/api/authoring/asset", { name, delete: true }); await loadAssets(); setStatus(`${name} を削除しました`, "ok"); }
         catch(e){ setStatus("素材の削除に失敗: " + e.message, "ng"); }
       });
@@ -1141,7 +1481,6 @@
       box.appendChild(d);
     }
   }
-
   async function uploadFiles(files){
     for(const file of files){
       try{
@@ -1166,9 +1505,7 @@
   ["dragleave","drop"].forEach(t=> drop.addEventListener(t, (ev)=>{ ev.preventDefault(); drop.classList.remove("over"); }));
   drop.addEventListener("drop", (ev)=>{ if(ev.dataTransfer && ev.dataTransfer.files.length) uploadFiles([...ev.dataTransfer.files]); });
 
-  /* ===================== オーバーレイでの試し再生 =====================
-     中継サーバー(このページを配信しているのと同じポート)へ playAuthoring を投げる。
-     オーバーレイが繋がっていればそのまま本番と同じ経路で再生される。 */
+  /* ===================== オーバーレイでの試し再生 ===================== */
   let relay = null;
   function connectRelay(){
     if(location.protocol === "file:") return;
@@ -1189,16 +1526,76 @@
 
   /* ===================== その他 ===================== */
   el("dark-bg").addEventListener("change", ()=> stageBox.classList.toggle("dark", el("dark-bg").checked));
+  el("show-guides").addEventListener("change", ()=> el("guides").classList.toggle("on", el("show-guides").checked));
   el("volume").value = 0.8;
+  el("btn-help").addEventListener("click", ()=> el("help").classList.add("show"));
+  el("btn-help-close").addEventListener("click", ()=> el("help").classList.remove("show"));
   // 右クリックはブラウザの標準メニューを出さない (タイムラインやプレビューの操作を邪魔しないため)
   document.addEventListener("contextmenu", (ev)=> ev.preventDefault());
 
   document.addEventListener("keydown", (ev)=>{
-    const t = ev.target.tagName;
-    if(t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
-    if(ev.code === "Space"){ ev.preventDefault(); el("btn-play").click(); }
-    if(ev.key === "Delete"){ el("btn-clip-del").click(); }
+    const tag = ev.target.tagName;
+    const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    const ctrl = ev.ctrlKey || ev.metaKey;
+
+    if(ev.key === "Escape"){ el("help").classList.remove("show"); return; }
+    if(ctrl && ev.key.toLowerCase() === "s"){ ev.preventDefault(); saveScene(); return; }
+    if(ctrl && ev.key.toLowerCase() === "z"){ ev.preventDefault(); if(ev.shiftKey) redo(); else undo(); return; }
+    if(ctrl && ev.key.toLowerCase() === "y"){ ev.preventDefault(); redo(); return; }
+    if(typing || !scene) return;
+
+    if(ev.code === "Space"){ ev.preventDefault(); el("btn-play").click(); return; }
+    if(ev.key === "Home"){ ev.preventDefault(); seekTo(0); return; }
+    if(ev.key === "End"){ ev.preventDefault(); seekTo(scene.duration); return; }
+    if(ev.key === "ArrowLeft" || ev.key === "ArrowRight"){
+      ev.preventDefault();
+      const step = frameSec() * (ev.shiftKey ? 10 : 1) * (ev.key === "ArrowLeft" ? -1 : 1);
+      seekTo(snapTime(time + step));
+      return;
+    }
+    if(ctrl && ev.key.toLowerCase() === "d"){ ev.preventDefault(); duplicateSelected(); return; }
+    if(ctrl && ev.key.toLowerCase() === "c"){
+      const c = selectedClip();
+      if(c){ clipboard = JSON.parse(JSON.stringify(c)); setStatus(`「${c.name || TYPE_LABEL[c.type]}」をコピーしました`, ""); }
+      return;
+    }
+    if(ctrl && ev.key.toLowerCase() === "v"){
+      if(!clipboard) return;
+      pushUndo();
+      const copy = YA.normalizeClip({ ...JSON.parse(JSON.stringify(clipboard)), id: YA.newId("c"), start: snapTime(time) });
+      scene.tracks.push(copy);
+      selId = copy.id; selKey = null;
+      markDirty(); refresh(true);
+      setStatus("貼り付けました", "ok");
+      return;
+    }
+    if(ev.key === "Delete" || ev.key === "Backspace"){
+      ev.preventDefault();
+      const c = selectedClip();
+      if(c && selKey && selKey.clipId === c.id){
+        pushUndo(); removePropKey(c, selKey.prop, selKey.t); markDirty(); apply(c, false); renderAll();
+      }else deleteSelected();
+      return;
+    }
+    const c = selectedClip();
+    if(c && (ev.key === "i" || ev.key === "I")){        // 開始をプレイヘッドへ
+      pushUndo();
+      const end = round(c.start + c.dur, 4);
+      c.start = clamp(snapTime(time), 0, end - frameSec());
+      c.dur = round(end - c.start, 4);
+      markDirty(); refresh(false); return;
+    }
+    if(c && (ev.key === "o" || ev.key === "O")){        // 終わりをプレイヘッドへ
+      pushUndo();
+      c.dur = round(Math.max(frameSec(), snapTime(time) - c.start), 4);
+      markDirty(); refresh(false); return;
+    }
+    if(c && (ev.key === "k" || ev.key === "K")){ addKeysAtPlayhead(); return; }
+    if(ev.key === "+" || ev.key === "="){ setZoom(zoom * 1.25); return; }
+    if(ev.key === "-"){ setZoom(zoom * 0.8); return; }
+    if(ev.key === "0"){ setZoom(1); return; }
   });
+
   window.addEventListener("beforeunload", (ev)=>{
     if(!dirty) return;
     ev.preventDefault();
@@ -1210,10 +1607,11 @@
       setStatus("http://localhost:8787/enshutsu/authoring_editor.html で開いてください (file:// では保存できません)", "ng");
       return;
     }
+    updateUndoUi();
     try{
       await loadAssets();
       await loadScenes();
-      if(scenes.length) setStatus("準備完了", "ok");
+      if(scenes.length) setStatus("準備完了 (キー操作は ? ボタン)", "ok");
     }catch(e){
       setStatus("中継サーバーに接続できません: " + e.message, "ng");
     }

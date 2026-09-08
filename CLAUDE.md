@@ -37,7 +37,8 @@ slot_enshutsu_sender/
 │   ├── authoring_player.js      予告オーサリングの再生エンジン。シーンJSONをDOMへ組み、時刻tの姿を描くだけの部品
 │   │                            (globalThis.YokokuAuthoring)。オーバーレイとエディタが同じものを読む
 │   ├── authoring_editor.html    予告オーサリング(作成)。単独ページ (コンパネには埋め込まず別ウィンドウで開く)。
-│   │                            プレビュー+タイムライン+キーフレーム。POST /api/authoring で保存
+│   │                            After Effects 風: レイヤー行 + プロパティ行のタイムライン、⏱ でアニメーション化、
+│   │                            フレーム単位のスナップ、取り消し/やり直し。POST /api/authoring で保存
 │   ├── real/                    リールの効果音。start (回転開始) / stop (停止。stop1〜stop3 で停止順別も可)
 │   │                            筐体ビュー reel.html が /api/list で読む (任意。無ければ無音)
 │   ├── at/sound/                旧・内蔵演出の効果音置き場。オーバーレイはもう読まない (オーサリングの素材に使う)
@@ -203,6 +204,14 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   - 別の予告の呼び出し: 種類 `scene` のクリップ。再生中にその時刻を通過した1回だけ `playScene(id)` を呼ぶ
     (スクラブでは呼ばない)。オーバーレイは同じ `#authoring-layer` に重ねて再生し、差し替えの指示も引き継ぐ。
     互いに呼び合っても止まるよう深さ4段まで。
+  - エディタの操作は After Effects に寄せてある: タイムラインは**レイヤー行 + その下に開くプロパティ行**で、
+    プロパティ行の ⏱ (`toggleAnim`) を入れるとそのプロパティがアニメーションになり、以降は値を変えるたびに
+    プレイヘッドの位置へキーが打たれる (`setProp` → `setPropKey`)。⏱ を外すと現在値を基本値にしてキーを消す。
+    保存の形は「1つのキー(時刻)が複数プロパティを持てる」ままなので、キーの移動/削除はプロパティ単位で
+    分解する (`movePropKey` / `removePropKey` / `cleanKeys`)。
+    時間は fps (既定30、localStorage の `yk_fps`) でスナップし、タイムラインは拡大 (Ctrl+ホイール / +−0) と
+    横スクロールができる。取り消し/やり直しはシーン全体の JSON スナップショット (`pushUndo`)。
+    ドラッグ開始・ボタン・入力の focusin で控えるので、操作を足すときは同じように `pushUndo()` を先に呼ぶ。
   - `handleSubEvent` は「届いたイベントに割り当て (`bind`) があればそのシーンを流す」だけ。割り当てが無ければ何も出ない。
     `stop` は `stopTiming1..3` まで待たせ、`freeze`/`gg_start`/`at_end` は直列キューへ積む (重ならないように)。
     設定パネル「オーサリング」タブのチェックを外すと割り当てを無視する (何も出なくなる)。
