@@ -428,6 +428,9 @@ function resolveEnshutsu(spec, ev) {
 // ---------------------------------------------------------------------------
 function createMedalQueue(send) {
   const q = [];                      // [{ n, src, chat }]
+  // 投入ランキング。オーバーレイ(OBSブラウザソース)は配信中に再読込されることがあるので、
+  // 画面側ではなくここで持つ。stream.online でリセットする。
+  const ranking = new Map();
   let chatTokens = 0, genTokens = 0;
   let last = Date.now();
   let sentTotal = 0;
@@ -451,6 +454,7 @@ function createMedalQueue(send) {
       q.splice(i, 1);
       i--;
       sentTotal += it.n;
+      ranking.set(it.src, (ranking.get(it.src) || 0) + it.n);
       send({ action: "playerInput", input: "insertMedal", medals: it.n, src: it.src, reqId: it.id });
       log(`[投入] ${it.src} ${it.n}枚${it.note ? ` (${it.note})` : ""}`);
     }
@@ -472,6 +476,11 @@ function createMedalQueue(send) {
     },
     get waiting() { return q.reduce((a, b) => a + b.n, 0); },
     get sent() { return sentTotal; },
+    get top() {
+      return [...ranking.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([src, n]) => ({ src, n }));
+    },
+    reset() { ranking.clear(); },
   };
 }
 
@@ -622,6 +631,7 @@ function handleEvent(ev, ctx) {
       chatCounter.count = 0;
       chatCounter.lastByUser.clear();
       chatCounter.lastText = "";
+      if (ctx.medals) ctx.medals.reset();
       log("[Twitch] 配信開始を検知。初コメ判定と連帯カウンタをリセットしました");
     }
     ctx.relay.send({ action: "twitchEvent", ev });
@@ -731,6 +741,7 @@ async function main() {
       stage: args.medals ? "medals" : "tier1",
       chatCount: chatCounter.count, chatGoal: chatCounter.goal,
       medalsWaiting: medals.waiting, medalsSent: medals.sent,
+      ranking: medals.top,
     });
   }, 1000);
 

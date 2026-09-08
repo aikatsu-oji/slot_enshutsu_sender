@@ -988,7 +988,8 @@
     ceilingLeft: null, stateName: "",
     idle: false, need: 0, paused: false,
     chatCount: 0, chatGoal: 0,
-    ranking: new Map(),   // 出所 → 投入枚数
+    ranking: new Map(),      // 出所 → 投入枚数 (このページが繋がっている間の集計)
+    rankFromBridge: null,    // ブリッジが持っている集計 (再読込しても消えない)
   };
   // 払出や配信者の種銭は視聴者ランキングに入れない
   const TW_NOT_VIEWER = new Set(["自力", "スタート", "貯金", "視聴者"]);
@@ -2584,13 +2585,18 @@ function hideGameVideo(){
     const bar = el("tw-gauge").firstElementChild;
     if(bar) bar.style.width = goal ? `${Math.min(100, (twState.chatCount / goal) * 100)}%` : "0";
 
-    // 投入ランキング TOP3
+    // 投入ランキング TOP3。
+    // ブリッジが持っている値があればそちらを使う (OBS のブラウザソースを
+    // 配信中に再読込しても消えないように)。無ければ自分で数えたぶんを出す。
     const rank = el("tw-rank");
     rank.textContent = "";
-    const top = [...twState.ranking.entries()]
-      .filter(([src]) => !TW_NOT_VIEWER.has(src))
-      .sort((a, b) => b[1] - a[1]).slice(0, 3);
-    top.forEach(([src, n], i) => {
+    const top = (twState.rankFromBridge && twState.rankFromBridge.length)
+      ? twState.rankFromBridge.map((r) => [String(r.src), Number(r.n) || 0])
+        .filter(([src]) => !TW_NOT_VIEWER.has(src))
+      : [...twState.ranking.entries()]
+        .filter(([src]) => !TW_NOT_VIEWER.has(src))
+        .sort((a, b) => b[1] - a[1]).slice(0, 3);
+    top.slice(0, 3).forEach(([src, n], i) => {
       const sp = document.createElement("span");
       sp.textContent = `${["①","②","③"][i]}${src} ${twFmt(n)}`;
       rank.appendChild(sp);
@@ -2657,6 +2663,7 @@ function hideGameVideo(){
     if(!msg) return;
     twState.chatCount = msg.chatCount ?? twState.chatCount;
     twState.chatGoal = msg.chatGoal ?? twState.chatGoal;
+    if (Array.isArray(msg.ranking)) twState.rankFromBridge = msg.ranking;
     const st = el("tw-hud-state");
     if(st){
       st.textContent = `状態: ブリッジ${msg.connected ? "接続" : "未接続"} / 連携${msg.enabled ? "ON" : "OFF"}`
