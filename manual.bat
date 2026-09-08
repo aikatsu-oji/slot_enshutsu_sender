@@ -1,4 +1,11 @@
 @echo off
+rem 主制御を手動で操作するためのメニュー。中身は scripts\dev.cmd の呼び出しだけ。
+rem
+rem 【文字コードの注意】このファイルは Shift-JIS(cp932) + CRLF。
+rem scripts\dev.cmd が呼ぶ dev.ps1 は [Console]::OutputEncoding を UTF-8 に変えるので、
+rem 呼び出したあとはこのファイルの日本語が読めなくなり画面が文字化けする。
+rem そのため dev.cmd を呼んだ直後は必ず chcp 932 に戻してから日本語を表示する。
+chcp 932 >nul
 setlocal
 title 主制御 手動操作
 cd /d "%~dp0"
@@ -13,6 +20,7 @@ echo.
 call scripts\dev.cmd start -Mode manual
 if errorlevel 1 goto FAIL
 call scripts\dev.cmd send manual >nul 2>nul
+chcp 932 >nul
 echo.
 echo 手動モードでは主制御は自分から回りません。[1] のレバーONで1ゲームずつ進みます。
 echo ウェイト中(前回の回転開始から4.1秒以内)のレバーONは実機と同じく効きません。
@@ -20,6 +28,7 @@ echo ベットはMAXベット(3枚)のみ。クレジットが足りないと回らないので [2] で足して
 echo 遊技の結果はコンパネ(主制御モニタ)か [6] のログで確認できます。
 
 :MENU
+chcp 932 >nul
 echo.
 echo --------------------------------------------
 echo  [1] レバーON (1ゲーム進める)
@@ -48,14 +57,17 @@ goto MENU
 :STOP
 echo.
 call scripts\dev.cmd stop
+chcp 932 >nul
 goto END
 
 :LEAVE
+chcp 932 >nul
 echo.
 echo 主制御と中継サーバーは起動したままです。止めるときは scripts\dev.cmd stop を実行してください。
 goto END
 
 :FAIL
+chcp 932 >nul
 echo.
 echo [エラー] 起動に失敗しました。上のメッセージを確認してください。
 pause
