@@ -1385,6 +1385,7 @@
     if(!ev || typeof ev.kind !== "string") return;
     const who = ev.user && ev.user.name ? twEsc(ev.user.name) : "—";
     const detail = [
+      ev.note ? twEsc(ev.note) : "",
       ev.reward ? twEsc(ev.reward) : "",
       ev.amount ? `${ev.amount}` : "",
       ev.tier ? `tier${ev.tier}` : "",
@@ -1429,19 +1430,16 @@
   });
 
   // 疑似イベント。ブリッジの handleEvent に本物と同じ形で入る。
+  // ルール表がチャットだけなので、ここもチャットだけ。ほかの種別を足すときは
+  // rules.json のルールと一緒にここへ戻す (無いルールを押しても何も起きず、原因が分からない)。
   const TW_MOCKS = [
-    ["フォロー",     () => ({ kind:"follow", user:{ login:"testuser", name:"テスト視聴者" } })],
-    ["ビッツ100",    () => ({ kind:"cheer", amount:100, user:{ login:"bits100", name:"ビッツ子" } })],
-    ["ビッツ1000",   () => ({ kind:"cheer", amount:1000, user:{ login:"bits1k", name:"ビッツ太郎" } })],
-    ["ビッツ10000",  () => ({ kind:"cheer", amount:10000, user:{ login:"bits10k", name:"ビッツ次郎" } })],
-    ["サブスク t1",  () => ({ kind:"sub", tier:1, user:{ login:"sub1", name:"サブ子" } })],
-    ["サブスク t3",  () => ({ kind:"sub", tier:3, user:{ login:"sub3", name:"サブ三郎" } })],
-    ["サブギフト5",  () => ({ kind:"subgift", tier:1, amount:5, user:{ login:"gifter", name:"ギフト男" } })],
-    ["レイド50",     () => ({ kind:"raid", amount:50, user:{ login:"friend", name:"ともだち" } })],
     // 連帯カウンタを進めるコメント。毎回ちがう人・ちがう本文にしないと
     // 「同じ人の連投」「直前と同じ本文」として数えられない (実際の除外ルールと同じ扱い)
     ["コメント",     () => chatMock()],
     ["コメント×10",  () => Array.from({ length: 10 }, () => chatMock())],
+    ["コメント×30",  () => Array.from({ length: 30 }, () => chatMock())],
+    // 数えられないコメント。ゲージが進まないことの確認用
+    ["!コマンド",    () => ({ kind:"chat", text:"!左", user:{ login:"cmd" + Date.now(), name:"コマンド子" } })],
     // 初コメ判定は login ごとなので、押すたびに別人にする
     ["初コメ",       () => ({ kind:"chat", text:"はじめまして", user:{ login:"newbie" + Date.now(), name:"新規さん" } })],
   ];

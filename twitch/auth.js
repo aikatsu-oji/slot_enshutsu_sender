@@ -4,12 +4,14 @@
 // Device Code Grant を使う。ブラウザに 8 桁のコードを出して承認してもらうと
 // リフレッシュトークンが手に入り、以後は自動更新される。
 //
-// clientId は twitch/client_id.js に配布元のものが入っていれば、利用者は何も用意しなくてよい
-// (公開クライアントの ID は秘密ではない)。channel も省略でき、その場合は
-// **承認した本人のチャンネル**が自動で使われる。つまり設定ファイルは無くても動く。
+// **既定の構成 (チャット連動だけ) では、このファイルは 1 行も動かない。**
+// レイド・ビッツ・サブスクなど EventSub が要るイベントを後々足したときにだけ通る道。
+//
+// clientId は **各自で登録したアプリのもの** を使う (配布元の ID は同梱しない)。
+// channel は省略でき、その場合は **承認した本人のチャンネル** が自動で使われる。
 //
 // 置き場所 (いずれも .gitignore 済みの .run/ 配下。無ければ無いで動く):
-//   .run/twitch_config.json  { "clientId": "...", "channel": "..." }  ← 上書きしたいときだけ
+//   .run/twitch_config.json  { "clientId": "...", "channel": "..." }
 //   .run/twitch_token.json   Device Code フローの結果 (触らない)
 // 環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL があればそれが最優先。
 //
@@ -21,10 +23,9 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUN_DIR = path.join(ROOT, ".run");
-const CONFIG_PATH = path.join(RUN_DIR, "twitch_config.json");
 const TOKEN_PATH = path.join(RUN_DIR, "twitch_token.json");
 
-const { DEFAULT_CLIENT_ID } = require("./client_id");
+const { loadConfig, CONFIG_PATH } = require("./config");
 
 const ID_BASE = "https://id.twitch.tv/oauth2";
 const HELIX_BASE = "https://api.twitch.tv/helix";
@@ -47,23 +48,18 @@ function writeJson(file, obj) {
   fs.writeFileSync(file, JSON.stringify(obj, null, 2) + "\n");
 }
 
-// 設定を読む。環境変数 → .run/twitch_config.json → 同梱の client_id.js の順。
-// channel は省略可 (省略時は承認した本人のチャンネルを使う)。
-function loadConfig() {
-  const file = readJson(CONFIG_PATH) || {};
-  const clientId = process.env.TWITCH_CLIENT_ID || file.clientId || DEFAULT_CLIENT_ID || "";
-  const channel = process.env.TWITCH_CHANNEL || file.channel || "";
-  if (!clientId) {
-    throw new Error(
-      "クライアント ID がありません。次のどれかで指定してください。\n" +
-        "  1. twitch/client_id.js に配布元の ID を入れる (配布するときはここ)\n" +
-        "  2. .run/twitch_config.json の \"clientId\"\n" +
-        "  3. 環境変数 TWITCH_CLIENT_ID\n" +
-        "  取り方は doc/twitch認証の取り方.md"
-    );
-  }
-  // channel は空でよい。空なら承認した本人のチャンネルになる。
-  return { clientId, channel: String(channel).toLowerCase() };
+// clientId が要るのはこの道 (EventSub) だけ。チャット連動では要らないので、
+// 設定の読み取り (config.js) では投げずにここで確かめる。
+function requireClientId(config) {
+  if (config && config.clientId) return config.clientId;
+  throw new Error(
+    "クライアント ID がありません。EventSub のイベント (レイド/ビッツ/サブスクなど) を使うには、\n" +
+      "  自分で登録したアプリの ID を次のどちらかで指定してください。\n" +
+      "  1. .run/twitch_config.json の \"clientId\"\n" +
+      "  2. 環境変数 TWITCH_CLIENT_ID\n" +
+      "  取り方は doc/twitch認証の取り方.md\n" +
+      "  ※ チャット連動だけなら clientId も認証も要りません (--chat <channel>)"
+  );
 }
 
 async function postForm(url, params) {
@@ -152,6 +148,7 @@ async function refreshToken(clientId, refresh_token) {
  * 保存済みトークン → 生存確認 → 切れていればリフレッシュ → それも駄目なら Device Code フロー。
  */
 async function ensureToken(config, scopes, log) {
+  requireClientId(config);
   const saved = readJson(TOKEN_PATH);
 
   if (saved && saved.access_token) {
@@ -231,4 +228,4 @@ function createHelix(config, session, log, apiBase = HELIX_BASE) {
   };
 }
 
-module.exports = { loadConfig, ensureToken, createHelix, CONFIG_PATH, TOKEN_PATH };
+module.exports = { loadConfig, requireClientId, ensureToken, createHelix, CONFIG_PATH, TOKEN_PATH };

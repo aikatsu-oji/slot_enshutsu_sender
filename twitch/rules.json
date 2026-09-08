@@ -5,13 +5,16 @@
     "        medals / counter / vote / input / force は一致したルールぶんすべて適用する。",
     "ルールに \"enabled\": false を書くとそのルールだけ無効にできる。",
     "",
-    "メダルの入口は『チャット連帯カウンタ』と『レイド』の2つだけ。どちらも無料。",
-    "課金 (cheer/sub/subgift) には medals を持たせない。演出だけで報いる。",
-    "チャンネルポイントは使わない (アフィリエイト/パートナー限定の機能で、",
-    "  未到達だと存在しないため)。使いたくなったら kind:'redeem' のルールを足す。",
+    "いまは『チャット連帯カウンタ』だけ。ほかの要素は後々設計する。",
+    "チャットは匿名で読めるので、この構成なら **認証もクライアント ID も要らない**。",
+    "  node twitch/twitch_bridge.js --chat <あなたのチャンネル名>",
+    "",
+    "kind が chat 以外のルール (raid / cheer / sub / resub / subgift / follow / redeem) を",
+    "1つでも有効にすると、ブリッジは EventSub 側に切り替わり、認証と",
+    "自分で登録したアプリの clientId が要るようになる (doc/twitch認証の取り方.md)。",
+    "各イベントの設計 (投入枚数・バナーのランク表) は doc/twitch連携設計.md に残してある。",
     "",
     "requires:'mod' はチャットのバッジで判定する (チャットには badges が付いてくる)。",
-    "  guard.mods はチャンネルポイントを使う場合の予備 (あちらはバッジが付かないため)。",
     "force (強制フラグ) はブリッジと主制御の両方に --allow-force を付けたときだけ効く。"
   ],
   "enabled": true,
@@ -60,21 +63,7 @@
       }
     },
     {
-      "name": "レイド",
-      "when": {
-        "kind": "raid"
-      },
-      "medals": {
-        "of": "amount",
-        "unit": 20,
-        "max": 1000
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rank": "金"
-      }
-    },
-    {
+      "_note": "後々設計する。チャットなので有効にしても認証は要らない。",
       "name": "初コメ歓迎",
       "when": {
         "kind": "chat",
@@ -83,9 +72,11 @@
       "enshutsu": {
         "type": "banner",
         "rank": "白"
-      }
+      },
+      "enabled": false
     },
     {
+      "_note": "後々設計する。チャットなので有効にしても認証は要らない。モデレータと配信者だけが通る。",
       "name": "設定変更",
       "when": {
         "kind": "chat",
@@ -100,9 +91,11 @@
       "enshutsu": {
         "type": "banner",
         "rank": "青"
-      }
+      },
+      "enabled": false
     },
     {
+      "_note": "後々設計する。有効にすると出玉が確実に減る (ナビを無視して押すことになる)。",
       "name": "押し順投票",
       "when": {
         "kind": "chat",
@@ -113,85 +106,6 @@
         "windowSec": 3
       },
       "enabled": false
-    },
-    {
-      "name": "フォロー",
-      "when": {
-        "kind": "follow"
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rank": "白"
-      }
-    },
-    {
-      "name": "ビッツ",
-      "when": {
-        "kind": "cheer"
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rankBy": [
-          [
-            100,
-            "白"
-          ],
-          [
-            500,
-            "青"
-          ],
-          [
-            1000,
-            "緑"
-          ],
-          [
-            5000,
-            "赤"
-          ],
-          [
-            10000,
-            "金"
-          ]
-        ]
-      }
-    },
-    {
-      "name": "サブスク",
-      "when": {
-        "kind": "sub"
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rankByTier": {
-          "1": "赤",
-          "2": "赤",
-          "3": "金"
-        }
-      }
-    },
-    {
-      "name": "継続サブスク",
-      "when": {
-        "kind": "resub"
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rankByTier": {
-          "1": "赤",
-          "2": "赤",
-          "3": "金"
-        }
-      }
-    },
-    {
-      "name": "サブギフト",
-      "when": {
-        "kind": "subgift"
-      },
-      "enshutsu": {
-        "type": "banner",
-        "rank": "赤"
-      }
     }
   ]
 }

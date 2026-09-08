@@ -1,18 +1,18 @@
 {
   "_readme": [
-    "このファイルは必須ではありません。",
-    "  clientId … twitch/client_id.js に配布元の ID が入っていれば不要。",
-    "  channel  … 省略すると『承認した本人のチャンネル』が自動で使われる。",
-    "つまり通常は .run/twitch_config.json を作らなくても動きます。",
+    "このファイルは必須ではありません。チャンネル名はコマンドラインでも渡せます。",
+    "  node twitch/twitch_bridge.js --chat <あなたのチャンネル名>",
     "",
-    "自分のアプリを使いたい / 別のチャンネルに繋ぎたいときだけ、",
-    "このファイルを .run/twitch_config.json にコピーして値を入れてください (.run/ は git 管理外)。",
-    "環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL でも指定できます (そちらが最優先)。",
+    "毎回打つのが面倒なら、このファイルを .run/twitch_config.json にコピーして",
+    "channel に自分のチャンネル名を入れてください (.run/ は git 管理外)。",
+    "環境変数 TWITCH_CHANNEL でも指定できます (そちらが最優先)。",
     "",
-    "clientId を自分で取るときは https://dev.twitch.tv/console/apps で登録します。",
+    "clientId は **チャット連動では使いません** (認証もアプリ登録も不要)。",
+    "レイド・ビッツ・サブスクなど EventSub が要るイベントを後々足すときだけ、",
+    "自分で登録したアプリの ID をここに入れます。取り方は doc/twitch認証の取り方.md。",
     "  OAuth リダイレクト URL は http://localhost (必須項目だが実際には使わない)",
     "  クライアントの種類は必ず『公開 (Public)』にしてください。"
   ],
-  "clientId": "",
-  "channel": ""
+  "channel": "",
+  "clientId": ""
 }

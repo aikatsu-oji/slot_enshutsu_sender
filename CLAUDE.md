@@ -33,15 +33,15 @@ slot_enshutsu_sender/
 │       ├── freeze/              神揃いフリーズ素材 (cutin/, afterblackout/, blackout.mp3 ...)。GIF/画像に加え動画 (mp4/webm/mov) 可
 │       │                        afterblackout/ は mp4 (音声込み) か GIF (無音、設定秒数で表示)。sound/ サブフォルダは廃止
 │       └── banner/sound/        予告バナーの効果音 (任意: 白/青/緑/赤/金.mp3)
-├── twitch/                    Twitch 連携 (段階3: 演出 + 無料アクションぶんのメダル投入)
-│   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
-│   ├── eventsub.js              EventSub WebSocket の接続・再接続・keepalive 監視・重複排除だけの薄い層
-│   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。--chat <channel> で使う。認証不要
-│   ├── auth.js                  Device Code Grant とトークン更新。トークンは .run/ 配下 (git 管理外)
-│   ├── client_id.js             配布元の公開クライアントID (秘密ではない)。入れておくと利用者はアプリ登録が不要
+├── twitch/                    Twitch 連携 (いまはチャット連帯カウンタだけ。ほかの要素は後々設計する)
+│   ├── twitch_bridge.js         チャット/EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
+│   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。既定の経路。認証不要
+│   ├── config.js                設定 (channel / clientId) の読み取りだけ。認証を通らずに使える
+│   ├── eventsub.js              EventSub WebSocket の薄い層。チャット以外のルールを足したときだけ通る
+│   ├── auth.js                  Device Code Grant とトークン更新。同上。トークンは .run/ 配下 (git 管理外)
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
-│   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
-│   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ
+│   ├── config.example.json      .run/twitch_config.json のひな形 (channel / clientId)
+│   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ (30コメントで連帯カウンタが埋まる)
 ├── doc/                       仕様書 (主制御・副制御仕様書.docx, スロットの概念.pdf, twitch連携設計.md,
 │                              twitch認証の取り方.md, はじめて使う人へ.md)
 ├── scripts/
@@ -83,9 +83,9 @@ scripts\dev.cmd send reelIn                          # リールユニットを�
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
 npm test / npm run check / npm start                   # 同等の npm scripts
-npm run twitch:mock                                    # Twitch に繋がず擬似イベントで演出を確認 (中継サーバーが要る)
-npm run twitch                                         # 本番。初回は Device Code Grant の認証が走る
-node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿名で読む。認証もアプリ登録も不要
+npm run twitch:mock                                    # Twitch に繋がず擬似イベントを流す (中継サーバーが要る)
+node twitch/twitch_bridge.js --chat <channel>          # 本番。匿名でチャットを読む。認証もアプリ登録も不要
+npm run twitch                                         # 同上 (チャンネル名は TWITCH_CHANNEL か .run/twitch_config.json)
 ```
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
@@ -143,33 +143,33 @@ node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿�
   **抽選に触る口は既定で閉じている。** ブリッジが送れるのは投入・押し順・一時停止・電源だけ。
   強制フラグ (`forceFlag` = イベント用のやらせ) は **ブリッジと主制御の両方に `--allow-force`**
   を付けたときだけ効き、使った回数は `forced_games` に残って集計から切り分けられる。
-  `requires:"mod"` の判定は、チャンネルポイントにバッジが付いてこないので
-  `guard.mods` に書いた login 名で行う (既定は空 = 誰も通らない)。
-  ルールに `"enabled": false` を書くとそのルールだけ無効にできる (押し順投票は既定 OFF)。
+  `requires:"mod"` はチャットのバッジ (`ev.user.isMod`) で判定する。
+  ルールに `"enabled": false` を書くとそのルールだけ無効にできる。
   1分あたりの上限に当たったぶんは捨てずに待たせる (視聴者が押したぶんを失わない)。
   `--no-medals` で演出だけの挙動 (段階1) に戻せる。
+- **いまのルール表はチャット連帯カウンタ (30コメント → 120枚) だけ。ほかの要素は後々設計する。**
+  初コメ歓迎・設定変更・押し順投票は `"enabled": false` で置いてある (チャットなので有効に
+  してもよい)。レイド・ビッツ・サブスク・フォロー・チャンネルポイントのルールは削除した。
+  各イベントの設計 (投入枚数・バナーのランク表) は `doc/twitch連携設計.md` に残っている。
+- **クライアント ID は同梱しない。既定の構成では認証もアプリ登録も要らない。**
+  有効なルールがチャットだけなら (`chatOnlyRules()`)、ブリッジは匿名 IRC (`chat_irc.js` /
+  justinfan) を選ぶ。必要なのはチャンネル名だけで、`--chat <channel>` → 環境変数
+  `TWITCH_CHANNEL` → `.run/twitch_config.json` の `channel` の順に見る。
+  設定の読み取りは `config.js` に分けてある (チャット連動で `auth.js` を通らないようにするため)。
+- チャット以外のルールを 1 つでも有効にすると EventSub 側 (要認証) に切り替わり、
+  **各自で登録したアプリの clientId** が要る (`ensureToken` の `requireClientId` で弾く)。
   clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
-  認証の手順は `doc/twitch認証の取り方.md`。要求スコープはルール表から自動で決まるので、
-  使わないルールを消す (または `"enabled": false` にする) とそのぶんの権限は求められない。
-- **clientId は `twitch/client_id.js` に同梱する** (公開クライアントの ID は秘密ではない)。
-  入っていれば利用者はアプリ登録が不要。`channel` も省略でき、省略時は**承認した本人**の
-  チャンネルになるので、`.run/twitch_config.json` は無くても動く。
-  上書きの優先順位は 環境変数 → `.run/twitch_config.json` → `client_id.js`。
-  同梱にするとレート制限と EventSub 購読上限を利用者全員で共有し、アプリを消すと全員止まる。
-  スコープを増やすと既存の利用者は承認をやり直す必要がある。
-  **トークンは配布元に渡らない** (Twitch から利用者の PC へ直接発行される)。
+  手順は `doc/twitch認証の取り方.md`。要求スコープはルール表から自動で決まる。
 - **チャンネルポイントは使わない** (アフィリエイト/パートナー限定の機能で、未到達だと存在しない。
-  実接続で `Get Custom Reward` が 403 になって判明した)。メダルの入口は
-  **チャット連帯カウンタ (30コメント → 120枚) とレイド** の 2 つだけ。
-  使いたくなったら `rules.json` に `kind:"redeem"` のルールを足すだけでよく、スコープも自動で付く。
-- `checkRewards` は `kind:"redeem"` のルールがあるときだけ走る (読み取りのみ)。
+  実接続で `Get Custom Reward` が 403 になって判明した)。
+  `checkRewards` は `kind:"redeem"` のルールがあるときだけ走る (読み取りのみ)。
   403 は「アフィリエイト未到達」を疑わせるメッセージを出す。
   200 のときは NFKC + 空白除去で似た名前を突き止めて出す (名前が1文字違うと無反応になるため)。
-- `!設定変更` はチャットのバッジで `requires:"mod"` を判定する。`guard.mods` は不要
-  (チャンネルポイント経由にする場合だけ、バッジが付かないので名簿が要る)。
-- `--chat <channel>` は **認証なし** でチャットだけ読む (`chat_irc.js` / justinfan の匿名ログイン)。
-  アプリ登録も OAuth も要らないので、コメント連動だけならチャンネル名の指定だけで動く。
-  チャンネルポイント・ビッツ・サブスク・レイドは IRC では取れないので EventSub (認証あり) が要る。
+- チャット連動では `stream.online` が取れないので、連帯カウンタ・初コメ判定・ランキングの
+  リセット点は**ブリッジの起動時**になる (配信ごとに起動し直す)。起動ログにそう出す。
+- 普通のコメントは中継へ流さない (本文を出さない)。**連帯カウンタの達成だけは
+  `twitchEvent`(`kind:"counter"`) で流す。**これが無いとコンパネのイベント欄が
+  ずっと空のままで、動いているのか分からない。
 - 投入の流量制御 (`createMedalQueue`) の**トークンバケツは空ではなく 10 分ぶんの残高から始める**
   (`INITIAL_MINUTES`)。空だと 120枚 ÷ 14枚/分 = 8.6 分ぶん貯まるまで最初の 1 回が必ず待たされ、
   「達成したのにメダルが入らない」に見える (実際に踏んだ)。上限に当たって待たせるときは

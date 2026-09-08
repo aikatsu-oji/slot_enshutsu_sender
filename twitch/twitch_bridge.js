@@ -26,6 +26,7 @@ const WebSocket = require("ws");
 
 const { createEventSub, DEFAULT_URL } = require("./eventsub");
 const { createChatIrc, DEFAULT_CHAT_URL } = require("./chat_irc");
+const { loadConfig } = require("./config");
 
 const ROOT = path.resolve(__dirname, "..");
 const RANKS = ["白", "青", "緑", "赤", "金"];
@@ -77,8 +78,10 @@ function printHelp() {
   --rules <file>    ルール表              (既定 twitch/rules.json)
   --ws-url <url>    EventSub の接続先     (既定 ${DEFAULT_URL})
   --api-url <url>   Helix の接続先        (Twitch CLI のモックを使うときだけ)
-  --chat <channel>  そのチャンネルのチャットだけ匿名で読む (認証不要・準備はこれだけ)
-                    チャンネルポイント/ビッツ/サブスク/レイドは取れない (EventSub が要る)
+  --chat <channel>  読むチャンネル。匿名なので認証もアプリ登録も要らない。
+                    既定のルール表はチャットだけなので、指定するのは実質これだけ。
+                    省略時は TWITCH_CHANNEL か .run/twitch_config.json の channel を使う。
+                    ビッツ/サブスク/レイドは取れない (EventSub = 要認証が要る)
   --chat-url <url>  チャットの接続先 (既定 ${DEFAULT_CHAT_URL})
   --mock <file>     擬似イベント JSONL を流す (Twitch に繋がない)
   --speed <n>       --mock の再生倍率     (既定 1 = 1.5 秒に 1 件)
@@ -264,6 +267,13 @@ function neededKinds() {
   // 承認画面に出すと、配信者に余計な権限を求めることになる。
   for (const r of rules.rules) if (r.enabled !== false) kinds.add(r.when.kind);
   return [...kinds].filter((k) => SUBSCRIPTIONS[k]);
+}
+
+// 有効なルールがチャットだけなら、匿名 IRC で読めるので
+// **認証もクライアント ID も要らない**。既定の rules.json はこちらに倒れる。
+// レイドやサブスクのルールを 1 つでも有効にすると EventSub 側 (要認証) に切り替わる。
+function chatOnlyRules() {
+  return rules.rules.every((r) => r.enabled === false || r.when.kind === "chat");
 }
 
 // ---------------------------------------------------------------------------
@@ -545,7 +555,7 @@ const chatCounter = { count: 0, goal: 0, lastByUser: new Map(), lastText: "" };
 
 function countChat(rule, ev, ctx) {
   const c = rule.counter;
-  chatCounter.goal = Number(c.goal) || 200;
+  chatCounter.goal = Number(c.goal) || 30;
   const text = ev.text || "";
   if (text.length < (Number(c.minLength) || 0)) return;
   if (Array.isArray(c.ignore) && c.ignore.some((p) => new RegExp(p, "u").test(text))) return;
@@ -564,6 +574,13 @@ function countChat(rule, ev, ctx) {
   const medals = Number(c.medals) || 0;
   ctx.medals.push(medals, "チャット", { chat: true, note: `${chatCounter.goal}コメント達成` });
   log(`[チャット] ${chatCounter.goal}コメント達成 → ${medals}枚 (${c.label || ""})`);
+  // 普通のコメントは中継へ流さない (本文を出さないため) ので、達成だけはここで知らせる。
+  // これが無いとコンパネのイベント欄が最後まで空のままで、動いているのか分からない。
+  ctx.relay.send({
+    action: "twitchEvent",
+    ev: { kind: "counter", user: { name: "チャット" }, amount: medals,
+          note: `${chatCounter.goal}コメント達成 ${c.label ? `(${c.label})` : ""}`.trim() },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -778,6 +795,21 @@ function handleEvent(ev, ctx) {
 async function main() {
   reloadRules();
 
+  // 有効なルールがチャットだけなら匿名 IRC で読む (認証もクライアント ID も要らない)。
+  // 中継サーバーに繋ぐ前に確かめる。足りないまま繋いでも何も起きないだけで分かりにくい。
+  const chatOnly = !args.mock && (args.chat || chatOnlyRules());
+  const chatChannel = chatOnly ? (args.chat || loadConfig().channel) : "";
+  if (chatOnly && !chatChannel) {
+    console.error(
+      "チャンネル名がありません。次のどれかで指定してください。\n" +
+        "  1. node twitch/twitch_bridge.js --chat <あなたのチャンネル名>\n" +
+        "  2. 環境変数 TWITCH_CHANNEL\n" +
+        "  3. .run/twitch_config.json の \"channel\" (twitch/config.example.json がひな形)\n" +
+        "  ※ 認証もアプリ登録も要りません。チャンネル名だけで動きます。"
+    );
+    process.exit(2);
+  }
+
   const ctx = {};
   const relay = createRelay(args.relay, (msg) => {
     if (msg.action === "twitchControl") {
@@ -838,11 +870,15 @@ async function main() {
   process.on("SIGTERM", shutdown);
 
   // --- チャットだけ匿名で読むモード (認証不要) ---
-  if (args.chat) {
-    log(`[起動] チャット連動モード: #${args.chat} (匿名・認証不要)`);
-    log("       チャンネルポイント/ビッツ/サブスク/レイドは取れません (EventSub が要ります)");
+  // 有効なルールがチャットだけなら自動でこちら。--chat でも明示できる。
+  if (chatOnly) {
+    const channel = chatChannel;
+    log(`[起動] チャット連動モード: #${channel} (匿名・認証不要)`);
+    log("       ビッツ/サブスク/レイド/チャンネルポイントは取れません (EventSub が要ります)");
+    log("       配信開始 (stream.online) も取れないので、連帯カウンタとランキングは");
+    log("       このプロセスの起動時がリセット点になります (配信ごとに起動し直す)");
     ctx.es = createChatIrc({
-      channel: args.chat,
+      channel,
       url: args.chatUrl,
       log,
       onStatus: (ok, text) => { esConnected = ok; log(`[チャット] ${text}`); },
@@ -880,8 +916,10 @@ async function main() {
     return;
   }
 
-  // --- 本番 / Twitch CLI のモックサーバー ---
-  const { loadConfig, ensureToken, createHelix } = require("./auth");
+  // --- EventSub (要認証) / Twitch CLI のモックサーバー ---
+  // ここへ来るのは、チャット以外のルールを有効にしたときだけ。
+  // clientId は各自で登録したアプリのものが要る (配布元の ID は同梱していない)。
+  const { ensureToken, createHelix } = require("./auth");
   const config = loadConfig();
   const kinds = neededKinds();
   const wanted = kinds.flatMap((k) => SUBSCRIPTIONS[k]);

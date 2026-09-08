@@ -2,20 +2,52 @@
 #   node twitch/twitch_bridge.js --mock twitch/mock_events.jsonl --speed 5
 # type は EventSub の subscription type、event はその通知本体をそのまま置く。
 # # で始まる行と空行は読み飛ばす。
+#
+# いまのルール表はチャットだけなので、まずチャットで連帯カウンタ (30コメント) を満たす。
+# 同じ人の10秒以内の連投と直前と同じ本文は数えないので、全部ちがう人・ちがう本文にしてある。
 {"type":"stream.online","event":{"id":"9001","broadcaster_user_name":"テスト配信者","type":"live"}}
+{"type":"channel.chat.message","event":{"message_id":"c1","chatter_user_login":"viewer1","chatter_user_name":"はなこ1","message":{"text":"こんばんは"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c2","chatter_user_login":"viewer2","chatter_user_name":"たろう2","message":{"text":"はじめまして"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c3","chatter_user_login":"viewer3","chatter_user_name":"じろう3","message":{"text":"おつかれさま"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c4","chatter_user_login":"viewer4","chatter_user_name":"さぶろう4","message":{"text":"いい感じ"},"badges":[{"set_id":"subscriber","id":"12"}]}}
+{"type":"channel.chat.message","event":{"message_id":"c5","chatter_user_login":"viewer5","chatter_user_name":"しろう5","message":{"text":"来た"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c6","chatter_user_login":"viewer6","chatter_user_name":"ごろう6","message":{"text":"うおおお"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c7","chatter_user_login":"viewer7","chatter_user_name":"むつこ7","message":{"text":"惜しい"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c8","chatter_user_login":"viewer8","chatter_user_name":"ななせ8","message":{"text":"がんばれ"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c9","chatter_user_login":"viewer9","chatter_user_name":"やえ9","message":{"text":"右押して"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c10","chatter_user_login":"viewer10","chatter_user_name":"ここな10","message":{"text":"天井まであと少し"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c11","chatter_user_login":"viewer11","chatter_user_name":"はなこ11","message":{"text":"神引き頼む"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c12","chatter_user_login":"viewer12","chatter_user_name":"たろう12","message":{"text":"ドキドキする"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c13","chatter_user_login":"viewer13","chatter_user_name":"じろう13","message":{"text":"つよい"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c14","chatter_user_login":"viewer14","chatter_user_name":"さぶろう14","message":{"text":"やったー"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c15","chatter_user_login":"viewer15","chatter_user_name":"しろう15","message":{"text":"ここから"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c16","chatter_user_login":"viewer16","chatter_user_name":"ごろう16","message":{"text":"まだいける"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c17","chatter_user_login":"viewer17","chatter_user_name":"むつこ17","message":{"text":"次だ"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c18","chatter_user_login":"viewer18","chatter_user_name":"ななせ18","message":{"text":"信じてる"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c19","chatter_user_login":"viewer19","chatter_user_name":"やえ19","message":{"text":"熱い"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c20","chatter_user_login":"viewer20","chatter_user_name":"ここな20","message":{"text":"初見です"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c21","chatter_user_login":"viewer21","chatter_user_name":"はなこ21","message":{"text":"面白い"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c22","chatter_user_login":"viewer22","chatter_user_name":"たろう22","message":{"text":"応援してます"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c23","chatter_user_login":"viewer23","chatter_user_name":"じろう23","message":{"text":"勝てる"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c24","chatter_user_login":"viewer24","chatter_user_name":"さぶろう24","message":{"text":"なるほど"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c25","chatter_user_login":"viewer25","chatter_user_name":"しろう25","message":{"text":"たしかに"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c26","chatter_user_login":"viewer26","chatter_user_name":"ごろう26","message":{"text":"そうそう"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c27","chatter_user_login":"viewer27","chatter_user_name":"むつこ27","message":{"text":"わかる"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c28","chatter_user_login":"viewer28","chatter_user_name":"ななせ28","message":{"text":"すごい"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c29","chatter_user_login":"viewer29","chatter_user_name":"やえ29","message":{"text":"にじり寄る"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"c30","chatter_user_login":"viewer30","chatter_user_name":"ここな30","message":{"text":"最後まで見る"},"badges":[]}}
+# 除外されるもの (カウンタが進まないことの確認)
+{"type":"channel.chat.message","event":{"message_id":"x1","chatter_user_login":"nightbot","chatter_user_name":"Nightbot","message":{"text":"広告です"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"x2","chatter_user_login":"viewer1","chatter_user_name":"はなこ1","message":{"text":"！！！"},"badges":[]}}
+{"type":"channel.chat.message","event":{"message_id":"x3","chatter_user_login":"viewer2","chatter_user_name":"たろう2","message":{"text":"!左"},"badges":[]}}
+# モデレータの !設定変更 (ルールを有効にしたときだけ効く)
+{"type":"channel.chat.message","event":{"message_id":"m1","chatter_user_login":"modsan","chatter_user_name":"モデレータ","message":{"text":"!設定変更"},"badges":[{"set_id":"moderator","id":"1"}]}}
+#
+# ここから下は EventSub が要るイベント。いまのルール表では素通りする (後々設計する)。
 {"type":"channel.follow","event":{"user_login":"hanako","user_name":"はなこ"}}
-{"type":"channel.chat.message","event":{"message_id":"c1","chatter_user_login":"hanako","chatter_user_name":"はなこ","message":{"text":"こんばんは"},"badges":[]}}
-{"type":"channel.chat.message","event":{"message_id":"c2","chatter_user_login":"taro","chatter_user_name":"たろう","message":{"text":"はじめまして"},"badges":[{"set_id":"subscriber","id":"12"}]}}
-{"type":"channel.cheer","event":{"user_login":"taro","user_name":"たろう","bits":100,"message":"がんばれ","is_anonymous":false}}
-{"type":"channel.channel_points_custom_reward_redemption.add","event":{"id":"r1","user_login":"hanako","user_name":"はなこ","reward":{"title":"100回転","cost":500},"user_input":""}}
-{"type":"channel.channel_points_custom_reward_redemption.add","event":{"id":"r2","user_login":"jiro","user_name":"じろう","reward":{"title":"10回転","cost":50},"user_input":""}}
-{"type":"channel.cheer","event":{"user_login":"jiro","user_name":"じろう","bits":1000,"message":"神引き頼む","is_anonymous":false}}
+{"type":"channel.cheer","event":{"user_login":"taro","user_name":"たろう","bits":1000,"message":"神引き頼む","is_anonymous":false}}
 {"type":"channel.subscribe","event":{"user_login":"saburo","user_name":"さぶろう","tier":"1000","is_gift":false}}
-{"type":"channel.subscribe","event":{"user_login":"shiro","user_name":"しろう","tier":"1000","is_gift":true}}
 {"type":"channel.subscription.gift","event":{"user_login":"saburo","user_name":"さぶろう","tier":"1000","total":5,"is_anonymous":false}}
 {"type":"channel.subscription.message","event":{"user_login":"goro","user_name":"ごろう","tier":"3000","cumulative_months":12,"message":{"text":"12ヶ月目です"}}}
-{"type":"channel.cheer","event":{"user_login":"","user_name":"","bits":10000,"message":"神","is_anonymous":true}}
 {"type":"channel.raid","event":{"from_broadcaster_user_login":"friend","from_broadcaster_user_name":"ともだち","viewers":50}}
-{"type":"channel.chat.message","event":{"message_id":"c3","chatter_user_login":"nightbot","chatter_user_name":"Nightbot","message":{"text":"広告です"},"badges":[]}}
-{"type":"channel.chat.message","event":{"message_id":"c4","chatter_user_login":"hanako","chatter_user_name":"はなこ","message":{"text":"!左"},"badges":[]}}
 {"type":"stream.offline","event":{"broadcaster_user_name":"テスト配信者"}}
