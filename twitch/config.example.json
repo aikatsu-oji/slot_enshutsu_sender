@@ -1,11 +1,17 @@
 {
   "_readme": [
-    "このファイルを .run/twitch_config.json にコピーして値を埋めてください (.run/ は git 管理外)。",
-    "clientId は https://dev.twitch.tv/console/apps でアプリを登録すると発行されます。",
-    "  OAuth Redirect URL は http://localhost (Device Code Grant では実際には使いません)",
-    "  Client Type は Public にしてください (client secret を配信 PC に置かずに済みます)。",
-    "channel は自分のチャンネル名 (URL の twitch.tv/ の後ろ)。",
-    "環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL でも指定できます (そちらが優先)。"
+    "このファイルは必須ではありません。",
+    "  clientId … twitch/client_id.js に配布元の ID が入っていれば不要。",
+    "  channel  … 省略すると『承認した本人のチャンネル』が自動で使われる。",
+    "つまり通常は .run/twitch_config.json を作らなくても動きます。",
+    "",
+    "自分のアプリを使いたい / 別のチャンネルに繋ぎたいときだけ、",
+    "このファイルを .run/twitch_config.json にコピーして値を入れてください (.run/ は git 管理外)。",
+    "環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL でも指定できます (そちらが最優先)。",
+    "",
+    "clientId を自分で取るときは https://dev.twitch.tv/console/apps で登録します。",
+    "  OAuth リダイレクト URL は http://localhost (必須項目だが実際には使わない)",
+    "  クライアントの種類は必ず『公開 (Public)』にしてください。"
   ],
   "clientId": "",
   "channel": ""

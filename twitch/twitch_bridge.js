@@ -633,6 +633,42 @@ function applyForce(rule, ev, ctx) {
   log(`[強制] 次ゲームを ${rule.force.flag} に指定しました (演出)`);
 }
 
+// ---------------------------------------------------------------------------
+// チャンネルポイント報酬の名前を起動時に照合する (読み取りだけ)
+//   名前が 1 文字違うだけで無反応になり、しかも何も起きないので原因が分からない。
+//   起動時に突き合わせて、違っていればその場で言う。
+// ---------------------------------------------------------------------------
+// 全角/半角・大文字小文字・前後の空白を無視した比較用のキー
+const rewardKey = (s) => String(s || "").normalize("NFKC").replace(/\s+/g, "").toLowerCase();
+
+async function checkRewards(helix, broadcasterId) {
+  const wanted = [...new Set(rules.rules
+    .filter((r) => r.enabled !== false && r.when.kind === "redeem" && r.when.reward)
+    .map((r) => r.when.reward))];
+  if (!wanted.length) return;
+
+  const res = await helix.get(`/channel_points/custom_rewards?broadcaster_id=${broadcasterId}`);
+  if (res.status !== 200 || !res.body || !Array.isArray(res.body.data)) {
+    log(`[報酬] 一覧を取得できませんでした (${res.status})。名前の照合は省略します`);
+    return;
+  }
+  const have = res.body.data.map((x) => x.title);
+  const haveKeys = new Map(have.map((t) => [rewardKey(t), t]));
+  const missing = wanted.filter((t) => !have.includes(t));
+
+  if (!missing.length) {
+    log(`[報酬] ルール表の ${wanted.length} 件はすべてチャンネルにあります`);
+    return;
+  }
+  log("[報酬] 次の報酬がチャンネルに見つかりません。反応しません:");
+  for (const t of missing) {
+    const near = haveKeys.get(rewardKey(t));
+    if (near) log(`         「${t}」→ 似た名前の「${near}」があります (空白や全角半角の違い?)`);
+    else log(`         「${t}」→ この名前で報酬を作るか、rules.json の "reward" を直してください`);
+  }
+  if (have.length) log(`         いまチャンネルにある報酬: ${have.join(" / ")}`);
+}
+
 function handleEvent(ev, ctx) {
   if (!rules.enabled) return;
   if (ev.user && ev.user.login && rules.guard.ignoreUsers.includes(ev.user.login)) return;
@@ -832,8 +868,20 @@ async function main() {
   if (args.subscribe) {
     const session = await ensureToken(config, scopes, log);
     helix = createHelix(config, session, log, args.apiUrl ? `${args.apiUrl}/helix` : undefined);
-    broadcasterId = await helix.userId(config.channel);
+    if (config.channel) {
+      broadcasterId = await helix.userId(config.channel);
+    } else {
+      // 設定にチャンネル名が無ければ、承認した本人のチャンネルを使う。
+      // これで設定ファイルそのものが不要になる (承認するだけで自分の配信に繋がる)。
+      broadcasterId = session.userId;
+      config.channel = session.login;
+    }
     log(`[Twitch] チャンネル ${config.channel} (id ${broadcasterId}) として動きます`);
+    try {
+      await checkRewards(helix, broadcasterId);
+    } catch (e) {
+      log(`[報酬] 名前の照合に失敗しました: ${e.message}`);   // 照合は補助なので止めない
+    }
   }
 
   ctx.es = createEventSub({

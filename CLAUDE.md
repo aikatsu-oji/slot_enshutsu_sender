@@ -37,7 +37,8 @@ slot_enshutsu_sender/
 │   ├── twitch_bridge.js         EventSub → 正規化 → ルール判定 → 流量制御 → 中継サーバーへ。--no-medals で演出だけに戻せる
 │   ├── eventsub.js              EventSub WebSocket の接続・再接続・keepalive 監視・重複排除だけの薄い層
 │   ├── chat_irc.js              チャットを匿名で読む (IRC over WebSocket)。--chat <channel> で使う。認証不要
-│   ├── auth.js                  Device Code Grant とトークン更新。設定/トークンは .run/ 配下 (git 管理外)
+│   ├── auth.js                  Device Code Grant とトークン更新。トークンは .run/ 配下 (git 管理外)
+│   ├── client_id.js             配布元の公開クライアントID (秘密ではない)。入れておくと利用者はアプリ登録が不要
 │   ├── rules.json               イベント → 操作の対応表。人が編集する唯一の設定ファイル
 │   ├── config.example.json      .run/twitch_config.json のひな形 (clientId / channel)
 │   └── mock_events.jsonl        Twitch に繋がずに全経路を通すテストデータ
@@ -150,6 +151,15 @@ node twitch/twitch_bridge.js --chat <channel>          # チャットだけ匿�
   clientId とトークンは `.run/` 配下 (git 管理外)。リポジトリに入れない。
   認証の手順は `doc/twitch認証の取り方.md`。要求スコープはルール表から自動で決まるので、
   使わないルールを消す (または `"enabled": false` にする) とそのぶんの権限は求められない。
+- **clientId は `twitch/client_id.js` に同梱する** (公開クライアントの ID は秘密ではない)。
+  入っていれば利用者はアプリ登録が不要。`channel` も省略でき、省略時は**承認した本人**の
+  チャンネルになるので、`.run/twitch_config.json` は無くても動く。
+  上書きの優先順位は 環境変数 → `.run/twitch_config.json` → `client_id.js`。
+  同梱にするとレート制限と EventSub 購読上限を利用者全員で共有し、アプリを消すと全員止まる。
+  スコープを増やすと既存の利用者は承認をやり直す必要がある。
+  **トークンは配布元に渡らない** (Twitch から利用者の PC へ直接発行される)。
+- 起動時にチャンネルポイント報酬の名前を照合する (`checkRewards`、読み取りのみ)。
+  名前が 1 文字違うと無反応で原因が分からないため、NFKC + 空白除去で似た名前を突き止めて出す。
 - `--chat <channel>` は **認証なし** でチャットだけ読む (`chat_irc.js` / justinfan の匿名ログイン)。
   アプリ登録も OAuth も要らないので、コメント連動だけならチャンネル名の指定だけで動く。
   チャンネルポイント・ビッツ・サブスク・レイドは IRC では取れないので EventSub (認証あり) が要る。

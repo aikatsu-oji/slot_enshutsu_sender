@@ -4,10 +4,14 @@
 // Device Code Grant を使う。ブラウザに 8 桁のコードを出して承認してもらうと
 // リフレッシュトークンが手に入り、以後は自動更新される。
 //
-// 設定とトークンの置き場所 (どちらも .gitignore 済みの .run/ 配下):
-//   .run/twitch_config.json  { "clientId": "...", "channel": "..." }
+// clientId は twitch/client_id.js に配布元のものが入っていれば、利用者は何も用意しなくてよい
+// (公開クライアントの ID は秘密ではない)。channel も省略でき、その場合は
+// **承認した本人のチャンネル**が自動で使われる。つまり設定ファイルは無くても動く。
+//
+// 置き場所 (いずれも .gitignore 済みの .run/ 配下。無ければ無いで動く):
+//   .run/twitch_config.json  { "clientId": "...", "channel": "..." }  ← 上書きしたいときだけ
 //   .run/twitch_token.json   Device Code フローの結果 (触らない)
-// 環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL があればそちらが優先される。
+// 環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL があればそれが最優先。
 //
 // ※ エンドポイントとスコープ名は Twitch 側の改訂があるため、動かないときは
 //    https://dev.twitch.tv/docs/authentication/ で最終確認すること。
@@ -19,6 +23,8 @@ const ROOT = path.resolve(__dirname, "..");
 const RUN_DIR = path.join(ROOT, ".run");
 const CONFIG_PATH = path.join(RUN_DIR, "twitch_config.json");
 const TOKEN_PATH = path.join(RUN_DIR, "twitch_token.json");
+
+const { DEFAULT_CLIENT_ID } = require("./client_id");
 
 const ID_BASE = "https://id.twitch.tv/oauth2";
 const HELIX_BASE = "https://api.twitch.tv/helix";
@@ -41,18 +47,22 @@ function writeJson(file, obj) {
   fs.writeFileSync(file, JSON.stringify(obj, null, 2) + "\n");
 }
 
-// 設定を読む。環境変数 → .run/twitch_config.json の順で見る。
+// 設定を読む。環境変数 → .run/twitch_config.json → 同梱の client_id.js の順。
+// channel は省略可 (省略時は承認した本人のチャンネルを使う)。
 function loadConfig() {
   const file = readJson(CONFIG_PATH) || {};
-  const clientId = process.env.TWITCH_CLIENT_ID || file.clientId || "";
+  const clientId = process.env.TWITCH_CLIENT_ID || file.clientId || DEFAULT_CLIENT_ID || "";
   const channel = process.env.TWITCH_CHANNEL || file.channel || "";
-  if (!clientId || !channel) {
+  if (!clientId) {
     throw new Error(
-      "clientId と channel が設定されていません。\n" +
-        "  twitch/config.example.json を .run/twitch_config.json にコピーして埋めるか、\n" +
-        "  環境変数 TWITCH_CLIENT_ID / TWITCH_CHANNEL を設定してください。"
+      "クライアント ID がありません。次のどれかで指定してください。\n" +
+        "  1. twitch/client_id.js に配布元の ID を入れる (配布するときはここ)\n" +
+        "  2. .run/twitch_config.json の \"clientId\"\n" +
+        "  3. 環境変数 TWITCH_CLIENT_ID\n" +
+        "  取り方は doc/twitch認証の取り方.md"
     );
   }
+  // channel は空でよい。空なら承認した本人のチャンネルになる。
   return { clientId, channel: String(channel).toLowerCase() };
 }
 
