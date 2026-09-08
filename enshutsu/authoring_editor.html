@@ -186,7 +186,8 @@
           <div id="sel-box"><span class="lbl"></span><span class="h br"></span></div>
         </div>
       </div>
-      <div class="note">プレビュー上でクリップをドラッグすると動かせます (右下でサイズ変更)。プレイヘッドの位置にキーフレームがあるときは、そのキーだけを動かします。</div>
+      <div class="note">プレビュー上でクリップをドラッグすると動かせます (右下でサイズ変更)。プレイヘッドの位置にキーフレームがあるときは、そのキーだけを動かします。<br>
+        画面に合わせたいときは、右の「クリップ設定」の<b>画面に合わせる</b>から「画面いっぱい」または「素材の比率で最大」を押します。</div>
     </div>
 
     <div class="card" id="timeline">
@@ -455,6 +456,7 @@
     { k:"y",     l:"Y(中心 %)",  t:"num", min:-200, max:300, step:0.5, for:"text shape image video" },
     { k:"w",     l:"幅(%)",      t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
     { k:"h",     l:"高さ(%)",    t:"num", min:0, max:300, step:0.5, for:"text shape image video" },
+    { k:"_fit",  l:"画面に合わせる", t:"fit", for:"text shape image video" },
     { k:"opacity", l:"不透明度", t:"range", min:0, max:1, step:0.02, for:"text shape image video" },
     { k:"scale", l:"拡大",       t:"num", min:0, max:10, step:0.05, for:"text shape image video" },
     { k:"rot",   l:"回転(度)",   t:"num", min:-360, max:360, step:1, for:"text shape image video" },
@@ -530,6 +532,24 @@
         wrap.appendChild(input); wrap.appendChild(txt);
         box.appendChild(lab); box.appendChild(wrap);
         continue;
+      }else if(f.t === "fit"){
+        const wrap = document.createElement("span");
+        wrap.style.cssText = "display:flex;gap:4px;flex-wrap:wrap;";
+        const full = document.createElement("button");
+        full.className = "sm"; full.textContent = "画面いっぱい";
+        full.title = "16:9 のステージ全体に広げます (はみ出しの扱いは「入れ方」で決まります)";
+        full.addEventListener("click", ()=> fitToStage(c));
+        wrap.appendChild(full);
+        if(c.type === "image" || c.type === "video"){
+          const nat = document.createElement("button");
+          nat.className = "sm"; nat.textContent = "素材の比率で最大";
+          nat.title = "素材の縦横比のまま画面へ最大で収めます (余白も切り取りも出ません)";
+          nat.disabled = !c.src;
+          nat.addEventListener("click", ()=> fitToAsset(c));
+          wrap.appendChild(nat);
+        }
+        box.appendChild(lab); box.appendChild(wrap);
+        continue;
       }else if(f.t === "select"){
         input = document.createElement("select");
         for(const [v, t] of f.opts){ const o = document.createElement("option"); o.value = v; o.textContent = t; input.appendChild(o); }
@@ -551,6 +571,66 @@
       }
       box.appendChild(lab); box.appendChild(input);
     }
+  }
+
+  /* ---- 画面サイズに合わせる ----
+     クリップの枠は「ステージに対する %」で持つので、画面いっぱい = 中心(50,50)・幅高さ 100%。
+     素材の比率で最大にするときは、ステージ(16:9)の中に素材と同じ形の枠を作る:
+       枠の実寸比 = (w / h) × (16/9) なので、素材比 asp に合わせるには w/h = asp ÷ (16/9)。 */
+  const STAGE_ASPECT = 16 / 9;
+  const assetSizeCache = new Map();
+
+  // 素材の元の大きさ(px)を読む。読めなければ null
+  function measureAsset(url, kind){
+    if(assetSizeCache.has(url)) return Promise.resolve(assetSizeCache.get(url));
+    return new Promise((resolve)=>{
+      const done = (size)=>{ if(size && size.w > 0 && size.h > 0){ assetSizeCache.set(url, size); resolve(size); } else resolve(null); };
+      if(kind === "video"){
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.addEventListener("loadedmetadata", ()=> done({ w:v.videoWidth, h:v.videoHeight }), { once:true });
+        v.addEventListener("error", ()=> done(null), { once:true });
+        v.src = url;
+      }else{
+        const img = new Image();
+        img.addEventListener("load", ()=> done({ w:img.naturalWidth, h:img.naturalHeight }), { once:true });
+        img.addEventListener("error", ()=> done(null), { once:true });
+        img.src = url;
+      }
+    });
+  }
+
+  // 枠を作り直す。キーフレームで動かしている場合も、同じずれ幅・同じ倍率でついてくる
+  function resizeClip(c, x, y, w, h){
+    const dx = x - c.x, dy = y - c.y;
+    const rw = c.w > 0 ? w / c.w : 1, rh = c.h > 0 ? h / c.h : 1;
+    for(const k of c.keys){
+      if(k.x != null) k.x = round(k.x + dx, 2);
+      if(k.y != null) k.y = round(k.y + dy, 2);
+      if(k.w != null) k.w = round(k.w * rw, 2);
+      if(k.h != null) k.h = round(k.h * rh, 2);
+    }
+    c.x = round(x, 2); c.y = round(y, 2); c.w = round(w, 2); c.h = round(h, 2);
+  }
+
+  function fitToStage(c){
+    resizeClip(c, 50, 50, 100, 100);
+    markDirty(); apply(c, false); renderProps(); renderKeys();
+    setStatus("画面いっぱいに合わせました", "ok");
+  }
+
+  async function fitToAsset(c){
+    if(!c.src){ setStatus("先に素材を選んでください", "ng"); return null; }
+    const size = await measureAsset(player.assetUrl(c.src), c.type);
+    if(!size){ setStatus("素材の大きさを読み取れませんでした", "ng"); return null; }
+    const asp = size.w / size.h;
+    const w = asp >= STAGE_ASPECT ? 100 : 100 * (asp / STAGE_ASPECT);
+    const h = asp >= STAGE_ASPECT ? 100 * (STAGE_ASPECT / asp) : 100;
+    resizeClip(c, 50, 50, w, h);
+    c.fit = "fill";   // 枠が素材と同じ形になるので、引き伸ばしでちょうど収まる
+    markDirty(); apply(c, false); renderProps(); renderKeys();
+    setStatus(`素材の比率 ${size.w}×${size.h} に合わせました`, "ok");
+    return size;
   }
 
   // クリップ1件の変更を再生機へ反映する。structural=true のときだけ DOM を作り直す
@@ -869,6 +949,9 @@
     selId = c.id;
     markDirty();
     refresh(true);
+    // 素材つきの画像・動画は、置いた時点で素材の比率どおりに画面へ合わせておく
+    if(c.src && (type === "image" || type === "video")) fitToAsset(c);
+    return c;
   }
   document.querySelectorAll("[data-add]").forEach(b=> b.addEventListener("click", ()=> addClip(b.dataset.add)));
 
