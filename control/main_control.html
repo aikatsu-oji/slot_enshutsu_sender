@@ -313,6 +313,8 @@
   .mb-tile.state-normal .mb-val{color:#c9bfc5;}
   .mb-tile.state-gg .mb-val{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.5);}
   .mb-tile.state-at .mb-val{color:#7cf2a8;text-shadow:0 0 10px rgba(46,204,113,.4);}
+  /* 前兆 = 当選済みだが告知前。オペレータには分かるが配信画面には出ない */
+  .mb-tile.state-zenchou .mb-val{color:#ffb36b;text-shadow:0 0 10px rgba(255,140,60,.45);}
   .mb-val.plus{color:#7cf2a8;}
   .mb-val.minus{color:#ff9a8a;}
   .mb-reels{display:flex;gap:6px;margin-top:6px;}
@@ -604,6 +606,7 @@
         <span>ナビ <b id="mb-navi">—</b></span>
         <span>払出 <b id="mb-pay">—</b></span>
         <span>レバー <b id="mb-accept">—</b></span>
+        <span>前兆 <b id="mb-zenchou">—</b></span>
       </div>
       <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
       <div class="mb-opts">
@@ -628,6 +631,11 @@
           <div class="lbl">ヒート</div>
           <div class="mb-val" id="sb-heat-n">—</div>
           <div class="sb-heat" id="sb-heat"></div>
+        </div>
+        <div class="mb-tile">
+          <div class="lbl">連続予告</div>
+          <div class="mb-val" id="sb-chain">—</div>
+          <div class="sb-real" id="sb-chain-note">本前兆かガセかは副制御も知らない</div>
         </div>
         <div class="mb-tile">
           <div class="lbl">天井の写し</div>
@@ -962,6 +970,7 @@
     navi: document.getElementById("mb-navi"),
     pay: document.getElementById("mb-pay"),
     accept: document.getElementById("mb-accept"),
+    zenchou: document.getElementById("mb-zenchou"),
     mode: document.getElementById("mb-mode"),
     credit: document.getElementById("mb-credit"),
     creditTop: document.getElementById("mb-credit-top"),   // 常時見えるダイジェスト側
@@ -979,9 +988,11 @@
     add_games: ["上乗せ", "ev-at"],
     stock_release: ["ストック放出", "ev-at"],
     at_end: ["AT終了 → 通常時", "ev-end"],
+    zenchou: ["… 前兆突入（告知はまだ）", "ev-at"],
     info: ["", ""],
   };
-  const MB_STATE_CLASS = { "通常": "state-normal", "GG": "state-gg", "AT": "state-at" };
+  const MB_STATE_CLASS = { "通常": "state-normal", "前兆": "state-zenchou",
+                           "GG": "state-gg", "AT": "state-at" };
   let mbTimer = null;
   let mbEventCount = 0;
   let mbCmdCount = 0;
@@ -1046,15 +1057,18 @@
     mbSetCredit(d.credit);
     mb.total.textContent = `${(d.game ?? 0).toLocaleString()}G / IN ${(d.totalIn ?? 0).toLocaleString()} / OUT ${(d.totalOut ?? 0).toLocaleString()}`;
 
+    // 前兆 = 当選済みで告知待ち。オペレータ用の表示で、配信画面には出さない
+    mb.zenchou.textContent = d.zenchou ? `残${d.zenchou}G` : "—";
     // 副制御の推測と突き合わせるため、主制御の実モードを控えておく
-    sbRealMode = (st === "通常") ? (d.mode ?? null) : null;
+    // (前兆中も通常時と同じく内部モードが載る)
+    sbRealMode = (st === "通常" || st === "前兆") ? (d.mode ?? null) : null;
     sbSyncReal();
   }
 
   function mbRenderEvent(d){
     const [label, cls] = MB_EVENT_LABEL[d.event] || MB_EVENT_LABEL.info;
     // 通知文(text)はラベルと重複しない場合だけ添える(赤7揃い / +30G / 残ストック数など)
-    const showText = ["stock_up","add_games","stock_release","info"].includes(d.event);
+    const showText = ["stock_up","add_games","stock_release","zenchou","info"].includes(d.event);
     const detail = showText ? (d.text || "") : "";
     const extra = d.event === "gg_start" && d.cause ? `（${d.cause}）` : "";
     const stock = d.stock != null ? `  stock=${d.stock}` : "";
@@ -1130,6 +1144,7 @@
     mb.prize.textContent = "—";
     mb.navi.textContent = "—";
     mb.pay.textContent = "—";
+    mb.zenchou.textContent = "—";
     mbSetCredit(d.credit);
     mb.total.textContent = `0G / IN 0 / OUT 0`;
     sbRealMode = d.mode ?? null;
@@ -1254,6 +1269,8 @@
     real: document.getElementById("sb-real"),
     heatN: document.getElementById("sb-heat-n"),
     heat: document.getElementById("sb-heat"),
+    chain: document.getElementById("sb-chain"),
+    chainNote: document.getElementById("sb-chain-note"),
     ceiling: document.getElementById("sb-ceiling"),
     ceilingNote: document.getElementById("sb-ceiling-note"),
     pattern: document.getElementById("sb-pattern"),
@@ -1317,6 +1334,12 @@
     sb.rx.textContent = (d.rx ?? 0).toLocaleString();
     const lit = Math.max(0, Math.min(SB_HEAT_MAX, Number(d.heat) || 0));
     Array.from(sb.heat.children).forEach((el, i)=> el.classList.toggle("lit", i < lit));
+    // 連続予告 (前兆演出)。本前兆かガセかは副制御自身も知らない
+    const chain = Number(d.chain) || 0;
+    sb.chain.textContent = chain ? `${chain}G目` : "—";
+    sb.chain.classList.toggle("sb-zone", chain > 0);
+    sb.chainNote.textContent = chain ? "告知が来るまで毎ゲーム出す"
+                                     : "本前兆かガセかは副制御も知らない";
     // 天井の写し: 副制御が 0x41 の下位8bitから数え直した残りゲーム数
     sb.ceiling.textContent = d.ceilingLeft != null ? `残${d.ceilingLeft}G` : "—";
     sb.ceiling.classList.toggle("sb-zone", !!d.zone);

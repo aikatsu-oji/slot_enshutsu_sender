@@ -115,19 +115,27 @@ LOTTERY_TABLE_AT = dict(LOTTERY_TABLE, **{
     "共通ベル":   ( 1900,   3000,   4100,   5200,   6300,   7400),
 })
 
-# 上記テーブルでの機械割（設定ごとに8000万G測定・--ladder で再現できる）
-#   設定1  97.7%   設定2  99.8%   設定3 102.2%
-#   設定4 105.6%   設定5 109.4%   設定6 114.0%
-# 隣接設定の差は +2.2 / +2.4 / +3.4 / +3.9 / +4.6 ポイントで、
-# 「設定を1つ上げるほど伸びが大きい」順に並ぶ（どこにも逆転が無い）。
-# テーブルを触ったら --ladder で6設定を測り直し、逆転が出ていないか確認すること
+# 上記テーブルでの機械割（設定ごとに2000万G測定。
+#   py -3 god_main_board.py --ladder --games 20000000 --seed 7 で再現できる）
+#   設定1  97.6%   設定2  99.2%   設定3 102.1%
+#   設定4 105.5%   設定5 108.8%   設定6 113.1%
+# 設定1→6で単調に増加し、どこにも逆転が無い（隣接差は測定ごとに前後する）。
+# 当選しても前兆（ZENCHOU_GAMES）を挟むぶん通常遊技が伸びるので、前兆が無い場合に比べて
+# 設定1で0.39・設定6で0.66ポイント低い（当たりやすい設定ほど前兆の回数が多く、よく削れる）。
+# テーブルや前兆ゲーム数を触ったら --ladder で6設定を測り直し、逆転が出ていないか確認すること
 # （1万G程度の単発集計は±10%以上ぶれるので、設定差の判断には使えない）。
 
 # ---------------------------------------------------------------------------
 # 3. 状態定義
 # ---------------------------------------------------------------------------
 
-ST_NORMAL, ST_GG, ST_AT = 0, 1, 2          # 遊技状態
+ST_NORMAL, ST_GG, ST_AT, ST_ZENCHOU = 0, 1, 2, 3   # 遊技状態
+# 前兆は「GGに当選済みだが、まだ告知していない通常遊技」。遊技としては通常時と
+# 同じ（押し順ナビは出ず、内部抽選も通常時のテーブル）で、違うのは当選が確定して
+# いることだけ。副制御には 0x11 / 0x42 / 0x50 のデータとしてこの状態が届くので、
+# 前兆の間ずっと連続予告を流せる（当選を知っても告知はしない）。
+PLAY_NORMAL = (ST_NORMAL, ST_ZENCHOU)      # 通常遊技として扱う状態
+PLAY_AT = (ST_GG, ST_AT)                   # 押し順ナビが出る状態
 MODE_LOW, MODE_HIGH, MODE_SHIGH = 0, 1, 2  # 通常時の内部モード（低確/高確/超高確）
 
 CEILING = 1200        # 天井ゲーム数
@@ -146,6 +154,18 @@ MODE_UP = {
     "チャンス目": (0.450, 0.100),
 }
 MODE_GAMES = 32       # 高確以上の滞在ゲーム数
+
+# 前兆（当選してから告知するまでに挟む通常遊技）。
+# レア役からGGに当選しても、その場では告知せずここで決めたゲーム数だけ通常遊技を
+# 続け、消化しきってからGGへ突入する（＝そこが告知）。
+# 神揃いはフリーズで即告知、天井は残りゲーム数で分かるので、どちらも前兆を挟まない。
+# 副制御はこの間ずっと連続予告を流すので、長すぎると間延びする。数ゲーム〜20G強に収めてある。
+ZENCHOU_GAMES = (4, 6, 8, 12, 16, 24)
+ZENCHOU_WEIGHTS = {
+    #  当選契機      4G  6G  8G 12G 16G 24G
+    "スイカ":     (25, 25, 20, 15, 10,  5),
+    "チャンス目": (15, 20, 25, 20, 15,  5),
+}
 
 GG_SEVEN_RATE = 0.185  # GG中1Gあたりの赤7揃い（ストック+1）
 GG_GOD_RATE = 0.005    # GG中1Gあたりの神揃い（ストック+5）
@@ -220,6 +240,10 @@ class MainBoard:
     gg_left: int = 0
     at_left: int = 0
     stock: int = 0
+    # 前兆（当選済みだが告知前）。残ゲーム数と当選契機を持つ。
+    # 0 より大きい間は当選が確定していて、消化しきったゲームの終わりにGGへ突入する。
+    zenchou_left: int = 0
+    zenchou_cause: str = ""
 
     # クレジット（貯留）。ベットはMAXベット（規定投入枚数3枚）のみで、
     # 3クレジット無いと回転できない。最大クレジットは無限（上限なし）。
@@ -277,8 +301,8 @@ class MainBoard:
     def ram_clear(self) -> None:
         """ラムクリア。実機の設定変更/RAMクリアに相当し、遊技に関わるRAMを全て消す。
 
-        消えるもの：遊技状態・内部モード・天井カウンタ・GG/AT残ゲーム数・ストック・
-        クレジット（貯留）・出玉カウンタ・当該ゲームのワーク。
+        消えるもの：遊技状態・内部モード・天井カウンタ・前兆・GG/AT残ゲーム数・
+        ストック・クレジット（貯留）・出玉カウンタ・当該ゲームのワーク。
         設定は据え置きにする（実機でもラムクリア単独では設定は変わらない）。
         最後に電源投入コマンド(0x01)を送り直すので、副制御も自分の写しを初期化する。
         """
@@ -288,6 +312,8 @@ class MainBoard:
         self.gg_left = 0
         self.at_left = 0
         self.stock = 0
+        self.zenchou_left = 0
+        self.zenchou_cause = ""
         self.credit = 0
         self.total_in = self.total_out = self.total_games = 0
         self.flag = "ハズレ"
@@ -456,10 +482,18 @@ class MainBoard:
             self._enter_gg("神揃い")
             return
 
-        if self.state == ST_NORMAL:
+        if self.state == ST_ZENCHOU:
+            # 前兆中。当選はもう決まっているので抽選はせず、消化しきったら告知する。
+            # 途中で天井に達したときは、天井の約束を守るためそこで打ち切る。
+            self.game_count += 1
+            self.zenchou_left -= 1
+            if self.zenchou_left <= 0 or self.game_count >= CEILING:
+                self._enter_gg(self.zenchou_cause)
+
+        elif self.state == ST_NORMAL:
             self.game_count += 1
             if flag in GG_RATE and self.rng.random() < GG_RATE[flag][self.mode]:
-                self._enter_gg(flag)
+                self._start_zenchou(flag)
                 return
             if flag in MODE_UP:
                 hi, shi = MODE_UP[flag]
@@ -522,8 +556,26 @@ class MainBoard:
             else:
                 self.send(CMD_AT_GAMES, min(self.at_left, 255))
 
+    def _start_zenchou(self, cause: str) -> None:
+        """GG当選を確定させ、告知までに挟む前兆ゲーム数を決める。
+
+        遊技状態を前兆へ移し、0x50 で副制御にも知らせる。副制御はこれを受けて
+        連続予告を流すが、告知はしない。前兆を消化しきったゲームの終わりに
+        _enter_gg() が呼ばれ、そこで出る 0x50（GG）が告知になる。
+        遊技者から見れば通常遊技が続いているだけで、当選済みかどうかは分からない
+        （副制御は当選していないゲームでもガセ前兆で同じ連続予告を流すため）。
+        """
+        self.zenchou_cause = cause
+        self.zenchou_left = self.rng.choices(
+            ZENCHOU_GAMES, weights=ZENCHOU_WEIGHTS[cause])[0]
+        self.state = ST_ZENCHOU
+        self.notice.append(f"前兆突入({cause}/{self.zenchou_left}G)")
+        self.send(CMD_STATE, ST_ZENCHOU)
+
     def _enter_gg(self, cause: str) -> None:
         self.state = ST_GG
+        self.zenchou_left = 0
+        self.zenchou_cause = ""
         self.gg_left = GG_GAMES
         self.stock = max(self.stock, 1)     # 突入時1個保証
         self.game_count = 0
@@ -544,9 +596,9 @@ class MainBoard:
         self.lottery()
         push = self.spin_start()
         # AT中は押し順ナビ（主制御が正解を指示）、通常時は遊技者のランダム押し
-        navi = self.state != ST_NORMAL and self.flag == "押順ベル"
+        navi = self.state in PLAY_AT and self.flag == "押順ベル"
         self.send(CMD_NAVI, self.bell_answer if navi else 0xFF)
-        order = self.bell_answer if self.state != ST_NORMAL else self.get_random() % 6
+        order = self.bell_answer if self.state in PLAY_AT else self.get_random() % 6
         self.judge(push, order)
         pay = self.payout()
         state_before = self.state
@@ -569,7 +621,7 @@ class MainBoard:
         return result
 
 
-STATE_NAME = {ST_NORMAL: "通常", ST_GG: "GG", ST_AT: "AT"}
+STATE_NAME = {ST_NORMAL: "通常", ST_GG: "GG", ST_AT: "AT", ST_ZENCHOU: "前兆"}
 
 
 # ---------------------------------------------------------------------------
@@ -649,6 +701,27 @@ SB_STEP = {
 SB_STAGE = (50, 30, 15, 5)      # 段階数 1,2,3,4 の重み（可能な範囲で切り詰める）
 
 SB_POINT = ("レバー", "第1", "第2", "第3")      # 予告を出す4つの操作時点
+
+# 連続予告（前兆演出）。主制御が前兆に入ると 0x50 / 0x42 で「前兆」状態が届くので、
+# 副制御は告知が来るまで毎ゲーム予告を出し続け、ゲームを追うごとにランクを上げる。
+# ただしそれだけでは連続予告＝当選確定になってしまうので、当選していないゲームでも
+# レア役からガセ前兆を自前に走らせて混ぜる。ガセのゲーム数も下の表から引くので、
+# 見た目でも長さでも本物と区別できない。
+#   行 = 連続何ゲーム目か（1 / 2 / 3 / 4ゲーム目以降）
+#   列 = [白, 青, 緑, 赤, 金] の重み。連続中は必ず何かを出すので「なし」の列は無い。
+SB_CHAIN_TABLE = (
+    (60, 30, 10,  0,  0),
+    (40, 40, 18,  2,  0),
+    (20, 40, 32,  8,  0),
+    (10, 30, 40, 18,  2),
+)
+# ガセ前兆に入る割合（レア役を引いたゲームのうち）。本前兆は1/860ゲーム前後なので、
+# その3倍ほどのガセを混ぜて連続予告の信頼度を2〜3割に置く。
+SB_FAKE_RATE = 0.22
+# ガセ前兆のゲーム数。主制御の前兆（ZENCHOU_GAMES）と同じ形にしてあるが、
+# 副制御は主制御の表を知らないので、あくまで別に持った自前の分布である。
+SB_CHAIN_GAMES = (4, 6, 8, 12, 16, 24)
+SB_CHAIN_WEIGHTS = (20, 22, 22, 18, 12, 6)
 
 # フリーズ（レバーONロック）。副制御が当否を確実に知れる材料は 0x20 の神揃いだけ
 # なので、ロックはここからしか出さない（ガセを引かせない）。
@@ -744,6 +817,8 @@ class SubBoard:
         self.pattern = 0       # 今ゲームの予告パターン番号（SB_PATTERNの添字）
         self.plan = [None] * 4 # それを展開した [レバーON, 第1停止, 第2停止, 第3停止] のランク
         self.freeze = 0        # 今ゲームのフリーズ段階（0=ロックなし、1〜3）
+        self.chain = 0         # 連続予告の経過ゲーム数（0=連続していない）
+        self.fake_left = 0     # ガセ前兆の残ゲーム数（本前兆は主制御の状態で分かる）
         self.stops = 0         # 今ゲームで受けた停止コマンド数（第n停止の n）
 
     # -- 副制御の見立て -----------------------------------------------------
@@ -756,6 +831,14 @@ class SubBoard:
         """
         lo, hi = SB_HEAT_STEP
         return 2 if self.heat >= hi else 1 if self.heat >= lo else 0
+
+    def in_chain(self) -> bool:
+        """連続予告（前兆演出）の最中か。
+
+        本前兆は主制御から届いた遊技状態で分かり、ガセ前兆は自前の残ゲーム数で決まる。
+        どちらも同じ見せ方をするので、遊技者からは区別できない。
+        """
+        return self.state == ST_ZENCHOU or self.fake_left > 0
 
     @property
     def ceiling_left(self) -> int:
@@ -790,6 +873,7 @@ class SubBoard:
             self.at_left = 0
             self.stock = 0
             self.heat = self.heat_tick = 0
+            self.chain = self.fake_left = 0
             self.game_count = 0
             self._reset_game()
 
@@ -816,8 +900,9 @@ class SubBoard:
 
         elif typ == CMD_STATE:
             if data == ST_GG and self.state != ST_GG:
-                self.emit("gg_start")
+                self.emit("gg_start")   # 前兆から来たならこれが告知になる
                 self.heat = self.heat_tick = 0
+                self.chain = self.fake_left = 0
                 self.game_count = 0     # 天井カウンタも主制御と同じく0に戻る
             elif data == ST_NORMAL and self.state != ST_NORMAL:
                 self.emit("at_end", total=self.stock)
@@ -836,6 +921,8 @@ class SubBoard:
 
         elif typ == CMD_GAME_END:
             self._track_game_count(data)
+            if self.fake_left > 0:
+                self.fake_left -= 1     # ガセ前兆の消化（本前兆は主制御が終わりを知らせる）
             self.heat_tick += 1
             if self.heat_tick >= SB_HEAT_DECAY:
                 self.heat_tick = 0
@@ -876,19 +963,38 @@ class SubBoard:
         self.freeze = self._draw_freeze(flag)
         if self.freeze:
             # レバーONフリーズ。ロック1（振動）→ロック2（カットイン）→ロック3（暗転）
+            self.chain = self.fake_left = 0
             self.pattern = 0
             self.plan = [None] * 4
             self.emit("freeze", seq=list(FREEZE_SEQ[:self.freeze]), rank="金")
         else:
-            self.pattern = self._draw_pattern(self._draw_rank(flag))
+            if self.in_chain():
+                # 連続予告の最中。毎ゲーム必ず出し、ゲームを追うごとにランクを上げる
+                self.chain += 1
+                rank = (BANNER_RANK[-1] if self.ceiling_left <= 1
+                        else self._draw_chain_rank())
+            else:
+                self.chain = 0
+                rank = self._draw_rank(flag)
+            self.pattern = self._draw_pattern(rank)
             self.plan = [None if v is None else BANNER_RANK[v]
                          for v in SB_PATTERN[self.pattern]]
-            # レバーON時点の演出。plan / pattern / heat は試験用モニタ向けの参考情報
-            # （オーバーレイは rank だけを見る）
+            # レバーON時点の演出。plan / pattern / heat / chain は試験用モニタ向けの
+            # 参考情報（オーバーレイは rank だけを見る）
             self.emit("lever", rank=self.plan[0], plan=list(self.plan),
-                      trigger=flag, pattern=self.pattern, heat=self.heat)
-        if self.state == ST_NORMAL and flag in RARE:
+                      trigger=flag, pattern=self.pattern, heat=self.heat,
+                      chain=self.chain)
+        if self.state in PLAY_NORMAL and flag in RARE:
             self.heat = min(self.heat + SB_HEAT_GAIN[flag], SB_HEAT_MAX)
+            if not self.in_chain() and self.rng.random() < SB_FAKE_RATE:
+                # ガセ前兆。当たっていなくても連続予告に入り、本前兆に見せかける
+                self.fake_left = self.rng.choices(
+                    SB_CHAIN_GAMES, weights=SB_CHAIN_WEIGHTS)[0]
+
+    def _draw_chain_rank(self) -> str:
+        """連続予告のランク。何ゲーム目かだけで決まり、当否は関係しない。"""
+        row = SB_CHAIN_TABLE[min(self.chain, len(SB_CHAIN_TABLE)) - 1]
+        return self.rng.choices(BANNER_RANK, weights=row)[0]
 
     def _draw_freeze(self, flag: str) -> int:
         """フリーズ（レバーONロック）の段階。0 はロックなし。
@@ -907,7 +1013,7 @@ class SubBoard:
         材料は「受信した成立役の強さ」と「自前の見立て（ヒート・天井カウンタ）」だけ。
         当否は届かないので、天井到達ゲームを除けばランクは期待度の目安でしかない。
         """
-        if self.state != ST_NORMAL:
+        if self.state not in PLAY_NORMAL:
             return None                     # AT/GG中は予告バナーを出さない（ナビが主役）
         if self.ceiling_left <= 1:
             # このゲームの遊技終了で天井に到達する。副制御が受信情報だけで
@@ -1082,6 +1188,7 @@ class EnshutsuServer:
 PANEL_URL = "ws://127.0.0.1:8787"
 
 PANEL_EVENT = [                       # 主制御の通知文字列 → コンパネ向けイベント名
+    ("前兆突入(",    "zenchou"),
     ("GG突入(",      "gg_start"),
     ("神揃い",       "god"),
     ("赤7揃い",      "stock_up"),
@@ -1283,7 +1390,7 @@ class PanelLink:
                       "canBet": b.credit >= BET, "game": b.total_games})
 
     def send_game(self, b: MainBoard, r: dict) -> None:
-        normal = b.state == ST_NORMAL
+        normal = b.state in PLAY_NORMAL
         self.ws.send({
             "action": "mainBoard", "type": "state",
             "game": r["game"],
@@ -1291,6 +1398,7 @@ class PanelLink:
             "state": STATE_NAME[b.state],
             "mode": ["低確", "高確", "超高確"][b.mode] if normal else None,
             "gameCount": b.game_count if normal else None,
+            "zenchou": b.zenchou_left if normal else None,
             "ceilingLeft": max(0, CEILING - b.game_count) if normal else None,
             "flag": r["flag"],
             "prize": r["prize"],
@@ -1334,6 +1442,7 @@ class PanelLink:
             "plan": list(s.plan),
             "rank": next((r for r in reversed(s.plan) if r), None),
             "freeze": s.freeze,
+            "chain": s.chain,
             "state": STATE_NAME.get(s.state, "?"),
             "stock": s.stock, "atLeft": s.at_left,
         }
@@ -1700,10 +1809,13 @@ def run_single(board: MainBoard, games: int) -> None:
     at_games = gg_hit = god_hit = 0
     for _ in range(games):
         r = board.play()
-        if r["state"] != ST_NORMAL:
+        if r["state"] in PLAY_AT:
             at_games += 1
         for n in r["notice"]:
-            if n.startswith("GG突入") and r["state"] == ST_NORMAL:
+            # 初当りは当選した瞬間で数える。レア役当選は前兆突入、
+            # 神揃いと天井は前兆を挟まないのでGG突入がそのまま当選ゲームになる。
+            if n.startswith("前兆突入") or (
+                    n.startswith("GG突入") and r["state"] == ST_NORMAL):
                 gg_hit += 1
             if n == "神揃い":
                 god_hit += 1
@@ -1743,13 +1855,14 @@ def _ladder_job(arg: tuple) -> tuple:
     """--ladder のワーカー1本。1台分を回して (投入, 払出, 状態別G数, GG初当り) を返す。"""
     setting, seed, games = arg
     b = MainBoard(setting=setting, rng=random.Random(seed), log_cmds=False)
-    st = [0, 0, 0]
+    st = [0] * len(STATE_NAME)
     hit = 0
     for _ in range(games):
         before = b.state
         r = b.play()
         st[before] += 1
-        if before == ST_NORMAL and any(n.startswith("GG突入") for n in r["notice"]):
+        if any(n.startswith("前兆突入") for n in r["notice"]) or (
+                before == ST_NORMAL and any(n.startswith("GG突入") for n in r["notice"])):
             hit += 1
     return b.total_in, b.total_out, st, hit
 
@@ -1783,7 +1896,7 @@ def run_ladder(games: int, seed: int | None = None) -> None:
         c = res[i * chunks:(i + 1) * chunks]
         tin = sum(x[0] for x in c)
         tout = sum(x[1] for x in c)
-        st = [sum(x[2][k] for x in c) for k in range(3)]
+        st = [sum(x[2][k] for x in c) for k in range(len(STATE_NAME))]
         hit = sum(x[3] for x in c)
         n = sum(st)
         rate = tout / tin * 100
