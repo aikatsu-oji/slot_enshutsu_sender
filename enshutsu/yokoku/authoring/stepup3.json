@@ -1,0 +1,155 @@
+{
+  "name": "ステップアップ 第3段階 (赤)",
+  "version": 1,
+  "duration": 1.3,
+  "bind": {
+    "event": "banner",
+    "trigger": "stop3"
+  },
+  "tracks": [
+    {
+      "id": "flash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 0,
+      "dur": 0.28,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ff6a6a",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.05,
+          "ease": "out",
+          "opacity": 0.55
+        },
+        {
+          "t": 0.28,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "obi",
+      "type": "shape",
+      "name": "帯",
+      "start": 0,
+      "dur": 1.3,
+      "x": -10,
+      "y": 62,
+      "w": 54,
+      "h": 12.5,
+      "radius": 9,
+      "bg": "#5c0a10",
+      "stroke": "#ff8a8a",
+      "strokeW": 0.25,
+      "shadow": 1.2,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "x": -10,
+          "opacity": 0
+        },
+        {
+          "t": 0.22,
+          "ease": "outCubic",
+          "x": 50,
+          "opacity": 0.95
+        },
+        {
+          "t": 1.02,
+          "ease": "linear",
+          "x": 50,
+          "opacity": 0.95
+        },
+        {
+          "t": 1.3,
+          "ease": "in",
+          "x": 50,
+          "opacity": 0
+        },
+        {
+          "t": 0.3,
+          "ease": "inOut",
+          "rot": -1.5
+        },
+        {
+          "t": 0.42,
+          "ease": "inOut",
+          "rot": 1.5
+        },
+        {
+          "t": 0.54,
+          "ease": "inOut",
+          "rot": 0
+        }
+      ]
+    },
+    {
+      "id": "moji",
+      "type": "text",
+      "name": "文字",
+      "text": "激アツ",
+      "start": 0.04,
+      "dur": 1.26,
+      "x": -10,
+      "y": 62,
+      "w": 52,
+      "h": 11,
+      "color": "#fff2d8",
+      "stroke": "#04203f",
+      "strokeW": 0.3,
+      "fontSize": 7.6,
+      "fontWeight": 900,
+      "letter": 0.18,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "x": -10,
+          "opacity": 0
+        },
+        {
+          "t": 0.2,
+          "ease": "outCubic",
+          "x": 50,
+          "opacity": 1
+        },
+        {
+          "t": 0.36,
+          "ease": "inOut",
+          "scale": 1.06
+        },
+        {
+          "t": 0.5,
+          "ease": "inOut",
+          "scale": 1
+        },
+        {
+          "t": 0.98,
+          "ease": "linear",
+          "x": 50,
+          "opacity": 1
+        },
+        {
+          "t": 1.26,
+          "ease": "in",
+          "x": 50,
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "stepup3"
+}

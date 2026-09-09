@@ -1,0 +1,97 @@
+{
+  "name": "リール枠フラッシュ",
+  "version": 1,
+  "duration": 0.95,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "glow",
+      "type": "shape",
+      "name": "枠",
+      "start": 0,
+      "dur": 0.95,
+      "x": 50,
+      "y": 62,
+      "w": 54,
+      "h": 50,
+      "bg": "rgba(0,0,0,0)",
+      "stroke": "#ffd76a",
+      "strokeW": 2.2,
+      "radius": 2,
+      "shadow": 0,
+      "blend": "screen",
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.1,
+          "ease": "out",
+          "opacity": 0.45
+        },
+        {
+          "t": 0.5,
+          "ease": "inOut",
+          "opacity": 0.5
+        },
+        {
+          "t": 0.95,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "line",
+      "type": "shape",
+      "name": "枠",
+      "start": 0,
+      "dur": 0.95,
+      "x": 50,
+      "y": 62,
+      "w": 49,
+      "h": 45,
+      "bg": "rgba(0,0,0,0)",
+      "stroke": "#fff3c4",
+      "strokeW": 0.7,
+      "radius": 2,
+      "shadow": 0,
+      "blend": "screen",
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.08,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 0.3,
+          "ease": "inOut",
+          "opacity": 0.25
+        },
+        {
+          "t": 0.5,
+          "ease": "inOut",
+          "opacity": 1
+        },
+        {
+          "t": 0.72,
+          "ease": "inOut",
+          "opacity": 0.3
+        },
+        {
+          "t": 0.95,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "waku_flash"
+}

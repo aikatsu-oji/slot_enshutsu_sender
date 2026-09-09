@@ -1,0 +1,347 @@
+{
+  "name": "群予告",
+  "version": 1,
+  "duration": 1.8,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "kasumi",
+      "type": "shape",
+      "name": "砂埃",
+      "start": 0.1,
+      "dur": 1.7,
+      "x": 50,
+      "y": 74,
+      "w": 100,
+      "h": 26,
+      "shadow": 0,
+      "opacity": 0,
+      "bg": "linear-gradient(0deg,rgba(60,45,30,.6),rgba(60,45,30,0))",
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.2,
+          "ease": "out",
+          "opacity": 0.75
+        },
+        {
+          "t": 1.4,
+          "ease": "linear",
+          "opacity": 0.6
+        },
+        {
+          "t": 1.7,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "mob0",
+      "type": "shape",
+      "name": "影1",
+      "start": 0,
+      "dur": 1.25,
+      "x": 112,
+      "y": 60,
+      "w": 5,
+      "h": 14,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 60,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.625,
+          "ease": "linear",
+          "y": 58
+        },
+        {
+          "t": 1.25,
+          "ease": "linear",
+          "x": -12,
+          "y": 60,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob1",
+      "type": "shape",
+      "name": "影2",
+      "start": 0.06,
+      "dur": 1.22,
+      "x": 112,
+      "y": 68,
+      "w": 4.2,
+      "h": 11,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 68,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.61,
+          "ease": "linear",
+          "y": 66
+        },
+        {
+          "t": 1.22,
+          "ease": "linear",
+          "x": -12,
+          "y": 68,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob2",
+      "type": "shape",
+      "name": "影3",
+      "start": 0.12,
+      "dur": 1.19,
+      "x": 112,
+      "y": 55,
+      "w": 6,
+      "h": 17,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 55,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.595,
+          "ease": "linear",
+          "y": 53
+        },
+        {
+          "t": 1.19,
+          "ease": "linear",
+          "x": -12,
+          "y": 55,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob3",
+      "type": "shape",
+      "name": "影4",
+      "start": 0.18,
+      "dur": 1.16,
+      "x": 112,
+      "y": 72,
+      "w": 3.6,
+      "h": 9,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 72,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.58,
+          "ease": "linear",
+          "y": 70
+        },
+        {
+          "t": 1.16,
+          "ease": "linear",
+          "x": -12,
+          "y": 72,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob4",
+      "type": "shape",
+      "name": "影5",
+      "start": 0.24,
+      "dur": 1.13,
+      "x": 112,
+      "y": 63,
+      "w": 5.4,
+      "h": 15,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 63,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.565,
+          "ease": "linear",
+          "y": 61
+        },
+        {
+          "t": 1.13,
+          "ease": "linear",
+          "x": -12,
+          "y": 63,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob5",
+      "type": "shape",
+      "name": "影6",
+      "start": 0.3,
+      "dur": 1.1,
+      "x": 112,
+      "y": 58,
+      "w": 4.6,
+      "h": 12,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 58,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.55,
+          "ease": "linear",
+          "y": 56
+        },
+        {
+          "t": 1.1,
+          "ease": "linear",
+          "x": -12,
+          "y": 58,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob6",
+      "type": "shape",
+      "name": "影7",
+      "start": 0.36,
+      "dur": 1.07,
+      "x": 112,
+      "y": 70,
+      "w": 6.4,
+      "h": 18,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 70,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.535,
+          "ease": "linear",
+          "y": 68
+        },
+        {
+          "t": 1.07,
+          "ease": "linear",
+          "x": -12,
+          "y": 70,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "mob7",
+      "type": "shape",
+      "name": "影8",
+      "start": 0.44,
+      "dur": 1.04,
+      "x": 112,
+      "y": 66,
+      "w": 4,
+      "h": 10,
+      "radius": 40,
+      "bg": "#0a0a12",
+      "shadow": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 112,
+          "y": 66,
+          "opacity": 0.95
+        },
+        {
+          "t": 0.52,
+          "ease": "linear",
+          "y": 64
+        },
+        {
+          "t": 1.04,
+          "ease": "linear",
+          "x": -12,
+          "y": 66,
+          "opacity": 0.95
+        }
+      ]
+    },
+    {
+      "id": "flash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 1.45,
+      "dur": 0.3,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ffffff",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.05,
+          "ease": "out",
+          "opacity": 0.7
+        },
+        {
+          "t": 0.3,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "mure_yokoku"
+}

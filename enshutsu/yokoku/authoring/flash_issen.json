@@ -1,0 +1,83 @@
+{
+  "name": "一閃フラッシュ (レバーON)",
+  "version": 1,
+  "duration": 0.6,
+  "bind": {
+    "event": "banner",
+    "trigger": "lever"
+  },
+  "tracks": [
+    {
+      "id": "flash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 0,
+      "dur": 0.32,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ffffff",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.06,
+          "ease": "out",
+          "opacity": 0.85
+        },
+        {
+          "t": 0.32,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "ray",
+      "type": "shape",
+      "name": "光の帯",
+      "start": 0.02,
+      "dur": 0.5,
+      "x": -25,
+      "y": 50,
+      "w": 26,
+      "h": 190,
+      "rot": -20,
+      "blend": "screen",
+      "shadow": 0,
+      "bg": "linear-gradient(90deg,rgba(191,233,255,0),#bfe9ff,rgba(191,233,255,0))",
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "x": -25
+        },
+        {
+          "t": 0.08,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 0.42,
+          "ease": "linear",
+          "x": 125,
+          "opacity": 0.9
+        },
+        {
+          "t": 0.5,
+          "ease": "in",
+          "x": 135,
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "flash_issen"
+}

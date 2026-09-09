@@ -1,0 +1,211 @@
+{
+  "name": "神揃いフリーズ",
+  "version": 1,
+  "duration": 3.4,
+  "bind": {
+    "event": "freeze"
+  },
+  "tracks": [
+    {
+      "id": "black",
+      "type": "shape",
+      "name": "暗転",
+      "start": 0,
+      "dur": 3.4,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#000000",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.35,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 3.1,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 3.4,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "rainbow",
+      "type": "shape",
+      "name": "虹の輪",
+      "start": 0.5,
+      "dur": 2.6,
+      "x": 50,
+      "y": 50,
+      "w": 112,
+      "h": 112,
+      "radius": 50,
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "bg": "radial-gradient(closest-side,#000 33%,rgba(0,0,0,0) 34%),conic-gradient(#ff0055,#ffcc00,#00ff88,#00ccff,#7a5cff,#ff0055)",
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.2,
+          "rot": 0
+        },
+        {
+          "t": 0.4,
+          "ease": "out",
+          "opacity": 0.55,
+          "scale": 1
+        },
+        {
+          "t": 2,
+          "ease": "linear",
+          "opacity": 0.4,
+          "rot": 180
+        },
+        {
+          "t": 2.6,
+          "ease": "in",
+          "opacity": 0,
+          "scale": 1.3,
+          "rot": 260
+        }
+      ]
+    },
+    {
+      "id": "godflash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 0.85,
+      "dur": 0.4,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ffffff",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.06,
+          "ease": "out",
+          "opacity": 0.95
+        },
+        {
+          "t": 0.4,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "god",
+      "type": "text",
+      "name": "GOD",
+      "text": "GOD",
+      "start": 0.9,
+      "dur": 2.5,
+      "x": 50,
+      "y": 46,
+      "w": 90,
+      "h": 34,
+      "color": "#ffe27a",
+      "stroke": "#3a2400",
+      "strokeW": 1,
+      "fontSize": 24,
+      "fontWeight": 900,
+      "letter": 0.14,
+      "shadow": 2,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.25
+        },
+        {
+          "t": 0.32,
+          "ease": "outBack",
+          "opacity": 1,
+          "scale": 1.08
+        },
+        {
+          "t": 0.5,
+          "ease": "out",
+          "scale": 1
+        },
+        {
+          "t": 2.1,
+          "ease": "linear",
+          "opacity": 1,
+          "scale": 1.02
+        },
+        {
+          "t": 2.5,
+          "ease": "in",
+          "opacity": 0,
+          "scale": 1.1
+        }
+      ]
+    },
+    {
+      "id": "sub",
+      "type": "text",
+      "name": "神揃い",
+      "text": "神 揃 い",
+      "start": 1.5,
+      "dur": 1.8,
+      "x": 50,
+      "y": 72,
+      "w": 70,
+      "h": 10,
+      "color": "#fff8e0",
+      "stroke": "#3a2400",
+      "strokeW": 0.35,
+      "fontSize": 6.2,
+      "fontWeight": 800,
+      "letter": 0.4,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.3,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 1.5,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 1.8,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "god_freeze"
+}

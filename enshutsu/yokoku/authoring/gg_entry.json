@@ -1,0 +1,175 @@
+{
+  "name": "GG突入",
+  "version": 1,
+  "duration": 2.6,
+  "bind": {
+    "event": "gg_start"
+  },
+  "tracks": [
+    {
+      "id": "flash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 0,
+      "dur": 0.4,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ffd76a",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.06,
+          "ease": "out",
+          "opacity": 0.95
+        },
+        {
+          "t": 0.4,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "rays",
+      "type": "shape",
+      "name": "放射",
+      "start": 0.1,
+      "dur": 2.3,
+      "x": 50,
+      "y": 50,
+      "w": 160,
+      "h": 160,
+      "radius": 50,
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "bg": "repeating-conic-gradient(rgba(255,215,106,.55) 0deg 6deg,rgba(255,215,106,0) 6deg 14deg)",
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "rot": 0,
+          "scale": 0.7
+        },
+        {
+          "t": 0.3,
+          "ease": "out",
+          "opacity": 0.6,
+          "scale": 1
+        },
+        {
+          "t": 2,
+          "ease": "linear",
+          "opacity": 0.45,
+          "rot": 90
+        },
+        {
+          "t": 2.3,
+          "ease": "in",
+          "opacity": 0,
+          "rot": 120
+        }
+      ]
+    },
+    {
+      "id": "logo",
+      "type": "text",
+      "name": "GOD GAME",
+      "text": "GOD GAME",
+      "start": 0.24,
+      "dur": 2.2,
+      "x": 50,
+      "y": 44,
+      "w": 96,
+      "h": 24,
+      "color": "#ffe27a",
+      "stroke": "#3a2400",
+      "strokeW": 0.8,
+      "fontSize": 14,
+      "fontWeight": 900,
+      "letter": 0.12,
+      "shadow": 2,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.5
+        },
+        {
+          "t": 0.26,
+          "ease": "outBack",
+          "opacity": 1,
+          "scale": 1.05
+        },
+        {
+          "t": 0.42,
+          "ease": "out",
+          "scale": 1
+        },
+        {
+          "t": 1.9,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 2.2,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "sub",
+      "type": "text",
+      "name": "サブ文字",
+      "text": "ゴッドゲーム突入",
+      "start": 0.5,
+      "dur": 1.9,
+      "x": 50,
+      "y": 64,
+      "w": 80,
+      "h": 10,
+      "color": "#fff8e0",
+      "stroke": "#241500",
+      "strokeW": 0.55,
+      "fontSize": 5.6,
+      "fontWeight": 800,
+      "letter": 0.22,
+      "shadow": 2,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "y": 68
+        },
+        {
+          "t": 0.24,
+          "ease": "outCubic",
+          "opacity": 1,
+          "y": 64
+        },
+        {
+          "t": 1.6,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 1.9,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "gg_entry"
+}

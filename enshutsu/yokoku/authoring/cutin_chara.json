@@ -1,0 +1,121 @@
+{
+  "name": "カットイン予告 (差し替え可)",
+  "version": 1,
+  "duration": 1.7,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "shiro",
+      "type": "shape",
+      "name": "白背景",
+      "start": 0,
+      "dur": 1.7,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "shadow": 0,
+      "opacity": 0,
+      "bg": "radial-gradient(ellipse at 50% 45%,#ffffff,#f2efe6 70%,#e2ded2)",
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.12,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 1.5,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 1.7,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "img",
+      "type": "image",
+      "name": "キャラ",
+      "src": "assets/01_マジレス.jpg",
+      "slot": "cutin",
+      "start": 0.06,
+      "dur": 1.6,
+      "x": 130,
+      "y": 50,
+      "w": 100,
+      "h": 99.31,
+      "fit": "fill",
+      "opacity": 1,
+      "keys": [
+        {
+          "t": 0,
+          "x": 130,
+          "scale": 1.1,
+          "opacity": 1
+        },
+        {
+          "t": 0.22,
+          "ease": "outCubic",
+          "x": 50,
+          "scale": 1
+        },
+        {
+          "t": 1.3,
+          "ease": "linear",
+          "x": 50,
+          "scale": 1.04,
+          "opacity": 1
+        },
+        {
+          "t": 1.6,
+          "ease": "in",
+          "x": 50,
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "line",
+      "type": "shape",
+      "name": "下帯",
+      "start": 0.2,
+      "dur": 1.4,
+      "x": 50,
+      "y": 88,
+      "w": 100,
+      "h": 9,
+      "shadow": 0,
+      "opacity": 0,
+      "bg": "linear-gradient(90deg,rgba(0,0,0,0),rgba(10,8,6,.8),rgba(0,0,0,0))",
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.16,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 1.2,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 1.4,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ],
+  "id": "cutin_chara"
+}

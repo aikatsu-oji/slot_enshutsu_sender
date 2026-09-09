@@ -1,0 +1,282 @@
+{
+  "name": "タイマー予告 (3・2・1)",
+  "version": 1,
+  "duration": 2.6,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "panel",
+      "type": "shape",
+      "name": "パネル",
+      "start": 0,
+      "dur": 2,
+      "x": 50,
+      "y": 26,
+      "w": 21,
+      "h": 13,
+      "radius": 14,
+      "bg": "#0a0f1c",
+      "stroke": "#7fc4ff",
+      "strokeW": 0.3,
+      "shadow": 1.4,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.6
+        },
+        {
+          "t": 0.18,
+          "ease": "outBack",
+          "opacity": 0.95,
+          "scale": 1
+        },
+        {
+          "t": 1.9,
+          "ease": "linear",
+          "opacity": 0.95
+        },
+        {
+          "t": 2,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "num3",
+      "type": "text",
+      "name": "カウント 3",
+      "text": "3",
+      "start": 0.2,
+      "dur": 0.6,
+      "x": 50,
+      "y": 26,
+      "w": 20,
+      "h": 12,
+      "color": "#eaf6ff",
+      "stroke": "#04203f",
+      "strokeW": 0.4,
+      "fontSize": 8.5,
+      "fontWeight": 900,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 1.6
+        },
+        {
+          "t": 0.12,
+          "ease": "outCubic",
+          "opacity": 1,
+          "scale": 1
+        },
+        {
+          "t": 0.5,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 0.6,
+          "ease": "in",
+          "opacity": 0,
+          "scale": 0.9
+        }
+      ]
+    },
+    {
+      "id": "num2",
+      "type": "text",
+      "name": "カウント 2",
+      "text": "2",
+      "start": 0.8,
+      "dur": 0.6,
+      "x": 50,
+      "y": 26,
+      "w": 20,
+      "h": 12,
+      "color": "#eaf6ff",
+      "stroke": "#04203f",
+      "strokeW": 0.4,
+      "fontSize": 8.5,
+      "fontWeight": 900,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 1.6
+        },
+        {
+          "t": 0.12,
+          "ease": "outCubic",
+          "opacity": 1,
+          "scale": 1
+        },
+        {
+          "t": 0.5,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 0.6,
+          "ease": "in",
+          "opacity": 0,
+          "scale": 0.9
+        }
+      ]
+    },
+    {
+      "id": "num1",
+      "type": "text",
+      "name": "カウント 1",
+      "text": "1",
+      "start": 1.4,
+      "dur": 0.6,
+      "x": 50,
+      "y": 26,
+      "w": 20,
+      "h": 12,
+      "color": "#eaf6ff",
+      "stroke": "#04203f",
+      "strokeW": 0.4,
+      "fontSize": 8.5,
+      "fontWeight": 900,
+      "shadow": 1,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 1.6
+        },
+        {
+          "t": 0.12,
+          "ease": "outCubic",
+          "opacity": 1,
+          "scale": 1
+        },
+        {
+          "t": 0.5,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 0.6,
+          "ease": "in",
+          "opacity": 0,
+          "scale": 0.9
+        }
+      ]
+    },
+    {
+      "id": "hitflash",
+      "type": "shape",
+      "name": "フラッシュ",
+      "start": 1.98,
+      "dur": 0.32,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "bg": "#ffd0d0",
+      "blend": "screen",
+      "shadow": 0,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0
+        },
+        {
+          "t": 0.05,
+          "ease": "out",
+          "opacity": 0.8
+        },
+        {
+          "t": 0.32,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "hit",
+      "type": "shape",
+      "name": "赤帯",
+      "start": 2,
+      "dur": 0.6,
+      "x": 50,
+      "y": 26,
+      "w": 46,
+      "h": 13,
+      "radius": 8,
+      "bg": "#5c0a10",
+      "stroke": "#ff8a8a",
+      "strokeW": 0.3,
+      "shadow": 1.4,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.7
+        },
+        {
+          "t": 0.14,
+          "ease": "outBack",
+          "opacity": 0.96,
+          "scale": 1
+        },
+        {
+          "t": 0.6,
+          "ease": "linear",
+          "opacity": 0.96
+        }
+      ]
+    },
+    {
+      "id": "hitmoji",
+      "type": "text",
+      "name": "文字",
+      "text": "激アツ",
+      "start": 2.04,
+      "dur": 0.56,
+      "x": 50,
+      "y": 26,
+      "w": 44,
+      "h": 12,
+      "color": "#fff2d8",
+      "stroke": "#3a0000",
+      "strokeW": 0.4,
+      "fontSize": 7.4,
+      "fontWeight": 900,
+      "letter": 0.16,
+      "shadow": 1.2,
+      "opacity": 0,
+      "keys": [
+        {
+          "t": 0,
+          "opacity": 0,
+          "scale": 0.7
+        },
+        {
+          "t": 0.14,
+          "ease": "outBack",
+          "opacity": 1,
+          "scale": 1
+        },
+        {
+          "t": 0.56,
+          "ease": "linear",
+          "opacity": 1
+        }
+      ]
+    }
+  ],
+  "id": "timer_yokoku"
+}
