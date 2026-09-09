@@ -121,10 +121,12 @@ LOTTERY_TABLE_AT = dict(LOTTERY_TABLE, **{
 
 # 上記テーブルでの機械割（設定ごとに1600万G測定。
 #   py -3 god_main_board.py --ladder --games 16000000 --seed 33 で再現できる）
-#   設定1  97.5%   設定2  98.9%   設定3 101.2%
-#   設定4 104.3%   設定5 108.2%   設定6 112.9%
-# 隣接設定の差は +1.4 / +2.3 / +3.1 / +3.9 / +4.7 ポイントで、
+#   設定1  98.1%   設定2  99.5%   設定3 101.7%
+#   設定4 104.9%   設定5 108.8%   設定6 113.5%
+# 隣接設定の差は +1.4 / +2.2 / +3.2 / +3.9 / +4.7 ポイントで、
 # 「設定を1つ上げるほど伸びが大きい」順に並ぶ（どこにも逆転が無い）。
+# ベル連（BELL_CHAIN_AT_RATE）からのAT当選は全初当りの約2.4%で、全設定を一律に
+# 0.6ポイント押し上げている。
 # 当選しても前兆（ZENCHOU_GAMES）を挟むぶん通常遊技が伸びるので、前兆が無い場合に比べて
 # 設定1で0.39・設定6で0.67ポイント低い（当たりやすい設定ほど前兆の回数が多く、よく削れる）。
 # AT中の上乗せ・ストック（AT_ADD_TABLE / AT_STOCK_TABLE）と GG_SEVEN_RATE も
@@ -203,6 +205,15 @@ MODE_UP = {
 }
 MODE_GAMES = 32       # 高確以上の滞在ゲーム数
 
+# ベル連（通常遊技でベルが揃い続けた回数）。共通ベルと押順ベル正解のどちらでも伸び、
+# 揃わなかったゲームで0に戻る。通常時のベル入賞率は約13%なので、4連が約1/4,000G、
+# 5連が約1/27,000G、6連以上はほぼ見ない。
+# AT中とGG中は押し順ナビで毎回揃ってしまい連が無限に伸びるので、数えない。
+BELL_PRIZES = ("共通ベル", "押順ベル")
+BELL_CHAIN_AT = 4          # この連数からAT（GG）を抽選する
+BELL_CHAIN_STOCK = 5       # この連数からは、ベルが揃うたびにストックが1個確定で増える
+BELL_CHAIN_AT_RATE = (0.15, 0.50, 1.00)   # 4連 / 5連 / 6連以上 のAT当選率
+
 # 前兆（当選してから告知するまでに挟む通常遊技）。
 # レア役からGGに当選しても、その場では告知せずここで決めたゲーム数だけ通常遊技を
 # 続け、消化しきってからGGへ突入する（＝そこが告知）。
@@ -213,6 +224,7 @@ ZENCHOU_WEIGHTS = {
     #  当選契機      4G  6G  8G 12G 16G 24G
     "スイカ":     (25, 25, 20, 15, 10,  5),
     "チャンス目": (15, 20, 25, 20, 15,  5),
+    "ベル連":     (35, 30, 20, 10,  5,  0),   # ベル連は自力で伸ばした実感があるので短めに告知する
 }
 
 # GG中の赤7（ストック+1）。ストックの供給源はGGとAT中抽選の2つで、合計が連チャン数を
@@ -291,6 +303,7 @@ class MainBoard:
     gg_left: int = 0
     at_left: int = 0
     stock: int = 0
+    bell_chain: int = 0        # ベル連（通常遊技でベルが揃い続けた回数）
     # 前兆（当選済みだが告知前）。残ゲーム数と当選契機を持つ。
     # 0 より大きい間は当選が確定していて、消化しきったゲームの終わりにGGへ突入する。
     zenchou_left: int = 0
@@ -352,7 +365,7 @@ class MainBoard:
     def ram_clear(self) -> None:
         """ラムクリア。実機の設定変更/RAMクリアに相当し、遊技に関わるRAMを全て消す。
 
-        消えるもの：遊技状態・内部モード・天井カウンタ・前兆・GG/AT残ゲーム数・
+        消えるもの：遊技状態・内部モード・天井カウンタ・前兆・ベル連・GG/AT残ゲーム数・
         ストック・クレジット（貯留）・出玉カウンタ・当該ゲームのワーク。
         設定は据え置きにする（実機でもラムクリア単独では設定は変わらない）。
         最後に電源投入コマンド(0x01)を送り直すので、副制御も自分の写しを初期化する。
@@ -365,6 +378,7 @@ class MainBoard:
         self.stock = 0
         self.zenchou_left = 0
         self.zenchou_cause = ""
+        self.bell_chain = 0
         self.credit = 0
         self.total_in = self.total_out = self.total_games = 0
         self.flag = "ハズレ"
@@ -529,6 +543,11 @@ class MainBoard:
     def update_state(self) -> None:
         flag = self.flag
         self.notice = []
+        # ベル連。通常遊技（通常＋前兆）でだけ数える。AT/GG中はナビで毎回揃うので数えない
+        if self.state in PLAY_NORMAL and self.prize in BELL_PRIZES:
+            self.bell_chain += 1
+        else:
+            self.bell_chain = 0
 
         if flag == "神揃い":
             self.stock += GOD_STOCK
@@ -540,13 +559,21 @@ class MainBoard:
         if self.state == ST_ZENCHOU:
             # 前兆中。当選はもう決まっているので抽選はせず、消化しきったら告知する。
             # 途中で天井に達したときは、天井の約束を守るためそこで打ち切る。
+            # ベル連のストックだけは当選済みでも意味があるので拾う。
             self.game_count += 1
+            self._bell_chain_stock()
             self.zenchou_left -= 1
             if self.zenchou_left <= 0 or self.game_count >= CEILING:
                 self._enter_gg(self.zenchou_cause)
 
         elif self.state == ST_NORMAL:
             self.game_count += 1
+            self._bell_chain_stock()
+            if self.bell_chain >= BELL_CHAIN_AT and self.prize in BELL_PRIZES \
+                    and self.rng.random() < self._bell_chain_rate():
+                self.notice.append(f"ベル{self.bell_chain}連")
+                self._start_zenchou("ベル連")
+                return
             if flag in GG_RATE and self.rng.random() < GG_RATE[flag][self.mode]:
                 self._start_zenchou(flag)
                 return
@@ -614,6 +641,18 @@ class MainBoard:
             else:
                 self.send(CMD_AT_GAMES, min(self.at_left, 255))
 
+    def _bell_chain_rate(self) -> float:
+        """今のベル連でのAT当選率。BELL_CHAIN_AT 連からで、以降は連数ごとに上がる。"""
+        i = min(self.bell_chain - BELL_CHAIN_AT, len(BELL_CHAIN_AT_RATE) - 1)
+        return BELL_CHAIN_AT_RATE[i]
+
+    def _bell_chain_stock(self) -> None:
+        """ベル連が規定数に達していたら、ベルが揃うたびにストックを1個増やす（抽選なし）。"""
+        if self.bell_chain >= BELL_CHAIN_STOCK and self.prize in BELL_PRIZES:
+            self.stock += 1
+            self.notice.append(f"ストック+1（ベル{self.bell_chain}連）")
+            self.send(CMD_STOCK, self.stock)
+
     def _start_zenchou(self, cause: str) -> None:
         """GG当選を確定させ、告知までに挟む前兆ゲーム数を決める。
 
@@ -634,6 +673,7 @@ class MainBoard:
         self.state = ST_GG
         self.zenchou_left = 0
         self.zenchou_cause = ""
+        self.bell_chain = 0
         self.gg_left = GG_GAMES
         self.stock = max(self.stock, 1)     # 突入時1個保証
         self.game_count = 0
@@ -717,6 +757,12 @@ SB_HEAT_GAIN = {"スイカ": 3, "チャンス目": 5}
 SB_HEAT_MAX = 12
 SB_HEAT_DECAY = 4           # 何ゲームに1ポイント減らすか
 SB_HEAT_STEP = (4, 8)       # この値以上で「高確」「超高確」と見立てる
+
+# ベル連。副制御は 0x34 全停止で表示役を受け取るので、主制御と同じようにベル連を数えられる。
+# 4連からAT抽選が走る（主制御の BELL_CHAIN_AT）ので、その手前の3連から見立てを1段上げて
+# 「ベルが続いている」ことを予告の濃さで見せる。連数そのものは受信情報から数えたもので、
+# 主制御の内部状態を覗いているわけではない。
+SB_BELL_ZONE = 3
 
 # 天井前兆。副制御は 0x41 から通常時ゲーム数を組み立てられるので、天井が近い
 # ゲームは見立てを1段上げて予告を濃くする。天井ゲーム数（CEILING）は機械の
@@ -875,6 +921,7 @@ class SubBoard:
         self.pattern = 0       # 今ゲームの予告パターン番号（SB_PATTERNの添字）
         self.plan = [None] * 4 # それを展開した [レバーON, 第1停止, 第2停止, 第3停止] のランク
         self.freeze = 0        # 今ゲームのフリーズ段階（0=ロックなし、1〜3）
+        self.bell_chain = 0    # ベル連の写し（0x34 の表示役から数える）
         self.chain = 0         # 連続予告の経過ゲーム数（0=連続していない）
         self.fake_left = 0     # ガセ前兆の残ゲーム数（本前兆は主制御の状態で分かる）
         self.stops = 0         # 今ゲームで受けた停止コマンド数（第n停止の n）
@@ -931,7 +978,7 @@ class SubBoard:
             self.at_left = 0
             self.stock = 0
             self.heat = self.heat_tick = 0
-            self.chain = self.fake_left = 0
+            self.chain = self.fake_left = self.bell_chain = 0
             self.game_count = 0
             self._reset_game()
 
@@ -950,6 +997,13 @@ class SubBoard:
         elif typ == CMD_NAVI and data != 0xFF:
             self.emit("navi", order=data)
 
+        elif typ == CMD_ALL_STOP:
+            # 表示役。ベル連を数えるためだけに使う（演出は出さない）
+            if self.state in PLAY_NORMAL and ID_FLAG.get(data) in BELL_PRIZES:
+                self.bell_chain += 1
+            else:
+                self.bell_chain = 0
+
         elif typ in (CMD_REEL_STOP_L, CMD_REEL_STOP_C, CMD_REEL_STOP_R):
             self.stops += 1
             if self.stops <= 3 and self.plan[self.stops]:
@@ -960,7 +1014,7 @@ class SubBoard:
             if data == ST_GG and self.state != ST_GG:
                 self.emit("gg_start")   # 前兆から来たならこれが告知になる
                 self.heat = self.heat_tick = 0
-                self.chain = self.fake_left = 0
+                self.chain = self.fake_left = self.bell_chain = 0
                 self.game_count = 0     # 天井カウンタも主制御と同じく0に戻る
             elif data == ST_NORMAL and self.state != ST_NORMAL:
                 self.emit("at_end", total=self.stock)
@@ -1080,6 +1134,8 @@ class SubBoard:
         level = self.guess
         if self.in_zone:
             level = min(level + 1, 2)       # 天井前兆。1段上の見立てとして扱う
+        if self.bell_chain >= SB_BELL_ZONE:
+            level = min(level + 1, 2)       # ベルが続いている。次にベルが揃えば4連＝AT抽選
         weights = SB_RANK_TABLE[SB_GROUP.get(flag, "弱")][level]
         i = self.rng.choices(range(len(BANNER_RANK) + 1), weights=weights)[0]
         return None if i == 0 else BANNER_RANK[i - 1]
@@ -1457,6 +1513,7 @@ class PanelLink:
             "mode": ["低確", "高確", "超高確"][b.mode] if normal else None,
             "gameCount": b.game_count if normal else None,
             "zenchou": b.zenchou_left if normal else None,
+            "bellChain": b.bell_chain if normal else None,
             "ceilingLeft": max(0, CEILING - b.game_count) if normal else None,
             "flag": r["flag"],
             "prize": r["prize"],
@@ -1501,6 +1558,7 @@ class PanelLink:
             "rank": next((r for r in reversed(s.plan) if r), None),
             "freeze": s.freeze,
             "chain": s.chain,
+            "bellChain": s.bell_chain,
             "state": STATE_NAME.get(s.state, "?"),
             "stock": s.stock, "atLeft": s.at_left,
         }
