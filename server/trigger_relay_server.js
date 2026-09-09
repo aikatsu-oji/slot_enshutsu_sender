@@ -515,6 +515,19 @@ const server = http.createServer((req, res) => {
 // WebSocketを同じサーバー(同じポート)に相乗りさせる
 const wss = new WebSocketServer({ server });
 
+// ポートが埋まっているときは、素の例外ではなく理由と対処を出して終わる
+//   (二重起動が一番多い。scripts\dev.cmd status で誰が掴んでいるか分かる)
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`[中継サーバー] ポート ${PORT} はすでに使われています。`);
+    console.error("  すでに起動している中継サーバーがあります。scripts\dev.cmd status で確認し、");
+    console.error("  止めるなら scripts\dev.cmd stop、別のポートで動かすなら PORT=8788 npm start のように指定してください。");
+  } else {
+    console.error("[中継サーバー] 起動に失敗しました:", err.message);
+  }
+  process.exit(1);
+});
+
 server.listen(PORT, () => {
   console.log(`[演出トリガー中継サーバー] ws://localhost:${PORT} で待機中...`);
   console.log(`[静的配信] http://localhost:${PORT}/ (公開ルート: ${ROOT})`);

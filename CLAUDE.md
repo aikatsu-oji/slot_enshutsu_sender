@@ -14,7 +14,7 @@ slot_enshutsu_sender/
 ├── setup.bat                  人手用ワンクリック起動 (依存確認 → サーバー → ブラウザ → 主制御)。Shift-JIS/CRLF
 ├── run_server.bat             setup.bat から呼ばれる中継サーバー起動用。Shift-JIS/CRLF
 ├── manual.bat                 人手用: 主制御を手動モードで起動し、メニューでレバーON/クレジット投入/自動切替。Shift-JIS/CRLF
-├── package.json               npm scripts (start / dev:* / test / check)
+├── package.json               npm scripts (start・dev = 中継サーバーを前面起動 / dev:cli = dev.ps1 への受け渡し / test / check)
 ├── server/
 │   └── trigger_relay_server.js  WebSocket 中継 + 静的配信 + /api/list + /api/health (port 8787)
 ├── main_board/
@@ -97,7 +97,8 @@ scripts\dev.cmd send authoring:sample_akatsu         # 予告オーサリング�
 scripts\dev.cmd open authoring                       # 予告オーサリング(単独ページ)をウィンドウで開く
 scripts\dev.cmd logs                                   # .run\*.log の末尾
 scripts\dev.cmd stop
-npm test / npm run check / npm start                   # 同等の npm scripts
+npm run dev (= npm start)                              # 中継サーバーだけを前面で起動 (dev サーバーとして扱うツール向け)
+npm test / npm run check                               # 同等の npm scripts。dev.ps1 への受け渡しは npm run dev:cli -- <command>
 ```
 
 - Git Bash から呼ぶ場合は `./scripts/dev.cmd start` または `powershell -ExecutionPolicy Bypass -File scripts/dev.ps1 start`。
