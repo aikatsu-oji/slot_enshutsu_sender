@@ -2055,11 +2055,14 @@ function hideGameVideo(){
 
   /* ===================== 副制御の演出イベント(HUD) =====================
      god_main_board.py の SubBoard が出す演出イベント(仕様書4.5節)を表示する。
-       lever{rank,plan}       レバーON。rank があればバナー。plan は参考情報
+     何を出すかを抽選しているのは主制御で、副制御は受け取った演出パターン番号を
+     この形のイベントに展開して流すだけ(pattern はその番号。表示には使わない)。
+       lever{rank,plan,pattern}  レバーON。rank があればバナー。plan/pattern は参考情報
        stop{n,rank}           第n停止(1〜3)。rank があればバナー(表示時刻は lever 起点でずらす)
        navi{order}            押し順ナビ
        banner{rank,trigger}   予告バナー(旧形式。コンパネ直送との互換用)
-       freeze{seq,rank}       神揃いフリーズ(レバーON) → 既存のロック1→2→3
+       freeze{seq,rank}       フリーズ(レバーON)。seq の最後がロック1/2/3のどこまで進むか
+                              (神揃いはロック3まで。短いロックは当選確定演出)
        gg_start               ゴッドゲーム突入
        stock_up{stock,gain}   ストック獲得
        add_games{games}       上乗せ

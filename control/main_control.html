@@ -329,6 +329,9 @@
   }
   .mb-roles span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
+  /* 演出抽選の結果は文字数が変わる (最長「レバー:青→第1:緑→第2:赤→第3:金」) ので、
+     1行ぶんの幅を丸ごと使い、枠の高さが動かないよう省略する */
+  .mb-roles span.wide{grid-column:1/-1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
   /* 遊技操作 (--manual のときのレバーON)。実機のレバーは主制御への入力なので、ここは操作部の代わり */
   /* 表示(進み方・クレジット)とボタンを別の格子にして、中身の文字数が変わっても
      枠の幅と折り返しが動かないようにする。値は枠内で省略する。 */
@@ -358,18 +361,23 @@
   .mb-cmds{display:none;}
   .mb-cmds.show{display:block;}
 
-  .sb-guess{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.4);}
-  .sb-real{font-size:10.5px;color:#7a7488;margin-top:3px;}
-  .sb-real.gap{color:#ff9a8a;}
-  .sb-heat{display:flex;gap:3px;margin-top:7px;}
-  .sb-heat i{
-    flex:1;height:10px;border-radius:2px;
-    background:#0d0b14;border:1px solid var(--line);
+  .sb-pat{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.4);}
+  .sb-note{font-size:10.5px;color:#7a7488;margin-top:3px;word-break:break-all;}
+  /* 予告プラン: レバーON / 第1〜第3停止の4点に何を出すかを並べる
+     (主制御が抽選して 0x22 で送ってきた中身そのもの) */
+  .sb-plan{display:flex;gap:3px;margin-top:7px;}
+  .sb-plan i{
+    flex:1;height:22px;border-radius:3px;font-style:normal;font-size:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#0d0b14;border:1px solid var(--line);color:#5c5670;line-height:1.1;
   }
-  .sb-heat i.lit{
-    background:var(--gold);border-color:var(--gold-bright);
-    box-shadow:0 0 6px rgba(212,175,55,.5);
-  }
+  .sb-plan i b{font-weight:700;font-size:11px;}
+  .sb-plan i.on{color:#efe9ff;box-shadow:0 0 6px rgba(212,175,55,.35);}
+  .sb-plan i.r-白{background:#2b2b33;border-color:#c9c9d6;}
+  .sb-plan i.r-青{background:#12294d;border-color:#4d8bff;}
+  .sb-plan i.r-緑{background:#0f3a24;border-color:#3ad07f;}
+  .sb-plan i.r-赤{background:#4a1218;border-color:#ff5a6a;}
+  .sb-plan i.r-金{background:#4a3a08;border-color:var(--gold-bright);}
   .sb-events .ev-freeze{color:#ff6b6b;font-weight:700;}
   .sb-events .ev-banner{color:var(--gold-bright);}
 
@@ -584,6 +592,7 @@
         <span>ナビ <b id="mb-navi">—</b></span>
         <span>払出 <b id="mb-pay">—</b></span>
         <span>レバー <b id="mb-accept">—</b></span>
+        <span class="wide">演出抽選 <b id="mb-enshutsu">—</b></span>
       </div>
       <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
       <div class="mb-opts">
@@ -600,14 +609,14 @@
       </div>
       <div class="sb-grid">
         <div class="mb-tile">
-          <div class="lbl">副制御の推測</div>
-          <div class="mb-val sb-guess" id="sb-guess">—</div>
-          <div class="sb-real" id="sb-real">主制御の実値 —</div>
+          <div class="lbl">受け取った演出</div>
+          <div class="mb-val sb-pat" id="sb-pattern">—</div>
+          <div class="sb-note" id="sb-note">主制御が抽選した予告パターン</div>
         </div>
         <div class="mb-tile">
-          <div class="lbl">ヒート</div>
-          <div class="mb-val" id="sb-heat-n">—</div>
-          <div class="sb-heat" id="sb-heat"></div>
+          <div class="lbl">予告プラン</div>
+          <div class="mb-val" id="sb-rank">—</div>
+          <div class="sb-plan" id="sb-plan"></div>
         </div>
         <div class="mb-tile">
           <div class="lbl">副制御が見ている状態</div>
@@ -930,6 +939,7 @@
     navi: document.getElementById("mb-navi"),
     pay: document.getElementById("mb-pay"),
     accept: document.getElementById("mb-accept"),
+    enshutsu: document.getElementById("mb-enshutsu"),
     mode: document.getElementById("mb-mode"),
     credit: document.getElementById("mb-credit"),
     creditTop: document.getElementById("mb-credit-top"),   // 常時見えるダイジェスト側
@@ -1014,9 +1024,8 @@
     mbSetCredit(d.credit);
     mb.total.textContent = `${(d.game ?? 0).toLocaleString()}G / IN ${(d.totalIn ?? 0).toLocaleString()} / OUT ${(d.totalOut ?? 0).toLocaleString()}`;
 
-    // 副制御の推測と突き合わせるため、主制御の実モードを控えておく
-    sbRealMode = (st === "通常") ? (d.mode ?? null) : null;
-    sbSyncReal();
+    // 主制御が抽選した演出(0x22 / 0x23)。副制御へ渡す前の値そのもの
+    mb.enshutsu.textContent = d.freeze ? `ロック${d.freeze}` : (d.enshutsuNote || "—");
   }
 
   function mbRenderEvent(d){
@@ -1100,8 +1109,7 @@
     mb.pay.textContent = "—";
     mbSetCredit(d.credit);
     mb.total.textContent = `0G / IN 0 / OUT 0`;
-    sbRealMode = d.mode ?? null;
-    sbSyncReal();
+    mb.enshutsu.textContent = "—";
     log("🧹 主制御 ラムクリア: 状態・ストック・クレジット・出玉カウンタを初期化しました");
   }
 
@@ -1208,17 +1216,17 @@
   // 副制御モニタ
   //   SubBoard の試験用モニタ端子が送る
   //   { action:"subBoard", type:"state"|"event", ... } を表示する。
-  //   guess は副制御が受信履歴だけから立てた見立てであり、主制御の内部モード
-  //   そのものではない。両者が食い違ったときは実値側を赤で示す。
+  //   演出を抽選するのは主制御なので、ここに出るのは「副制御が受け取った演出」
+  //   (0x22 の予告パターン番号と、それを展開したプラン)。副制御の見立てではない。
   // ---------------------------------------------------------------
-  const SB_HEAT_MAX = 9;      // SubBoard の min(heat + 3, 9) に合わせる
+  const SB_PLAN_POINT = ["レバー", "第1", "第2", "第3"];   // 予告を出す4つの操作時点
   const sb = {
     pill: document.getElementById("sb-pill"),
     pillText: document.getElementById("sb-pill-text"),
-    guess: document.getElementById("sb-guess"),
-    real: document.getElementById("sb-real"),
-    heatN: document.getElementById("sb-heat-n"),
-    heat: document.getElementById("sb-heat"),
+    pattern: document.getElementById("sb-pattern"),
+    note: document.getElementById("sb-note"),
+    rank: document.getElementById("sb-rank"),
+    plan: document.getElementById("sb-plan"),
     state: document.getElementById("sb-state"),
     rx: document.getElementById("sb-rx"),
     events: document.getElementById("sb-events"),
@@ -1234,10 +1242,12 @@
     add_games: ["上乗せ",         "ev-at"],
     at_end:    ["AT終了",         "ev-end"],
   };
-  for(let i = 0; i < SB_HEAT_MAX; i++) sb.heat.appendChild(document.createElement("i"));
+  SB_PLAN_POINT.forEach(name=>{
+    const cell = document.createElement("i");
+    cell.innerHTML = `<b>—</b>${name}`;
+    sb.plan.appendChild(cell);
+  });
 
-  let sbRealMode = null;      // 主制御の実モード(通常時のみ)
-  let sbGuess = null;         // 副制御の推測
   let sbTimer = null;
   let sbEventCount = 0;
 
@@ -1253,26 +1263,21 @@
     }, 20000);
   }
 
-  function sbSyncReal(){
-    if(sbRealMode == null){
-      sb.real.textContent = "主制御の実値 —（通常時のみ）";
-      sb.real.classList.remove("gap");
-      return;
-    }
-    sb.real.textContent = `主制御の実値 ${sbRealMode}`;
-    sb.real.classList.toggle("gap", sbGuess != null && sbGuess !== sbRealMode);
-  }
-
   function sbRenderState(d){
     sbAlive(`受信中 / ${(d.game ?? 0).toLocaleString()}G`);
-    sbGuess = d.guess ?? null;
-    sb.guess.textContent = sbGuess ?? "—";
-    sb.heatN.textContent = d.heat ?? "—";
+    const freeze = Number(d.freeze) || 0;
+    sb.pattern.textContent = freeze ? `ロック${freeze}` : `#${d.pattern ?? 0}`;
+    sb.note.textContent = freeze ? "フリーズ (0x23) — 予告は重ねない"
+                                 : (d.note || "主制御が抽選した予告パターン");
+    sb.rank.textContent = freeze ? "金" : (d.rank ?? "—");
     sb.state.textContent = d.state ?? "—";
     sb.rx.textContent = (d.rx ?? 0).toLocaleString();
-    const lit = Math.max(0, Math.min(SB_HEAT_MAX, Number(d.heat) || 0));
-    Array.from(sb.heat.children).forEach((el, i)=> el.classList.toggle("lit", i < lit));
-    sbSyncReal();
+    const plan = Array.isArray(d.plan) ? d.plan : [];
+    Array.from(sb.plan.children).forEach((el, i)=>{
+      const rank = plan[i] || null;
+      el.className = rank ? `on r-${rank}` : "";
+      el.innerHTML = `<b>${rank ?? "—"}</b>${SB_PLAN_POINT[i]}`;
+    });
   }
 
   function sbRenderEvent(d){
@@ -1331,9 +1336,9 @@
   };
   const INJ_EVT = {
     freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
-    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", heat:0}],
+    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", pattern:5}],
     stop:      ["停止予告",       {type:"stop", n:3, rank:"赤"}],
-    banner:    ["バナー予告(旧)", {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
+    banner:    ["バナー予告(旧)", {type:"banner", rank:"赤", trigger:"チャンス目"}],
     navi:      ["押し順ナビ",     {type:"navi", order:0}],
     gg_start:  ["GG開始",         {type:"gg_start"}],
     stock_up:  ["ストック加算",   {type:"stock_up", stock:2, gain:1}],

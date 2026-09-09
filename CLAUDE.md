@@ -15,6 +15,7 @@ slot_enshutsu_sender/
 │   └── trigger_relay_server.js  WebSocket 中継 + 静的配信 + /api/list + /api/health (port 8787)
 ├── main_board/
 │   ├── god_main_board.py        主制御(MainBoard)・副制御(SubBoard) シミュレータ。--serve で ws://127.0.0.1:8765
+│   │                            演出抽選も主制御が持つ (ENSHUTSU_TABLE / FREEZE_TABLE)。副制御は番号を絵にするだけ
 │   │                            --manual で「起動しても回さずレバーON待ち」。ベットはMAXベット(3枚)のみ
 │   └── reels.json               図柄配列 (1リール21コマ) の唯一の定義。主制御と筐体ビューの両方が読む
 ├── control/
@@ -51,8 +52,10 @@ slot_enshutsu_sender/
 - 中継サーバー `ws://127.0.0.1:8787` … コンパネ ⇔ オーバーレイ、主制御モニタ端子 → コンパネ。同じポートで http 静的配信。
 - 副制御ポート `ws://127.0.0.1:8765` … god_main_board.py --serve が演出イベントを配信し、オーバーレイが受信。
   副制御の演出トリガーは遊技者の操作に対応する4点: **レバーON** (0x30) / **第1停止** / **第2停止** / **第3停止**
-  (0x31〜0x33 の到着順)。レバーONで内部当選 (0x20) から予告プラン `[レバーON, 第1, 第2, 第3]` の各ランクを決め、
-  `lever{rank,plan}` を出し、各停止で `stop{n,rank}` を出す (rank=null は演出なし)。神揃いの `freeze` もレバーONで出す。
+  (0x31〜0x33 の到着順)。**何を出すかを抽選するのは主制御**で、副制御は 0x22 で届いた予告パターン番号を
+  `ENSHUTSU_PATTERN` で引いて `[レバーON, 第1, 第2, 第3]` のランク列に展開するだけ (自前の乱数を持たない)。
+  レバーONで `lever{rank,plan,pattern}` を出し、各停止で `stop{n,rank}` を出す (rank=null は演出なし)。
+  フリーズ `freeze{seq}` も 0x23 で届いた段階のぶんだけレバーONで出す。
   主制御は1ゲームぶんのコマンドを一括送出するので lever/stop はほぼ同時に届く。オーバーレイは lever 受信時刻を起点に
   `stopTiming1..3` (既定 1.15/1.6/2.05 秒 = 筐体ビューの停止タイミング) だけ遅らせて停止演出を出す。
   そのほか `navi`(押し順ナビ) / `gg_start` / `stock_up` / `add_games` / `at_end` は状態通知として従来どおり。
@@ -166,6 +169,18 @@ npm test / npm run check / npm start                   # 同等の npm scripts
   参照する (1リール21コマ + 継ぎ目複製で 26要素 × 3リール)。配列は `main_board/reels.json` が唯一の定義で、主制御は
   起動時に読み、筐体ビューは `../main_board/reels.json` を fetch する (file:// では読めないので 8787 経由で開く)。
   図柄を増減したら `symbols.js` の INFO / BODY と `reels.json` を直し、`symbols.html` で見た目を確認する。
+- 演出の抽選は**主制御**にある (`enshutsu_lottery`)。1ゲームは
+  内部抽選 (`lottery`) → **当否抽選 (`hit_lottery`)** → **演出抽選 (`enshutsu_lottery`)** → 回転開始 の順で、
+  当否をレバーONで確定させてから演出を選ぶので「当たっているゲームだけ強い予告」が出せる。
+  結果は `0x22 演出パターン` (毎ゲーム) と `0x23 フリーズ` (引いたゲームだけ) の2つで副制御へ渡す。
+  副制御は `ENSHUTSU_PATTERN[番号]` を引くだけで、乱数も推測ロジックも持たない (ヒートは廃止)。
+  演出用の乱数 `MainBoard.enshutsu_rng` は出玉抽選 `rng` と**別系統**なので、
+  `ENSHUTSU_TABLE` / `ENSHUTSU_TABLE_HIT` / `ENSHUTSU_STEP` / `FREEZE_TABLE` をいくら触っても機械割は動かない
+  (`--ladder` を回し直す必要があるのは `LOTTERY_TABLE` 系を触ったときだけ)。
+  逆に `hit_lottery` の当選率 (`GG_RATE` / `AT_ADD_RATE` など) を触ったら `--ladder` を通すこと。
+  予告パターンは番号1バイトに収める決まりなので、`ENSHUTSU_RANK` や段階数を増やすときは
+  `_build_enshutsu_patterns()` の総数が 256 を超えないか確認する (assert で落ちる)。
+  大量集計 (`--ladder` / `--sim`) は `draw_enshutsu=False` で演出抽選を飛ばす (結果は変わらない)。
 - 主制御の副制御ポート (8765) は **排他バインド** (Windows は `SO_EXCLUSIVEADDRUSE`)。二重起動すると2つ目は
   起動時にエラーを出して落ちる。`SO_REUSEADDR` に戻すと Windows では2つ目が黙ってポートを奪い、2台ぶんの
   state とコマンドが中継サーバーへ流れて **1回のレバーONでリールが2回回る**。ここは元に戻さないこと。

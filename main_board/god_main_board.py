@@ -8,14 +8,20 @@ GODタイプ パチスロ機 主制御（メイン基板）シミュレータ
     [1] クレジット投入 / MAXベット -> insert_credit() / bet()
     [2] 乱数取得（16bit）      -> get_random()
     [3] 内部抽選（役決定）      -> lottery()
-    [4] リール回転開始         -> spin_start()
-    [5] 停止制御（引込み/蹴り） -> stop_reel()
-    [6] 入賞判定（有効ライン）  -> judge()
-    [7] 払出                  -> payout()
-    [8] 状態遷移（AT/RT管理）   -> update_state()
+    [4] 当否抽選（AT/ストック） -> hit_lottery()
+    [5] 演出抽選（予告/フリーズ）-> enshutsu_lottery()
+    [6] リール回転開始         -> spin_start()
+    [7] 停止制御（引込み/蹴り） -> stop_reel()
+    [8] 入賞判定（有効ライン）  -> judge()
+    [9] 払出                  -> payout()
+   [10] 状態遷移（AT/RT管理）   -> update_state()
 
 本機はメイン管理AT（6号機準拠）として実装する。すなわちAT状態・ゲーム数・
 ストックはすべて主制御が保持し、副制御（演出基板）には結果を通知するだけとする。
+
+演出も同じ扱いにする。当該ゲームの当否はレバーONの時点で [4] が確定させ、
+[5] がその結果と内部モードから予告パターンを1つ抽選して、番号だけを副制御へ渡す。
+副制御は受け取った番号を絵に起こすだけで、自前の抽選を持たない。
 
 ベットはMAXベット（規定投入枚数3枚）のみで、部分ベットは持たない。回転はMAXベットが
 成立したときだけ。クレジットはクレジット投入信号で増え、上限は設けない（無限）。
@@ -26,7 +32,7 @@ GODタイプ パチスロ機 主制御（メイン基板）シミュレータ
     副制御ポート   … 2バイトコマンド（単方向）。--serve で ws://127.0.0.1:8765 から
                     演出イベントとしてオーバーレイへ配信される。
     試験用モニタ端子 … 主制御の全レジスタ。trigger_relay_server.js（ws://127.0.0.1:8787）
-                    へクライアント接続し、コンパネ main_control.html へ流す（第8節）。
+                    へクライアント接続し、コンパネ main_control.html へ流す（第9節）。
 
 usage:
     python3 god_main_board.py --setting 1 --games 10000   # 集計のみ（コンパネ送信なし）
@@ -127,8 +133,12 @@ ST_NORMAL, ST_GG, ST_AT = 0, 1, 2          # 遊技状態
 MODE_LOW, MODE_HIGH, MODE_SHIGH = 0, 1, 2  # 通常時の内部モード（低確/高確/超高確）
 
 CEILING = 1200        # 天井ゲーム数
+CEILING_ZONE = 32     # 天井までの残りゲーム数がこれ以下なら前兆扱い（演出抽選だけが見る）
 GG_GAMES = 10         # ゴッドゲームの固定ゲーム数
 AT_INIT_GAMES = 50    # ストック1個あたりの初期ATゲーム数
+AT_ADD_GAMES = 30     # AT中チャンス目からの上乗せゲーム数
+AT_ADD_RATE = 0.35    # AT中チャンス目の上乗せ当選率
+AT_STOCK_RATE = 0.20  # AT中スイカのストック当選率
 
 # レア役からのGG（ゴッドゲーム）当選率  [低確, 高確, 超高確]
 GG_RATE = {
@@ -158,8 +168,10 @@ WAIT_TIME = 4.1
 #    上位バイト = コマンド種別 / 下位バイト = データ。
 #    通信は主→副の一方向のみ。副制御は主制御へ一切送信できず、
 #    主制御は副制御の状態を参照しない（副が落ちても遊技は続行する）。
-#    内部モード（低確/高確/超高確）は送信しない。副制御は受信した
-#    情報だけから独自に高確度を推測して演出を決める。
+#    内部モード（低確/高確/超高確）そのものは送信しない。代わりに主制御が
+#    モードと当否を材料に演出を抽選し、その結果である演出パターン番号
+#    （0x22 / 0x23）だけを渡す。副制御は番号を絵に起こすだけで、
+#    主制御の内部状態は最後まで見えない。
 # ---------------------------------------------------------------------------
 
 CMD_POWER_ON = 0x01     # 電源投入・復帰
@@ -167,6 +179,8 @@ CMD_MEDAL_IN = 0x10     # メダル投入   data: 投入枚数
 CMD_GAME_START = 0x11   # 遊技開始     data: 遊技状態
 CMD_FLAG = 0x20         # 内部当選     data: 条件装置番号
 CMD_NAVI = 0x21         # 押し順ナビ   data: 押し順番号(0-5) / 0xFF=ナビなし
+CMD_ENSHUTSU = 0x22     # 演出パターン data: 予告パターン番号(0=演出なし)。毎ゲーム送る
+CMD_FREEZE = 0x23       # フリーズ     data: ロック段階(1〜3)。抽選で当たったゲームだけ送る
 CMD_REEL_START = 0x30   # 全リール回転開始
 CMD_REEL_STOP_L = 0x31  # 左リール停止 data: 停止位置(コマ番号)
 CMD_REEL_STOP_C = 0x32
@@ -182,7 +196,8 @@ CMD_ADD_GAMES = 0x53    # 上乗せ       data: 上乗せG数
 
 CMD_NAME = {
     CMD_POWER_ON: "電源投入", CMD_MEDAL_IN: "メダル投入", CMD_GAME_START: "遊技開始",
-    CMD_FLAG: "内部当選", CMD_NAVI: "押し順ナビ", CMD_REEL_START: "リール回転",
+    CMD_FLAG: "内部当選", CMD_NAVI: "押し順ナビ",
+    CMD_ENSHUTSU: "演出パターン", CMD_FREEZE: "フリーズ", CMD_REEL_START: "リール回転",
     CMD_REEL_STOP_L: "左リール停止", CMD_REEL_STOP_C: "中リール停止",
     CMD_REEL_STOP_R: "右リール停止", CMD_ALL_STOP: "全停止", CMD_PAYOUT: "払出",
     CMD_GAME_END: "遊技終了", CMD_STATE_NOTIFY: "状態通知",
@@ -196,11 +211,116 @@ FLAG_ID = {name: i for i, name in enumerate(
      "チャンス目", "赤7揃い", "神揃い"])}
 ID_FLAG = {v: k for k, v in FLAG_ID.items()}
 
-RARE = ("スイカ", "チャンス目")
+
+# ---------------------------------------------------------------------------
+# 5. 演出抽選テーブル（主副で共有する定数）
+#
+#    演出を決めるのは主制御。内部当選役・内部モード・天井までの残りゲーム数・
+#    当該ゲームの当否といった、主制御しか持たない情報から予告パターンを1つ抽選し、
+#    その番号だけを 0x22（演出パターン）/ 0x23（フリーズ）で副制御へ渡す。
+#    副制御はここの表を同じ番号で引いて絵に起こすだけで、自前の抽選を持たない。
+#
+#    演出用の乱数は出玉抽選（MainBoard.rng）とは別系統（MainBoard.enshutsu_rng）に
+#    してある。ここの重みをいくら触っても機械割は動かない。
+# ---------------------------------------------------------------------------
+
+ENSHUTSU_RANK = ["白", "青", "緑", "赤", "金"]     # 予告ランク（弱→強）
+
+# 演出抽選での役グループ。内部当選役をここで3段階に丸める（記載の無い役は「弱」）。
+ENSHUTSU_GROUP = {
+    "スイカ": "中",
+    "チャンス目": "強",
+}
+
+# 最終ランクの抽選テーブル。
+#   行 = 内部モード（低確 / 高確 / 超高確）。天井前兆は1段上の行を使う。
+#   列 = [演出なし, 白, 青, 緑, 赤, 金] の重み（合計は行ごとに任意）。
+# 上の行ほど強いランクが出るので、副制御が高確度を推測しなくても期待度が絵に出る。
+ENSHUTSU_TABLE = {
+    #  役グループ    演出なし    白    青    緑    赤    金
+    "弱": ((9600,  300,   80,   20,    0,    0),
+           (9450,  350,  150,   50,    0,    0),
+           (9100,  500,  280,  100,   20,    0)),
+    "中": ((4000, 3000, 2000,  800,  180,   20),
+           (2500, 2600, 3000, 1500,  360,   40),
+           (1200, 1800, 3200, 3000,  720,   80)),
+    "強": ((2000, 2500, 3000, 2000,  450,   50),
+           (1000, 2000, 3000, 3000,  900,  100),
+           ( 400, 1200, 2600, 4000, 1600,  200)),
+}
+
+# GG当選ゲーム専用の表。演出なしを引かせず、赤・金へ寄せる（当選の重さを出す）。
+# 主制御が当否をレバーONで確定させているからこそ引ける表で、
+# 「当たっているゲームだけ強い」という当たり前の期待度をここで作る。
+ENSHUTSU_TABLE_HIT = ((0, 400, 1200, 3000, 4000, 1400),
+                      (0, 200,  800, 2500, 4500, 2000),
+                      (0, 100,  400, 2000, 4800, 2700))
+
+# 最終ランクごとの「最後に出す操作時点」の重み [レバーON, 第1停止, 第2停止, 第3停止]。
+# 高ランクほど遅い時点まで引っ張り、ステップアップさせやすい。
+ENSHUTSU_STEP = {
+    "白": (70, 15, 10,  5),
+    "青": (45, 20, 20, 15),
+    "緑": (25, 20, 25, 30),
+    "赤": (15, 15, 25, 45),
+    "金": (10, 10, 20, 60),
+}
+ENSHUTSU_STAGE = (50, 30, 15, 5)   # 段階数 1,2,3,4 の重み（可能な範囲で切り詰める）
+
+ENSHUTSU_POINT = ("レバー", "第1", "第2", "第3")   # 予告を出す4つの操作時点
+
+
+def _build_enshutsu_patterns():
+    """予告パターンの全表を作る（主副が同じ番号で引く対応表）。
+
+    1パターン = [レバーON, 第1停止, 第2停止, 第3停止] の各時点に出すランク番号
+    （None はその時点では何も出さない）。最終ランク t・最後に出す時点 f・
+    段階数 k の組をすべて並べたもので、番号0は「演出なし」。
+    例: t=赤(3) f=第3停止(3) k=3 → (None, 青, 緑, 赤)。
+    番号は 0x22 の1バイトに収める（現在41通り）。
+    """
+    patterns = [(None, None, None, None)]
+    ids = {}
+    for t in range(len(ENSHUTSU_RANK)):
+        for f in range(4):
+            for k in range(1, min(f, t) + 2):
+                p = [None] * 4
+                for j in range(k):
+                    p[f - (k - 1) + j] = t - (k - 1) + j
+                ids[(t, f, k)] = len(patterns)
+                patterns.append(tuple(p))
+    return tuple(patterns), ids
+
+
+ENSHUTSU_PATTERN, ENSHUTSU_PATTERN_ID = _build_enshutsu_patterns()
+assert len(ENSHUTSU_PATTERN) <= 256, "演出パターン番号は0x22の1バイトに収めること"
+
+
+def enshutsu_note(pid: int) -> str:
+    """演出パターン番号を読める形にする（コマンド生ログ・コンパネ表示用）。"""
+    pat = ENSHUTSU_PATTERN[pid] if 0 <= pid < len(ENSHUTSU_PATTERN) else None
+    if pat is None:
+        return f"未定義({pid})"
+    steps = [f"{ENSHUTSU_POINT[i]}:{ENSHUTSU_RANK[v]}"
+             for i, v in enumerate(pat) if v is not None]
+    return "→".join(steps) if steps else "演出なし"
+
+
+# フリーズ（レバーONロック）抽選。出玉に直結する演出なので主制御が持つ。
+#   [ロックなし, ロック1(振動), ロック2(カットイン), ロック3(暗転)] の重み。
+# 神揃い（通常時の内部当選・GG中の神揃いのどちらも）は必ずフル（ロック3）。
+# それ以外のGG当選でまれに出る短いロックは「出たら当選確定」の演出で、ガセは引かせない。
+# 当否をレバーONで確定させている（hit_lottery）から引ける表で、
+# 副制御が受信情報だけから推測していた頃には作れなかった演出になる。
+FREEZE_TABLE = {
+    "神揃い":  (   0,   0,  0, 100),
+    "GG当選":  (9700, 220, 80,   0),
+}
+FREEZE_SEQ = ("lock1", "lock2", "lock3")
 
 
 # ---------------------------------------------------------------------------
-# 5. 主制御の内部レジスタ
+# 6. 主制御の内部レジスタ
 # ---------------------------------------------------------------------------
 
 @dataclass
@@ -238,6 +358,16 @@ class MainBoard:
     reel_pos: list = field(default_factory=lambda: [0, 0, 0])
     prize: str = "ハズレ"
     notice: list = field(default_factory=list)
+    # レバーONで確定した当該ゲームの当否（hit_lottery が入れ、update_state が消費する）。
+    # 演出抽選はこれを見て「当たっているゲームだけ強い予告」を出す。
+    hit: dict = field(default_factory=dict)
+
+    # 演出抽選。演出用の乱数は出玉抽選（rng）とは別系統にして、演出テーブルを
+    # いくら触っても機械割が動かないようにする。
+    enshutsu_rng: random.Random = field(default_factory=random.Random)
+    draw_enshutsu: bool = True  # 演出を抽選するか。大量集計（--ladder / --sim）では切る
+    enshutsu: int = 0           # 当該ゲームの予告パターン番号（0x22 で送る値）
+    freeze: int = 0             # 当該ゲームのフリーズ段階（0x23 で送る値。0=ロックなし）
 
     # 副制御ポート（単方向送信専用）
     sub: "SubBoard | None" = None
@@ -274,7 +404,7 @@ class MainBoard:
         """ラムクリア。実機の設定変更/RAMクリアに相当し、遊技に関わるRAMを全て消す。
 
         消えるもの：遊技状態・内部モード・天井カウンタ・GG/AT残ゲーム数・ストック・
-        クレジット（貯留）・出玉カウンタ・当該ゲームのワーク。
+        クレジット（貯留）・出玉カウンタ・当該ゲームのワーク（当否と演出抽選結果を含む）。
         設定は据え置きにする（実機でもラムクリア単独では設定は変わらない）。
         最後に電源投入コマンド(0x01)を送り直すので、副制御も自分の写しを初期化する。
         """
@@ -291,6 +421,9 @@ class MainBoard:
         self.bell_answer = 0
         self.reel_pos = [0, 0, 0]
         self.notice = []
+        self.hit = {}
+        self.enshutsu = 0
+        self.freeze = 0
         self.cmd_log.clear()
         # ウェイトも電源投入直後と同じ扱いに戻す（直前の回転が無かったことにする）
         self.spin_at = 0.0
@@ -370,7 +503,127 @@ class MainBoard:
         self.send(CMD_FLAG, FLAG_ID[self.flag])
         return self.flag
 
-    # -- [4] リール回転 ----------------------------------------------------
+    # -- [4] 当否抽選 ------------------------------------------------------
+    def hit_lottery(self) -> dict:
+        """当該ゲームの当否をレバーONの時点で確定させる。
+
+        実機の主制御はレバーONの1回で役もAT当選も決めてしまい、リールが回り
+        始めた時点で結果は動かない。ここで確定させておくと、次段の演出抽選が
+        「このゲームは当たっている」を知ったうえで予告を選べる。
+        引いた結果は self.hit に置くだけで、状態は変えない（反映は update_state）。
+
+        戻り値（すべて任意キー）:
+            gg       … レア役からのGG当選。値は当選契機の役名
+            ceiling  … 天井到達でのGG当選
+            mode_up  … 通常時の内部モード昇格先（None は昇格しない）
+            god      … 神揃い（通常時は内部当選、GG中はGG中の神揃い抽選）
+            seven    … GG中の赤7揃い（ストック+1）
+            add      … AT中の上乗せゲーム数
+            stock    … AT中のストック獲得数
+        """
+        flag = self.flag
+        h: dict = {}
+        if flag == "神揃い":
+            # 神揃いは内部当選そのものが当選。状態を問わず最優先で扱う
+            h["god"] = True
+        elif self.state == ST_NORMAL:
+            if flag in GG_RATE and self.rng.random() < GG_RATE[flag][self.mode]:
+                h["gg"] = flag
+            else:
+                if flag in MODE_UP:
+                    hi, shi = MODE_UP[flag]
+                    r = self.rng.random()
+                    h["mode_up"] = (MODE_SHIGH if r < shi else
+                                    MODE_HIGH if r < shi + hi else None)
+                if self.game_count + 1 >= CEILING:
+                    h["ceiling"] = True
+        elif self.state == ST_GG:
+            r = self.rng.random()
+            if r < GG_GOD_RATE:
+                h["god"] = True
+            elif r < GG_GOD_RATE + GG_SEVEN_RATE:
+                h["seven"] = True
+        else:                                   # ST_AT
+            if flag == "チャンス目" and self.rng.random() < AT_ADD_RATE:
+                h["add"] = AT_ADD_GAMES
+            elif flag == "スイカ" and self.rng.random() < AT_STOCK_RATE:
+                h["stock"] = 1
+        self.hit = h
+        return h
+
+    # -- [5] 演出抽選 ------------------------------------------------------
+    def enshutsu_lottery(self) -> int:
+        """予告演出とフリーズを抽選し、その番号だけを副制御へ渡す。
+
+        材料は内部当選役・遊技状態・内部モード・天井までの残りゲーム数・当否で、
+        どれも主制御しか持たない情報。副制御へ出るのは 0x22（予告パターン番号）と
+        0x23（フリーズ段階）だけなので、副制御は内部状態を知らないまま
+        主制御が決めた期待度どおりの演出を出せる。
+
+        0x22 は演出が無くても毎ゲーム送り（副制御が今ゲームの分を取り違えない）、
+        0x23 はロックを引いたゲームだけ送る。
+
+        draw_enshutsu が False のときは何も抽選せず、コマンドも出さない。
+        機械割を測るだけの大量集計（--ladder / --sim）で演出抽選の時間を省くため。
+        """
+        self.enshutsu = self.freeze = 0
+        if not self.draw_enshutsu:
+            return 0
+        self.freeze = self._draw_freeze()
+        if self.freeze:
+            # フリーズそのものが今ゲームの演出。予告は重ねない
+            self.enshutsu = 0
+            self.send(CMD_ENSHUTSU, 0)
+            self.send(CMD_FREEZE, self.freeze)
+            return 0
+        self.enshutsu = self._draw_pattern(self._draw_rank())
+        self.send(CMD_ENSHUTSU, self.enshutsu)
+        return self.enshutsu
+
+    def _draw_freeze(self) -> int:
+        """フリーズ（レバーONロック）の段階。0 はロックなし。
+
+        神揃いは内部当選（通常時）でもGG中の神揃い抽選でも hit["god"] が立つので、
+        どちらの神揃いも同じようにフルフリーズになる。
+        """
+        if self.hit.get("god"):
+            cause = "神揃い"
+        elif self.hit.get("gg") or self.hit.get("ceiling"):
+            cause = "GG当選"
+        else:
+            return 0
+        return self.enshutsu_rng.choices(range(4), weights=FREEZE_TABLE[cause])[0]
+
+    def _draw_rank(self):
+        """今ゲームの予告の最終ランク。None は予告なし。"""
+        if self.state != ST_NORMAL:
+            return None          # AT/GG中は予告バナーを出さない（押し順ナビが主役）
+        m = self.mode
+        if CEILING - self.game_count <= CEILING_ZONE:
+            m = min(m + 1, MODE_SHIGH)      # 天井前兆。1段上のモードとして扱う
+        if self.hit.get("gg") or self.hit.get("ceiling"):
+            weights = ENSHUTSU_TABLE_HIT[m]
+        else:
+            weights = ENSHUTSU_TABLE[ENSHUTSU_GROUP.get(self.flag, "弱")][m]
+        i = self.enshutsu_rng.choices(range(len(ENSHUTSU_RANK) + 1), weights=weights)[0]
+        return None if i == 0 else ENSHUTSU_RANK[i - 1]
+
+    def _draw_pattern(self, rank) -> int:
+        """最終ランクから予告パターン番号を1つ選ぶ。
+
+        「最後に出す操作時点 f」と「段階数 k」を抽選し、f を終点に k 段階で
+        最終ランクまで上げる（ステップアップ予告）。
+        例: 赤・f=第3停止・k=3 → 第1停止:青 → 第2停止:緑 → 第3停止:赤。
+        """
+        if rank is None:
+            return 0
+        t = ENSHUTSU_RANK.index(rank)
+        f = self.enshutsu_rng.choices(range(4), weights=ENSHUTSU_STEP[rank])[0]
+        kmax = min(f, t) + 1
+        k = self.enshutsu_rng.choices(range(1, kmax + 1), weights=ENSHUTSU_STAGE[:kmax])[0]
+        return ENSHUTSU_PATTERN_ID[(t, f, k)]
+
+    # -- [6] リール回転 ----------------------------------------------------
     def spin_start(self) -> list:
         """各リールの目押し位置（=遊技者の停止操作位置）を決める。"""
         if self.wait_time > 0.0:
@@ -378,7 +631,7 @@ class MainBoard:
         self.send(CMD_REEL_START)
         return [self.get_random() % KOMA for _ in range(3)]
 
-    # -- [5] 停止制御 ------------------------------------------------------
+    # -- [7] 停止制御 ------------------------------------------------------
     def stop_reel(self, reel_idx: int, push_pos: int, target: str | None) -> int:
         """
         主制御の停止制御テーブル相当。
@@ -400,7 +653,7 @@ class MainBoard:
                 return pos
         return push_pos
 
-    # -- [6] 入賞判定 ------------------------------------------------------
+    # -- [8] 入賞判定 ------------------------------------------------------
     def judge(self, push: list, order: int) -> str:
         """
         有効ライン（中段一直線）の図柄組合せから入賞役を確定する。
@@ -432,7 +685,7 @@ class MainBoard:
         self.send(CMD_ALL_STOP, FLAG_ID[self.prize])
         return self.prize
 
-    # -- [7] 払出 ----------------------------------------------------------
+    # -- [9] 払出 ----------------------------------------------------------
     def payout(self) -> int:
         p = PAYOUT.get(self.prize, 0)
         self.total_out += p
@@ -440,9 +693,11 @@ class MainBoard:
         self.send(CMD_PAYOUT, p)
         return p
 
-    # -- [8] 状態遷移 ------------------------------------------------------
+    # -- [10] 状態遷移 ------------------------------------------------------
     def update_state(self) -> None:
+        """レバーONで確定済みの当否（self.hit）を遊技状態へ反映する。ここでは抽選しない。"""
         flag = self.flag
+        h = self.hit
         self.notice = []
 
         if flag == "神揃い":
@@ -454,31 +709,28 @@ class MainBoard:
 
         if self.state == ST_NORMAL:
             self.game_count += 1
-            if flag in GG_RATE and self.rng.random() < GG_RATE[flag][self.mode]:
-                self._enter_gg(flag)
+            if h.get("gg"):
+                self._enter_gg(h["gg"])
                 return
-            if flag in MODE_UP:
-                hi, shi = MODE_UP[flag]
-                r = self.rng.random()
-                if r < shi:
-                    self.mode, self.mode_left = MODE_SHIGH, MODE_GAMES
-                elif r < shi + hi:
-                    self.mode = max(self.mode, MODE_HIGH)
-                    self.mode_left = MODE_GAMES
+            up = h.get("mode_up")
+            if up == MODE_SHIGH:
+                self.mode, self.mode_left = MODE_SHIGH, MODE_GAMES
+            elif up == MODE_HIGH:
+                self.mode = max(self.mode, MODE_HIGH)
+                self.mode_left = MODE_GAMES
             if self.mode_left > 0:
                 self.mode_left -= 1
                 if self.mode_left == 0:
                     self.mode = MODE_LOW
-            if self.game_count >= CEILING:
+            if h.get("ceiling"):
                 self._enter_gg("天井")
 
         elif self.state == ST_GG:
-            r = self.rng.random()
-            if r < GG_GOD_RATE:
+            if h.get("god"):
                 self.stock += GOD_STOCK
                 self.notice.append("神揃い")
                 self.send(CMD_STOCK, self.stock)
-            elif r < GG_GOD_RATE + GG_SEVEN_RATE:
+            elif h.get("seven"):
                 self.stock += 1
                 self.notice.append("赤7揃い")
                 self.send(CMD_STOCK, self.stock)
@@ -494,13 +746,13 @@ class MainBoard:
 
         else:  # ST_AT
             self.at_left -= 1
-            if flag == "チャンス目" and self.rng.random() < 0.35:
-                self.at_left += 30
-                self.notice.append("+30G")
-                self.send(CMD_ADD_GAMES, 30)
-            elif flag == "スイカ" and self.rng.random() < 0.20:
-                self.stock += 1
-                self.notice.append("ストック+1")
+            if h.get("add"):
+                self.at_left += h["add"]
+                self.notice.append(f"+{h['add']}G")
+                self.send(CMD_ADD_GAMES, h["add"])
+            elif h.get("stock"):
+                self.stock += h["stock"]
+                self.notice.append(f"ストック+{h['stock']}")
                 self.send(CMD_STOCK, self.stock)
             if self.at_left <= 0:
                 if self.stock > 0:
@@ -538,6 +790,8 @@ class MainBoard:
             raise RuntimeError(f"クレジット不足（{self.credit}枚）: "
                                f"MAXベット{BET}枚が成立しないので回転できない")
         self.lottery()
+        self.hit_lottery()          # 当否はレバーONで確定（この先ぶれない）
+        self.enshutsu_lottery()     # 確定した当否と内部モードから演出を抽選し、副制御へ渡す
         push = self.spin_start()
         # AT中は押し順ナビ（主制御が正解を指示）、通常時は遊技者のランダム押し
         navi = self.state != ST_NORMAL and self.flag == "押順ベル"
@@ -559,6 +813,8 @@ class MainBoard:
             "pay": pay,
             "diff": self.total_out - self.total_in,
             "notice": list(self.notice),
+            "enshutsu": self.enshutsu,
+            "freeze": self.freeze,
         }
         if self.panel is not None:
             self.panel.send_game(self, result)
@@ -569,26 +825,24 @@ STATE_NAME = {ST_NORMAL: "通常", ST_GG: "GG", ST_AT: "AT"}
 
 
 # ---------------------------------------------------------------------------
-# 6. 副制御（演出制御基板）
+# 7. 副制御（演出制御基板）
 # ---------------------------------------------------------------------------
-
-BANNER_RANK = ["白", "青", "緑", "赤", "金"]
-
 
 class SubBoard:
     """
     副制御基板。主制御から届く2バイトコマンドだけで動作する。
 
     - 主制御へ送信する手段を持たない（単方向）。
-    - 主制御の内部モードは受信できないため、レア役の受信履歴から
-      自前のヒートカウンタで高確度を推測して演出頻度を決める。
-    - 演出抽選には主制御とは別系統の乱数を使う（出玉に影響しない）。
+    - 演出を抽選しない。何を出すかは主制御が決めており、副制御は 0x22 で届いた
+      予告パターン番号を ENSHUTSU_PATTERN で引いて絵に起こすだけ。乱数を持たない。
+    - したがって主制御の内部モードを推測する必要も無い（主制御がモードを織り込んで
+      抽選した結果が番号で届く）。内部状態そのものは相変わらず見えない。
     - 出力は演出イベント（dict）。on_eventに渡した関数へそのまま流れるので、
       WebSocket送信やOBSオーバーレイへの中継に差し替えられる。
 
     演出のトリガーは遊技者の操作に対応する次の4点。
-        レバーON  … 0x30 リール回転。内部当選(0x20)を材料に今ゲームの予告プランを決め、
-                    レバーON時点の演出を出す。神揃いならここでフリーズ演出を出す。
+        レバーON  … 0x30 リール回転。この時点までに届いた 0x22 / 0x23 に従って
+                    レバーON時点の演出を出す（フリーズならここで出す）。
         第1停止   … 0x31/0x32/0x33 のうち1つ目に届いた停止コマンド
         第2停止   … 同2つ目
         第3停止   … 同3つ目
@@ -596,7 +850,7 @@ class SubBoard:
     プランにランクがある停止だけ出す。
     予告プランは [レバーON, 第1停止, 第2停止, 第3停止] の各時点で出すバナーのランク
     （白/青/緑/赤/金、None=何も出さない）。最終ランクへ向けて段階的に上がる
-    （ステップアップ予告）か、どこか1点だけで出す。
+    （ステップアップ予告）か、どこか1点だけで出す。組み合わせは主制御が抽選済み。
     GG突入・ストック・上乗せ・AT終了は遊技状態の通知なので、操作トリガーとは別に
     状態移行コマンドで出す。
 
@@ -604,8 +858,7 @@ class SubBoard:
     副制御はこれで自分が持つ遊技状態の写しを確定させる（演出は出さない）。
     """
 
-    def __init__(self, rng: random.Random | None = None, on_event=None, panel=None):
-        self.rng = rng or random.Random()
+    def __init__(self, on_event=None, panel=None):
         self.on_event = on_event
         # 試験用モニタ端子。主制御とは別系統で、副制御の内部を外へ出すだけ。
         # ここから主制御へ届く経路は無い（単方向は崩れない）。
@@ -615,10 +868,11 @@ class SubBoard:
         self.state = ST_NORMAL
         self.at_left = 0
         self.stock = 0
-        self.heat = 0          # 副制御が独自に持つ高確示唆カウンタ
         self.rx = 0            # 受信コマンド数
-        self.flag = "ハズレ"   # 今ゲームの内部当選（0x20で受信。演出の決定はレバーONまで保留）
-        self.plan = [None] * 4 # 今ゲームの予告プラン [レバーON, 第1停止, 第2停止, 第3停止] のランク
+        self.flag = "ハズレ"   # 今ゲームの内部当選（0x20で受信。演出の実行はレバーONまで保留）
+        self.pattern = 0       # 今ゲームの予告パターン番号（0x22で受信）
+        self.plan = [None] * 4 # それを展開した [レバーON, 第1停止, 第2停止, 第3停止] のランク
+        self.freeze = 0        # 今ゲームのフリーズ段階（0x23で受信。0=ロックなし）
         self.stops = 0         # 今ゲームで受けた停止コマンド数（第n停止の n）
 
     # -- 演出イベント出力 ---------------------------------------------------
@@ -643,21 +897,26 @@ class SubBoard:
             self.state = data
             self.at_left = 0
             self.stock = 0
-            self.heat = 0
-            self.flag = "ハズレ"
-            self.plan = [None] * 4
-            self.stops = 0
+            self._reset_game()
 
         elif typ == CMD_GAME_START:
             self.game += 1
             self.state = data
-            self.flag = "ハズレ"
-            self.plan = [None] * 4
-            self.stops = 0
+            self._reset_game()
 
         elif typ == CMD_FLAG:
-            # 内部当選は覚えるだけ。演出はレバーON（リール回転）で決める
+            # 内部当選は覚えるだけ（コンパネ表示用）。何を出すかは 0x22 が決める
             self.flag = ID_FLAG.get(data, "ハズレ")
+
+        elif typ == CMD_ENSHUTSU:
+            # 主制御が抽選した予告パターン。番号を表で引いて今ゲームのプランにする
+            self.pattern = data
+            pat = ENSHUTSU_PATTERN[data] if data < len(ENSHUTSU_PATTERN) else (None,) * 4
+            self.plan = [None if v is None else ENSHUTSU_RANK[v] for v in pat]
+
+        elif typ == CMD_FREEZE:
+            # 主制御が抽選したフリーズ段階（1〜3）。実行はレバーONで
+            self.freeze = min(max(data, 0), len(FREEZE_SEQ))
 
         elif typ == CMD_REEL_START:
             self._on_lever()
@@ -674,7 +933,6 @@ class SubBoard:
         elif typ == CMD_STATE:
             if data == ST_GG and self.state != ST_GG:
                 self.emit("gg_start")
-                self.heat = 0
             elif data == ST_NORMAL and self.state != ST_NORMAL:
                 self.emit("at_end", total=self.stock)
             self.state = data
@@ -690,10 +948,6 @@ class SubBoard:
         elif typ == CMD_ADD_GAMES:
             self.emit("add_games", games=data)
 
-        elif typ == CMD_GAME_END:
-            if self.heat > 0:
-                self.heat -= 1
-
         elif typ == CMD_STATE_NOTIFY:
             # 遊技終了後の状態通知。移行の演出は 0x50 が出したあとなので、ここでは写しを合わせるだけ。
             self.state = data
@@ -703,70 +957,30 @@ class SubBoard:
             # 主制御モニタと同じ1ゲーム周期の生存確認を保つ。
             self.panel.sub_state(self, force=(typ == CMD_STATE_NOTIFY))
 
-    # -- レバーON: 予告プランの決定 --------------------------------------------
+    # -- 今ゲームのワークを初期化 -------------------------------------------
+    def _reset_game(self) -> None:
+        self.flag = "ハズレ"
+        self.pattern = 0
+        self.plan = [None] * 4
+        self.freeze = 0
+        self.stops = 0
+
+    # -- レバーON: 受け取った演出を出す（ここでは抽選しない） --------------------
     def _on_lever(self) -> None:
-        flag = self.flag
-        if flag == "神揃い":
-            # レバーONフリーズ。3段階：ロック1（振動）→ロック2（カットイン）→ロック3（暗転）
+        if self.freeze:
+            # レバーONフリーズ。段階数は主制御が抽選済み
+            # （ロック1=振動 → ロック2=カットイン → ロック3=暗転）
             self.plan = [None] * 4
-            self.emit("freeze", seq=["lock1", "lock2", "lock3"], rank="金")
+            self.emit("freeze", seq=list(FREEZE_SEQ[:self.freeze]), rank="金")
             return
-
-        rank = self._draw_rank(flag)
-        self.plan = self._make_plan(rank)
-        # レバーON時点の演出。plan は試験用モニタ向けの参考情報（オーバーレイは rank だけを見る）
-        self.emit("lever", rank=self.plan[0], plan=list(self.plan), trigger=flag, heat=self.heat)
-        if self.state == ST_NORMAL and flag in RARE:
-            self.heat = min(self.heat + 3, 9)
-
-    def _draw_rank(self, flag: str):
-        """今ゲームの予告の最終ランクを決める。None は予告なし。"""
-        if self.state != ST_NORMAL:
-            return None                     # AT/GG中は予告バナーを出さない（ナビが主役）
-        if flag not in RARE:
-            return "白" if self.rng.random() < 0.04 else None   # 非レア役はたまにガセ
-        # レア役の強さ × 自前ヒートで予告ランクを決める
-        base = {"スイカ": 1, "チャンス目": 2}[flag]
-        level = base + (1 if self.heat >= 3 else 0)
-        weights = [
-            [40, 30, 20, 8, 2],
-            [20, 30, 30, 16, 4],
-            [8, 22, 32, 30, 8],
-            [3, 12, 25, 45, 15],
-        ][min(level, 3)]
-        return self.rng.choices(BANNER_RANK, weights=weights)[0]
-
-    # 最終ランクごとの「最後に出す時点」の重み [レバーON, 第1停止, 第2停止, 第3停止]。
-    # 高ランクほど遅い時点まで引っ張り、ステップアップさせやすい。
-    REVEAL_STEP_WEIGHTS = {
-        "白": [70, 15, 10, 5],
-        "青": [45, 20, 20, 15],
-        "緑": [25, 20, 25, 30],
-        "赤": [15, 15, 25, 45],
-        "金": [10, 10, 20, 60],
-    }
-    STAGE_COUNT_WEIGHTS = [50, 30, 15, 5]   # 段階数 1,2,3,4 の重み（可能な範囲で切り詰める）
-
-    def _make_plan(self, rank) -> list:
-        """最終ランクから [レバーON, 第1停止, 第2停止, 第3停止] の予告プランを作る。
-
-        最後に出す時点 f と段階数 k を抽選し、f を終点に k 段階で最終ランクへ上げる。
-        例: 赤・f=第3停止・k=3 → [None, 青, 緑, 赤]
-        """
-        plan = [None] * 4
-        if rank is None:
-            return plan
-        t = BANNER_RANK.index(rank)
-        f = self.rng.choices(range(4), weights=self.REVEAL_STEP_WEIGHTS[rank])[0]
-        kmax = min(f + 1, t + 1)
-        k = self.rng.choices(range(1, kmax + 1), weights=self.STAGE_COUNT_WEIGHTS[:kmax])[0]
-        for j in range(k):
-            plan[f - (k - 1) + j] = BANNER_RANK[t - (k - 1) + j]
-        return plan
+        # レバーON時点の演出。plan と pattern は試験用モニタ向けの参考情報
+        # （オーバーレイは rank だけを見る）
+        self.emit("lever", rank=self.plan[0], plan=list(self.plan),
+                  trigger=self.flag, pattern=self.pattern)
 
 
 # ---------------------------------------------------------------------------
-# 7. 演出送信ブリッジ（副制御 → オーバーレイ）
+# 8. 演出送信ブリッジ（副制御 → オーバーレイ）
 #
 #    副制御の出力先をWebSocket送信に差し替える。外部依存なし（標準ライブラリのみ）。
 #    こちらも単方向：クライアントからの受信フレームは破棄し、遊技には一切影響しない。
@@ -892,7 +1106,7 @@ class EnshutsuServer:
 
 
 # ---------------------------------------------------------------------------
-# 8. コンパネ通信（主制御 → 中継サーバー → main_control.html）
+# 9. コンパネ通信（主制御 → 中継サーバー → main_control.html）
 #
 #    main_control.html と enshutsu_overlay.html は trigger_relay_server.js
 #    （ws://127.0.0.1:8787）に接続し、{"action": ...} 形式のJSONを中継している。
@@ -1068,6 +1282,10 @@ class PanelLink:
             note = STATE_NAME.get(data, "")
         elif typ == CMD_NAVI:
             note = "ナビなし" if data == 0xFF else f"押し順{data + 1}"
+        elif typ == CMD_ENSHUTSU:
+            note = enshutsu_note(data)
+        elif typ == CMD_FREEZE:
+            note = "ロックなし" if data == 0 else f"ロック{data}"
         self.ws.send({"action": "mainBoard", "type": "cmd", "cmd": f"0x{cmd:04X}",
                       "name": CMD_NAME.get(typ, "?"), "data": data, "note": note})
 
@@ -1127,6 +1345,9 @@ class PanelLink:
             "reel": [REELS[i][b.reel_pos[i]] for i in range(3)],
             "reelPos": list(b.reel_pos),          # 停止位置(コマ番号)。筐体側のリール停止再現用
             "navi": (b.bell_answer + 1) if (not normal and r["flag"] == "押順ベル") else None,
+            "enshutsu": r["enshutsu"],
+            "enshutsuNote": enshutsu_note(r["enshutsu"]),
+            "freeze": r["freeze"],
             "diff": r["diff"],
             "credit": b.credit,
             "totalIn": b.total_in,
@@ -1144,16 +1365,22 @@ class PanelLink:
 
     # -- 副制御の試験用モニタ端子 -------------------------------------------
     def sub_state(self, s: "SubBoard", force: bool = False) -> None:
-        """副制御が受信内容だけから組み立てた状態。主制御の実値とは別物であり、
-        ヒートと推測確率状態はあくまで副制御の見立てとして扱う。
+        """副制御が受信内容だけから組み立てた状態。
+
+        演出は主制御が抽選するので、ここに出るのは「副制御が受け取った演出」
+        （パターン番号・展開したプラン・最終ランク・フリーズ段階）であって、
+        副制御の見立てではない。主制御の内部モードは相変わらず届かない。
 
         1コマンドごとに呼ばれるが、中継サーバーは受信を全件ログ出力するため、
         中身が前回と変わったときだけ送る（rx と game は比較対象から外す）。
         ただし force のときは変化が無くても送る。通常時が無風だと状態が何分も
         動かず、コンパネ側の生存監視が受信途絶と誤判定するため。"""
         snap = {
-            "heat": s.heat,
-            "guess": "超高確" if s.heat >= 6 else "高確" if s.heat >= 3 else "低確",
+            "pattern": s.pattern,
+            "note": enshutsu_note(s.pattern),
+            "plan": list(s.plan),
+            "rank": next((r for r in reversed(s.plan) if r), None),
+            "freeze": s.freeze,
             "state": STATE_NAME.get(s.state, "?"),
             "stock": s.stock, "atLeft": s.at_left,
         }
@@ -1176,7 +1403,7 @@ class PanelLink:
 
 
 # ---------------------------------------------------------------------------
-# 9. 実行モード
+# 10. 実行モード
 # ---------------------------------------------------------------------------
 
 def run_trace(board: MainBoard, games: int, interval: float = 0.0,
@@ -1225,13 +1452,18 @@ def run_commands(board: MainBoard, games: int) -> None:
             note = STATE_NAME.get(data, "")
         elif typ == CMD_NAVI:
             note = "ナビなし" if data == 0xFF else f"押し順{data + 1}"
+        elif typ == CMD_ENSHUTSU:
+            note = enshutsu_note(data)
+        elif typ == CMD_FREEZE:
+            note = "ロックなし" if data == 0 else f"ロック{data}"
         print(f"0x{cmd:04X}  {CMD_NAME.get(typ, '?'):<12} {data:>3}  {note}")
 
 
-def run_events(board: MainBoard, games: int, seed: int | None = None) -> None:
-    """副制御が出力する演出イベントをJSON Linesで流す（外部中継用の形）。"""
+def run_events(board: MainBoard, games: int) -> None:
+    """副制御が出力する演出イベントをJSON Linesで流す（外部中継用の形）。
+
+    演出を抽選するのは主制御なので、--seed を固定すればここも再現する。"""
     board.sub = SubBoard(
-        rng=random.Random(seed),
         on_event=lambda ev: print(json.dumps(ev, ensure_ascii=False), flush=True),
     )
     board.power_on()
@@ -1377,8 +1609,7 @@ def drain_inject(board: MainBoard, srv: "EnshutsuServer",
 
 
 def run_live(board: MainBoard, games: int, host: str, port: int,
-             interval: float, seed: int | None = None,
-             freeze_hold: float = 0.0, manual: bool = False,
+             interval: float, freeze_hold: float = 0.0, manual: bool = False,
              credit_refill: bool = False) -> None:
     """演出イベントをWebSocketで配信しながら稼働させる。
 
@@ -1410,8 +1641,7 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
         return
     print(f"演出配信中: ws://{host}:{port}  （Ctrl+Cで停止）", file=sys.stderr)
     board.wait_time = max(interval, 0.0)
-    board.sub = SubBoard(rng=random.Random(seed), on_event=srv.broadcast,
-                         panel=board.panel)
+    board.sub = SubBoard(on_event=srv.broadcast, panel=board.panel)
     board.power_on()
 
     inp = LiveInput(manual=manual)
@@ -1503,7 +1733,7 @@ def run_live(board: MainBoard, games: int, host: str, port: int,
                     board.panel.send_credit(board, "投入されました")
             r = board.play()
             played += 1
-            if freeze_hold > 0.0 and "神揃い" in r["notice"]:
+            if freeze_hold > 0.0 and r["freeze"]:
                 board.hold_lever(freeze_hold)   # フリーズぶん回転開始を止める
     except KeyboardInterrupt:
         pass
@@ -1541,7 +1771,7 @@ def run_single(board: MainBoard, games: int) -> None:
 def run_sim(setting: int, machines: int, games: int) -> None:
     diffs = []
     for i in range(machines):
-        b = MainBoard(setting=setting, rng=random.Random(i))
+        b = MainBoard(setting=setting, rng=random.Random(i), draw_enshutsu=False)
         for _ in range(games):
             b.play()
         diffs.append(b.total_out - b.total_in)
@@ -1559,7 +1789,8 @@ def run_sim(setting: int, machines: int, games: int) -> None:
 def _ladder_job(arg: tuple) -> tuple:
     """--ladder のワーカー1本。1台分を回して (投入, 払出, 状態別G数, GG初当り) を返す。"""
     setting, seed, games = arg
-    b = MainBoard(setting=setting, rng=random.Random(seed), log_cmds=False)
+    b = MainBoard(setting=setting, rng=random.Random(seed),
+                  log_cmds=False, draw_enshutsu=False)
     st = [0, 0, 0]
     hit = 0
     for _ in range(games):
@@ -1635,7 +1866,8 @@ def main() -> None:
                     help=f"ウェイト＝レバーON無効時間（秒）。回転開始から計る。"
                          f"既定は実機ウェイトの{WAIT_TIME}秒")
     ap.add_argument("--freeze-hold", type=float, default=0.0,
-                    help="神揃いフリーズの間、回転開始をさらに止める秒数（既定0＝止めない）")
+                    help="フリーズ（レバーONロック）の間、回転開始をさらに止める秒数"
+                         "（既定0＝止めない）")
     ap.add_argument("--credit", type=int, default=0,
                     help="起動時のクレジット枚数（既定0）。--serve は自動・手動とも貯留が要る。"
                          "ベットはMAXベット固定で、"
@@ -1664,20 +1896,22 @@ def main() -> None:
     if a.sim:
         run_sim(a.setting, a.sim, games)
         return
-    board = MainBoard(setting=a.setting, rng=random.Random(a.seed),
-                      credit=max(0, a.credit))
+    board = MainBoard(
+        setting=a.setting, rng=random.Random(a.seed), credit=max(0, a.credit),
+        # 演出用の乱数は出玉抽選と別系統。--seed を与えたときだけ再現できるようにする
+        enshutsu_rng=random.Random(None if a.seed is None else f"{a.seed}/enshutsu"))
     # --serve / --trace のときだけコンパネへ送る（集計モードでは送らない）
     if not a.no_panel and (a.serve or a.trace):
         board.panel = PanelLink(a.panel, raw_cmds=a.panel_cmds)
     try:
         if a.serve:
-            run_live(board, games, a.host, a.port, a.interval, a.seed,
+            run_live(board, games, a.host, a.port, a.interval,
                      freeze_hold=a.freeze_hold, manual=a.manual,
                      credit_refill=a.credit_refill)
         elif a.commands:
             run_commands(board, a.commands)
         elif a.events:
-            run_events(board, a.events, a.seed)
+            run_events(board, a.events)
         elif a.trace:
             run_trace(board, a.trace, interval=0.0, manual=a.manual)
         else:
