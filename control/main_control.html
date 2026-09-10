@@ -313,6 +313,8 @@
   .mb-tile.state-normal .mb-val{color:#c9bfc5;}
   .mb-tile.state-gg .mb-val{color:var(--gold-bright);text-shadow:0 0 10px rgba(212,175,55,.5);}
   .mb-tile.state-at .mb-val{color:#7cf2a8;text-shadow:0 0 10px rgba(46,204,113,.4);}
+  /* 前兆 = 当選済みだが告知前。オペレータには分かるが配信画面には出ない */
+  .mb-tile.state-zenchou .mb-val{color:#ffb36b;text-shadow:0 0 10px rgba(255,140,60,.45);}
   .mb-val.plus{color:#7cf2a8;}
   .mb-val.minus{color:#ff9a8a;}
   .mb-reels{display:flex;gap:6px;margin-top:6px;}
@@ -329,6 +331,8 @@
   }
   .mb-roles span{background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:6px 8px;}
   .mb-roles b{color:var(--gold-bright);font-weight:600;}
+  /* ベル連が3連以上 = 次にベルが揃えば4連でAT抽選 */
+  .mb-roles b.hot{color:#ffb36b;text-shadow:0 0 8px rgba(255,140,60,.5);}
   /* 遊技操作 (--manual のときのレバーON)。実機のレバーは主制御への入力なので、ここは操作部の代わり */
   /* 表示(進み方・クレジット)とボタンを別の格子にして、中身の文字数が変わっても
      枠の幅と折り返しが動かないようにする。値は枠内で省略する。 */
@@ -370,6 +374,26 @@
     background:var(--gold);border-color:var(--gold-bright);
     box-shadow:0 0 6px rgba(212,175,55,.5);
   }
+  /* 天井カウンタの写し。副制御が 0x41 から組み立てた値なので、実値と区別できる色にする */
+  .sb-zone{color:var(--gold-bright);}
+  /* 予告プラン: 副制御が今ゲームに選んだ筋書きを、4つの操作時点に並べて見せる */
+  .sb-plan-box{margin-top:8px;background:#0d0b14;border:1px solid var(--line);border-radius:8px;padding:7px 8px;}
+  .sb-plan-head{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);}
+  .sb-plan-head b{color:var(--gold-bright);font-weight:600;}
+  .sb-plan-head span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}
+  .sb-plan{display:flex;gap:3px;margin-top:6px;}
+  .sb-plan i{
+    flex:1;height:24px;border-radius:3px;font-style:normal;font-size:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:#151220;border:1px solid var(--line);color:#5c5670;line-height:1.15;
+  }
+  .sb-plan i b{font-weight:700;font-size:11px;}
+  .sb-plan i.on{color:#efe9ff;box-shadow:0 0 6px rgba(212,175,55,.35);}
+  .sb-plan i.r-白{background:#2b2b33;border-color:#c9c9d6;}
+  .sb-plan i.r-青{background:#12294d;border-color:#4d8bff;}
+  .sb-plan i.r-緑{background:#0f3a24;border-color:#3ad07f;}
+  .sb-plan i.r-赤{background:#4a1218;border-color:#ff5a6a;}
+  .sb-plan i.r-金{background:#4a3a08;border-color:var(--gold-bright);}
   .sb-events .ev-freeze{color:#ff6b6b;font-weight:700;}
   .sb-events .ev-banner{color:var(--gold-bright);}
 
@@ -584,6 +608,8 @@
         <span>ナビ <b id="mb-navi">—</b></span>
         <span>払出 <b id="mb-pay">—</b></span>
         <span>レバー <b id="mb-accept">—</b></span>
+        <span>前兆 <b id="mb-zenchou">—</b></span>
+        <span>ベル連 <b id="mb-bell">—</b></span>
       </div>
       <div class="mb-events" id="mb-events">god_main_board.py --serve を起動すると、ここに主制御のイベントが流れます</div>
       <div class="mb-opts">
@@ -610,6 +636,16 @@
           <div class="sb-heat" id="sb-heat"></div>
         </div>
         <div class="mb-tile">
+          <div class="lbl">連続予告</div>
+          <div class="mb-val" id="sb-chain">—</div>
+          <div class="sb-real" id="sb-chain-note">本前兆かガセかは副制御も知らない</div>
+        </div>
+        <div class="mb-tile">
+          <div class="lbl">天井の写し</div>
+          <div class="mb-val" id="sb-ceiling">—</div>
+          <div class="sb-real" id="sb-ceiling-note">0x41 から組み立てた残りG</div>
+        </div>
+        <div class="mb-tile">
           <div class="lbl">副制御が見ている状態</div>
           <div class="mb-val" id="sb-state">—</div>
         </div>
@@ -617,6 +653,13 @@
           <div class="lbl">受信コマンド数</div>
           <div class="mb-val" id="sb-rx">—</div>
         </div>
+      </div>
+      <div class="sb-plan-box">
+        <div class="sb-plan-head">
+          <span>予告プラン <b id="sb-pattern">—</b></span>
+          <span id="sb-plan-note">副制御が今ゲームに選んだ筋書き</span>
+        </div>
+        <div class="sb-plan" id="sb-plan"></div>
       </div>
       <div class="mb-events sb-events" id="sb-events">副制御が発火した演出がここに流れます</div>
     </div>
@@ -930,6 +973,8 @@
     navi: document.getElementById("mb-navi"),
     pay: document.getElementById("mb-pay"),
     accept: document.getElementById("mb-accept"),
+    zenchou: document.getElementById("mb-zenchou"),
+    bell: document.getElementById("mb-bell"),
     mode: document.getElementById("mb-mode"),
     credit: document.getElementById("mb-credit"),
     creditTop: document.getElementById("mb-credit-top"),   // 常時見えるダイジェスト側
@@ -947,9 +992,11 @@
     add_games: ["上乗せ", "ev-at"],
     stock_release: ["ストック放出", "ev-at"],
     at_end: ["AT終了 → 通常時", "ev-end"],
+    zenchou: ["… 前兆突入（告知はまだ）", "ev-at"],
     info: ["", ""],
   };
-  const MB_STATE_CLASS = { "通常": "state-normal", "GG": "state-gg", "AT": "state-at" };
+  const MB_STATE_CLASS = { "通常": "state-normal", "前兆": "state-zenchou",
+                           "GG": "state-gg", "AT": "state-at" };
   let mbTimer = null;
   let mbEventCount = 0;
   let mbCmdCount = 0;
@@ -1014,15 +1061,22 @@
     mbSetCredit(d.credit);
     mb.total.textContent = `${(d.game ?? 0).toLocaleString()}G / IN ${(d.totalIn ?? 0).toLocaleString()} / OUT ${(d.totalOut ?? 0).toLocaleString()}`;
 
+    // 前兆 = 当選済みで告知待ち。オペレータ用の表示で、配信画面には出さない
+    mb.zenchou.textContent = d.zenchou ? `残${d.zenchou}G` : "—";
+    // ベル連。4連からAT抽選、5連以上はベルが揃うたびにストック
+    const bc = Number(d.bellChain) || 0;
+    mb.bell.textContent = bc ? `${bc}連` : "—";
+    mb.bell.classList.toggle("hot", bc >= 3);
     // 副制御の推測と突き合わせるため、主制御の実モードを控えておく
-    sbRealMode = (st === "通常") ? (d.mode ?? null) : null;
+    // (前兆中も通常時と同じく内部モードが載る)
+    sbRealMode = (st === "通常" || st === "前兆") ? (d.mode ?? null) : null;
     sbSyncReal();
   }
 
   function mbRenderEvent(d){
     const [label, cls] = MB_EVENT_LABEL[d.event] || MB_EVENT_LABEL.info;
     // 通知文(text)はラベルと重複しない場合だけ添える(赤7揃い / +30G / 残ストック数など)
-    const showText = ["stock_up","add_games","stock_release","info"].includes(d.event);
+    const showText = ["stock_up","add_games","stock_release","zenchou","info"].includes(d.event);
     const detail = showText ? (d.text || "") : "";
     const extra = d.event === "gg_start" && d.cause ? `（${d.cause}）` : "";
     const stock = d.stock != null ? `  stock=${d.stock}` : "";
@@ -1098,6 +1152,8 @@
     mb.prize.textContent = "—";
     mb.navi.textContent = "—";
     mb.pay.textContent = "—";
+    mb.zenchou.textContent = "—";
+    mb.bell.textContent = "—";
     mbSetCredit(d.credit);
     mb.total.textContent = `0G / IN 0 / OUT 0`;
     sbRealMode = d.mode ?? null;
@@ -1210,8 +1266,11 @@
   //   { action:"subBoard", type:"state"|"event", ... } を表示する。
   //   guess は副制御が受信履歴だけから立てた見立てであり、主制御の内部モード
   //   そのものではない。両者が食い違ったときは実値側を赤で示す。
+  //   天井の写しも副制御が 0x41 の下位8bitから数え直した値で、主制御の値ではない。
+  //   予告プランは副制御が今ゲームに選んだ筋書き (SB_PATTERN の番号を展開したもの)。
   // ---------------------------------------------------------------
-  const SB_HEAT_MAX = 9;      // SubBoard の min(heat + 3, 9) に合わせる
+  const SB_HEAT_MAX = 12;     // SubBoard の SB_HEAT_MAX に合わせる
+  const SB_PLAN_POINT = ["レバー", "第1", "第2", "第3"];   // 予告を出す4つの操作時点
   const sb = {
     pill: document.getElementById("sb-pill"),
     pillText: document.getElementById("sb-pill-text"),
@@ -1219,6 +1278,13 @@
     real: document.getElementById("sb-real"),
     heatN: document.getElementById("sb-heat-n"),
     heat: document.getElementById("sb-heat"),
+    chain: document.getElementById("sb-chain"),
+    chainNote: document.getElementById("sb-chain-note"),
+    ceiling: document.getElementById("sb-ceiling"),
+    ceilingNote: document.getElementById("sb-ceiling-note"),
+    pattern: document.getElementById("sb-pattern"),
+    planNote: document.getElementById("sb-plan-note"),
+    plan: document.getElementById("sb-plan"),
     state: document.getElementById("sb-state"),
     rx: document.getElementById("sb-rx"),
     events: document.getElementById("sb-events"),
@@ -1235,6 +1301,11 @@
     at_end:    ["AT終了",         "ev-end"],
   };
   for(let i = 0; i < SB_HEAT_MAX; i++) sb.heat.appendChild(document.createElement("i"));
+  SB_PLAN_POINT.forEach(name=>{
+    const cell = document.createElement("i");
+    cell.innerHTML = `<b>—</b>${name}`;
+    sb.plan.appendChild(cell);
+  });
 
   let sbRealMode = null;      // 主制御の実モード(通常時のみ)
   let sbGuess = null;         // 副制御の推測
@@ -1272,6 +1343,30 @@
     sb.rx.textContent = (d.rx ?? 0).toLocaleString();
     const lit = Math.max(0, Math.min(SB_HEAT_MAX, Number(d.heat) || 0));
     Array.from(sb.heat.children).forEach((el, i)=> el.classList.toggle("lit", i < lit));
+    // 連続予告 (前兆演出)。本前兆かガセかは副制御自身も知らない
+    const chain = Number(d.chain) || 0;
+    sb.chain.textContent = chain ? `${chain}G目` : "—";
+    sb.chain.classList.toggle("sb-zone", chain > 0);
+    const bell = Number(d.bellChain) || 0;
+    sb.chainNote.textContent = chain ? "告知が来るまで毎ゲーム出す"
+                             : bell ? `ベル${bell}連（0x34 の表示役から数えた写し）`
+                                    : "本前兆かガセかは副制御も知らない";
+    // 天井の写し: 副制御が 0x41 の下位8bitから数え直した残りゲーム数
+    sb.ceiling.textContent = d.ceilingLeft != null ? `残${d.ceilingLeft}G` : "—";
+    sb.ceiling.classList.toggle("sb-zone", !!d.zone);
+    sb.ceilingNote.textContent = d.zone ? "天井前兆 (見立てを1段上げる)"
+                                        : `通算 ${(d.gameCount ?? 0).toLocaleString()}G`;
+    // 予告プラン: 今ゲームに選んだ筋書き。フリーズを引いたゲームは予告を出さない
+    const freeze = Number(d.freeze) || 0;
+    sb.pattern.textContent = freeze ? `ロック${freeze}` : `#${d.pattern ?? 0}`;
+    sb.planNote.textContent = freeze ? "フリーズ (予告は出さない)"
+                                     : (d.note || "副制御が今ゲームに選んだ筋書き");
+    const plan = Array.isArray(d.plan) ? d.plan : [];
+    Array.from(sb.plan.children).forEach((el, i)=>{
+      const rank = plan[i] || null;
+      el.className = rank ? `on r-${rank}` : "";
+      el.innerHTML = `<b>${rank ?? "—"}</b>${SB_PLAN_POINT[i]}`;
+    });
     sbSyncReal();
   }
 
@@ -1331,7 +1426,7 @@
   };
   const INJ_EVT = {
     freeze:    ["フリーズ演出",   {type:"freeze", seq:["lock1","lock2","lock3"], rank:"金"}],
-    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", heat:0}],
+    lever:     ["レバーON予告",   {type:"lever", rank:"青", plan:["青",null,null,null], trigger:"スイカ", pattern:5, heat:0}],
     stop:      ["停止予告",       {type:"stop", n:3, rank:"赤"}],
     banner:    ["バナー予告(旧)", {type:"banner", rank:"赤", trigger:"チャンス目", heat:3}],
     navi:      ["押し順ナビ",     {type:"navi", order:0}],
