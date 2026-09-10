@@ -1,0 +1,115 @@
+{
+  "id": "yokoku_freeze",
+  "name": "フリーズ演出",
+  "version": 1,
+  "duration": 1.8,
+  "bind": null,
+  "tracks": [
+    {
+      "id": "cmtsr3mh15",
+      "name": "動画",
+      "type": "video",
+      "src": "assets/frz.mp4",
+      "text": "",
+      "start": 0,
+      "dur": 1.5,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "opacity": 1,
+      "scale": 1,
+      "rot": 0,
+      "fit": "contain",
+      "color": "#ffffff",
+      "bg": "",
+      "stroke": "",
+      "strokeW": 0,
+      "radius": 0,
+      "fontSize": 9,
+      "fontWeight": 800,
+      "letter": 0.08,
+      "font": "",
+      "shadow": 1,
+      "blend": "normal",
+      "loop": false,
+      "volume": 1,
+      "muted": false,
+      "keys": [
+        {
+          "t": 0,
+          "ease": "inOut",
+          "opacity": 0
+        },
+        {
+          "t": 0.3,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 1.2,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 1.5,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    },
+    {
+      "id": "cmtsr4cs67",
+      "name": "動画",
+      "type": "video",
+      "src": "assets/01.mp4",
+      "text": "",
+      "start": 1.5,
+      "dur": 0.3,
+      "x": 50,
+      "y": 50,
+      "w": 100,
+      "h": 100,
+      "opacity": 1,
+      "scale": 1,
+      "rot": 0,
+      "fit": "contain",
+      "color": "#ffffff",
+      "bg": "",
+      "stroke": "",
+      "strokeW": 0,
+      "radius": 0,
+      "fontSize": 9,
+      "fontWeight": 800,
+      "letter": 0.08,
+      "font": "",
+      "shadow": 1,
+      "blend": "normal",
+      "loop": false,
+      "volume": 1,
+      "muted": false,
+      "keys": [
+        {
+          "t": 0,
+          "ease": "inOut",
+          "opacity": 0
+        },
+        {
+          "t": 0,
+          "ease": "linear",
+          "opacity": 1
+        },
+        {
+          "t": 0.15,
+          "ease": "out",
+          "opacity": 1
+        },
+        {
+          "t": 0.3,
+          "ease": "in",
+          "opacity": 0
+        }
+      ]
+    }
+  ]
+}
